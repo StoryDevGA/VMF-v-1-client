@@ -1,4 +1,109 @@
 // Types and statuses are contract-owned; titles use explicitly customer-visible API labels.
+export const GRAPH_MODES = Object.freeze(['Journey', 'Lineage', 'Impact', 'Gaps', 'Contradictions'])
+export const GRAPH_INSPECTION_KEYS = Object.freeze(['graphInspectionContext', 'graphMode', 'graphQuery', 'graphObjectId', 'graphEvidenceObjectId', 'graphObjectView', 'graphAfterEdgeKey'])
+
+export function readGraphInspection(params, contextKey) {
+  const defaults = { mode: 'Journey', search: '', selectedKey: '', objectView: 'group', afterEdgeKey: '', invalid: false }
+  if (params.get('graphInspectionContext') !== contextKey) return defaults
+  const mode = params.get('graphMode') || 'Journey'
+  const search = params.get('graphQuery') || ''
+  const selectedKey = params.get('graphObjectId') || ''
+  const evidenceObjectId = params.get('graphEvidenceObjectId') || ''
+  const objectView = params.get('graphObjectView') || 'group'
+  const afterEdgeKey = params.get('graphAfterEdgeKey') || ''
+  if (GRAPH_INSPECTION_KEYS.some(key => params.getAll(key).length > 1)
+    || !GRAPH_MODES.includes(mode) || !['group', 'object'].includes(objectView) || search.length > 240 || selectedKey.length > 240
+    || (selectedKey && evidenceObjectId)
+    || (evidenceObjectId && (evidenceObjectId !== evidenceObjectId.trim() || evidenceObjectId.length > 240
+      || objectView !== 'object' || !['Journey', 'Lineage', 'Impact'].includes(mode)
+      || /runtime_(?:instances|section_states|evidence_sources|evidence_objects|graph_snapshots|graph_elements)|mongodb|mongo(?:db)?|collection/i.test(evidenceObjectId)))
+    || (objectView === 'object' && !selectedKey && !evidenceObjectId)
+    || afterEdgeKey.length > 240 || (afterEdgeKey && (afterEdgeKey !== afterEdgeKey.trim() || objectView !== 'object' || !['Journey', 'Lineage', 'Impact'].includes(mode)))
+    || Array.from(search + selectedKey + evidenceObjectId + afterEdgeKey).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+    || (selectedKey && !selectedKey.trim())) return { ...defaults, invalid: true }
+  return { mode, search, selectedKey, objectView, afterEdgeKey, invalid: false, ...(evidenceObjectId ? { evidenceObjectId } : {}) }
+}
+
+export function writeGraphInspection(params, contextKey, inspection) {
+  const next = new URLSearchParams(params)
+  next.set('graphInspectionContext', contextKey)
+  next.set('graphMode', inspection.mode)
+  next.set('graphObjectView', inspection.objectView || 'group')
+  if (inspection.search) next.set('graphQuery', inspection.search); else next.delete('graphQuery')
+  if (inspection.selectedKey) next.set('graphObjectId', inspection.selectedKey); else next.delete('graphObjectId')
+  if (inspection.evidenceObjectId) next.set('graphEvidenceObjectId', inspection.evidenceObjectId); else next.delete('graphEvidenceObjectId')
+  const changed = params.get('graphInspectionContext') !== contextKey || (params.get('graphMode') || 'Journey') !== inspection.mode
+    || (params.get('graphQuery') || '') !== (inspection.search || '') || (params.get('graphObjectId') || '') !== (inspection.selectedKey || '')
+    || (params.get('graphEvidenceObjectId') || '') !== (inspection.evidenceObjectId || '')
+  if (!changed && inspection.objectView === 'object' && ['Journey', 'Lineage', 'Impact'].includes(inspection.mode) && inspection.afterEdgeKey) next.set('graphAfterEdgeKey', inspection.afterEdgeKey)
+  else next.delete('graphAfterEdgeKey')
+  return next
+}
+
+export function resolveGraphSelection(model, { selectedKey, evidenceObjectId, objectView = 'group' }) {
+  if (evidenceObjectId) return { group: null, selected: null }
+  const group = selectedKey ? model.entries.find(node => node.key === selectedKey || node.memberKeys?.includes(selectedKey))
+    : model.entries.find(node => node.layer === 'intelligence') || model.entries[0]
+  const selected = objectView === 'object' ? group && !group.diagnostic
+    ? model.nodes.find(node => node.key === selectedKey) : undefined : group
+  return { group, selected }
+}
+
+const sourceNavigationKeys = ['sourceContext', 'sourceQuery', 'sourceType', 'sourcePage', 'evidencePage', 'sourceEvidencePage', 'sourceId', 'evidenceObjectId', 'sourceReturn']
+const recordedId = value => typeof value === 'string' && value.trim() && value.trim().length <= 240
+  && !Array.from(value.trim()).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) ? value.trim() : ''
+
+export function graphSourceFocus(selected) {
+  if (!selected || selected.diagnostic || selected.memberKeys?.length > 1 || !selected.sourceId) return null
+  if (selected.layer === 'source') return { sourceId: selected.sourceId }
+  return selected.layer === 'evidence' && selected.evidenceObjectId
+    ? { sourceId: selected.sourceId, evidenceObjectId: selected.evidenceObjectId } : null
+}
+
+export function graphSourceParams(params, contextKey, focus) {
+  const next = new URLSearchParams(params)
+  sourceNavigationKeys.forEach(key => next.delete(key))
+  next.set('view', 'sources'); next.set('sourceContext', contextKey); next.set('sourceReturn', 'graph')
+  next.set('sourceId', focus.sourceId)
+  if (focus.evidenceObjectId) next.set('evidenceObjectId', focus.evidenceObjectId)
+  return next
+}
+
+export function graphSourceReturnHref(params, contextKey) {
+  if (params.get('sourceReturn') !== 'graph' || params.getAll('sourceReturn').length !== 1
+    || params.getAll('sourceContext').length !== 1 || params.get('sourceContext') !== contextKey
+    || params.get('graphInspectionContext') !== contextKey) return ''
+  const inspection = readGraphInspection(params, contextKey)
+  if (inspection.invalid || (!inspection.selectedKey && !inspection.evidenceObjectId)) return ''
+  const next = new URLSearchParams(params)
+  sourceNavigationKeys.forEach(key => next.delete(key))
+  next.set('view', 'intelligence-graph')
+  return `/app/intelligence?${next}`
+}
+
+export function graphContextReturnHref(params, contextKey) {
+  if (params.getAll('graphContextReturn').length !== 1 || params.get('graphContextReturn') !== 'inspection'
+    || params.get('graphInspectionContext') !== contextKey) return ''
+  const inspection = readGraphInspection(params, contextKey)
+  if (inspection.invalid || inspection.objectView !== 'object' || (!inspection.selectedKey && !inspection.evidenceObjectId)
+    || (inspection.selectedKey && inspection.selectedKey !== inspection.selectedKey.trim())) return ''
+  const next = new URLSearchParams(params)
+  next.delete('graphContextReturn'); next.set('view', 'intelligence-graph')
+  return `/app/intelligence?${next}`
+}
+
+export function readGraphLifecycle({ lock, loading, error }) {
+  if (loading || error || !lock || typeof lock !== 'object' || Array.isArray(lock)) return 'UNAVAILABLE'
+  if (lock.locked !== undefined && typeof lock.locked !== 'boolean') return 'UNAVAILABLE'
+  if (lock.state !== undefined && !['LOCKED', 'UNLOCKED'].includes(lock.state)) return 'UNAVAILABLE'
+  const timestamp = lock.lockedAt
+  const hasTimestamp = timestamp !== undefined && timestamp !== null && timestamp !== ''
+  if (hasTimestamp && (typeof timestamp !== 'string' || timestamp !== timestamp.trim() || !Number.isFinite(Date.parse(timestamp)))) return 'UNAVAILABLE'
+  const locked = lock.locked === true || lock.state === 'LOCKED' || hasTimestamp
+  const unlocked = lock.locked === false || lock.state === 'UNLOCKED'
+  return locked && unlocked ? 'UNAVAILABLE' : locked ? 'LOCKED' : unlocked ? 'UNLOCKED' : 'UNAVAILABLE'
+}
+
 export const GRAPH_LAYERS = [
   { key: 'source', label: 'Source', icon: 'S' },
   { key: 'evidence', label: 'Evidence', icon: 'E' },
@@ -35,6 +140,8 @@ const REASONING_STATES = { READY_FOR_REASONING: 'Ready for reasoning', NEEDS_EVI
 const score = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
   ? value <= 1 ? Math.round(value * 100) : value : null
 const knownState = (states, value) => Object.hasOwn(states, token(value)) ? states[token(value)] : ''
+const confidenceText = value => typeof value === 'string' && !Array.from(value).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) ? value.trim() : ''
+const confidenceList = value => Array.isArray(value) && value.length && value.every(item => Boolean(confidenceText(item))) ? value.map(confidenceText) : null
 
 function visibleNodeDetails(node) {
   if (node.customerVisible !== true) return {}
@@ -42,6 +149,13 @@ function visibleNodeDetails(node) {
   return {
     title: typeof node.label === 'string' ? node.label.trim() : '',
     confidence: confidenceScore !== null ? `${confidenceScore}% confidence` : '',
+    recordedConfidence: confidenceScore !== null ? `${confidenceScore}%` : '',
+    confidenceDetails: {
+      reason: confidenceText(node.metadata?.confidenceReason),
+      basis: confidenceList(node.metadata?.confidenceBasis),
+      factors: confidenceList(node.metadata?.confidenceFactors),
+      warnings: confidenceList(node.metadata?.confidenceWarnings),
+    },
     validation: knownState(VALIDATION_STATES, node.metadata?.validationStatus),
     reasoning: knownState(REASONING_STATES, node.metadata?.reasoningStatus),
   }
@@ -87,9 +201,13 @@ export function buildGraphViewModel(graph, mode = 'Journey', search = '') {
     const domain = knownState(DOMAINS, node.coverageDomain)
     const review = node.customerVisible === true ? knownState(REVIEW_STATES, node.reviewStatus) : ''
     const quality = node.customerVisible === true ? knownState(QUALITY_STATES, node.graphQualityState) : ''
-    const state = review || quality || 'Not projected'
+    const state = review || quality || 'Review/quality state unavailable'
     const details = visibleNodeDetails(node)
+    const sourceId = node.customerVisible === true && ['source', 'evidence'].includes(definition[0]) ? recordedId(node.sourceId) : ''
+    const evidenceObjectId = node.customerVisible === true && definition[0] === 'evidence' ? recordedId(node.evidenceObjectId) : ''
     return [{ key: node.nodeId, layer: definition[0], typeLabel: definition[1], label: details.title || definition[1], domain, state,
+      sourceId, evidenceObjectId,
+      recordedConfidence: details.recordedConfidence || '', confidenceDetails: details.confidenceDetails || null,
       review, quality, validation: details.validation, reasoning: details.reasoning,
       subtitle: [domain, state, quality !== state ? quality : '', details.confidence].filter(Boolean).join(' · '), diagnostic: false }]
   })

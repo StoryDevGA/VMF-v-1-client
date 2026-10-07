@@ -1,3 +1,4 @@
+import { DISCOVERY_DOCUMENT_ACCEPT, DISCOVERY_DOCUMENT_MAX_COUNT, DISCOVERY_WEBSITE_SOURCE_MAX_COUNT, buildEmptyDiscoveryDraftInputs, isSupportedDiscoveryDocument, getDiscoveryDocumentMaxBytes, readFileAsDataUrl, buildDiscoveryDocumentSource, formatDocumentSize, DOCUMENT_EXTRACTION_STORAGE_NOTE, DOCUMENT_EXTRACTION_HELPER_TEXT, formatSectionSupportingFileError, formatIntelligenceHubEvidenceError, buildDiscoveryContextReadiness, normalizeWebsiteSourceDrafts, buildDiscoveryInputsPayload } from '../../utils/discoveryAcquisition.js'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
@@ -47,6 +48,9 @@ import { WorkspaceJourney } from '../../components/WorkspaceJourney/WorkspaceJou
 import { getWorkspaceJourneyReviewSummary } from '../../components/WorkspaceJourney/workspaceJourneyModel.js'
 import { WorkspaceCapabilities } from './WorkspaceCapabilities.jsx'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
+import { createAcquisitionRequestTracker } from '../IntelligenceHub/acquisitionRequestTracker.js'
+import { acquisitionRunLabel } from '../IntelligenceHub/acquisitionRunContract.js'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
@@ -109,33 +113,6 @@ const DISCOVERY_INPUT_LABELS = Object.freeze({
   targetOffer: 'Target product or offer',
   notes: 'Optional notes',
 })
-const DISCOVERY_DOCUMENT_ACCEPT = [
-  '.csv',
-  '.docx',
-  '.md',
-  '.pdf',
-  '.pptx',
-  '.txt',
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/csv',
-  'text/markdown',
-  'text/plain',
-].join(',')
-const DISCOVERY_DOCUMENT_MAX_COUNT = 5
-const DISCOVERY_DOCUMENT_MAX_BYTES = 2500000
-const DISCOVERY_PPTX_DOCUMENT_MAX_BYTES = 40000000
-const DISCOVERY_WEBSITE_SOURCE_MAX_COUNT = 10
-
-const buildEmptyDiscoveryDraftInputs = () => ({
-  companyWebsite: '',
-  websiteSources: [''],
-  companyName: '',
-  marketRegion: '',
-  targetOffer: '',
-  notes: '',
-})
 const INTELLIGENCE_HUB_LABEL = 'Intelligence Hub'
 const INTELLIGENCE_HUB_EVIDENCE_LABEL = `${INTELLIGENCE_HUB_LABEL} evidence`
 const INTELLIGENCE_HUB_INPUTS_LABEL = `${INTELLIGENCE_HUB_LABEL} inputs`
@@ -159,65 +136,6 @@ const getRuntimeWorkspaceBackTarget = (state) => {
   return RUNTIME_WORKSPACE_BACK_FALLBACK
 }
 
-const getFileExtension = (fileName = '') => {
-  const normalized = String(fileName || '').trim().toLowerCase()
-  const dotIndex = normalized.lastIndexOf('.')
-  return dotIndex >= 0 ? normalized.slice(dotIndex) : ''
-}
-
-const isSupportedDiscoveryDocument = (file) => {
-  const mimeType = String(file?.type || '').trim().toLowerCase()
-  const extension = getFileExtension(file?.name)
-  return [
-    '.csv',
-    '.docx',
-    '.md',
-    '.pdf',
-    '.pptx',
-    '.txt',
-  ].includes(extension) || [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/csv',
-    'text/markdown',
-    'text/plain',
-  ].includes(mimeType)
-}
-
-const isPptxDiscoveryDocument = (file) => {
-  const mimeType = String(file?.type || '').trim().toLowerCase()
-  return getFileExtension(file?.name) === '.pptx'
-    || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-}
-
-const getDiscoveryDocumentMaxBytes = (file) =>
-  isPptxDiscoveryDocument(file) ? DISCOVERY_PPTX_DOCUMENT_MAX_BYTES : DISCOVERY_DOCUMENT_MAX_BYTES
-
-const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader()
-  reader.onload = () => resolve(String(reader.result || ''))
-  reader.onerror = () => reject(new Error(`Could not read ${file.name}.`))
-  reader.readAsDataURL(file)
-})
-
-const buildDiscoveryDocumentSource = async (file) => {
-  if (!isSupportedDiscoveryDocument(file)) {
-    throw new Error(`${file.name} is not a supported ${INTELLIGENCE_HUB_LABEL} document type.`)
-  }
-  if (file.size > getDiscoveryDocumentMaxBytes(file)) {
-    throw new Error(`${file.name} exceeds the ${INTELLIGENCE_HUB_LABEL} document size limit.`)
-  }
-
-  return {
-    fileName: file.name,
-    mimeType: file.type || '',
-    assetType: 'CUSTOMER_DOCUMENT',
-    sizeBytes: file.size,
-    contentBase64: await readFileAsDataUrl(file),
-  }
-}
-
 const buildSectionDocumentSource = async (file) => {
   if (!isSupportedDiscoveryDocument(file)) {
     throw new Error(`${file.name} is not a supported section evidence document type.`)
@@ -233,92 +151,6 @@ const buildSectionDocumentSource = async (file) => {
     sizeBytes: file.size,
     contentBase64: await readFileAsDataUrl(file),
   }
-}
-
-const formatDocumentSize = (sizeBytes = 0) =>
-  `${Math.max(1, Math.round((Number(sizeBytes) || 0) / 1024))} KB`
-
-const DOCUMENT_EXTRACTION_STORAGE_NOTE = 'Original documents are not stored. Only extracted evidence and source details are retained.'
-const DOCUMENT_EXTRACTION_HELPER_TEXT = 'PDF, PPTX, DOCX, TXT, MD, or CSV. Files are used only to extract evidence; originals are not stored.'
-const PDF_UNREADABLE_TEXT_ERROR_PREFIX = 'PDF document did not contain readable extractable text'
-const PDF_UNREADABLE_TEXT_HELPER = 'This PDF has no readable text layer. Use an OCR/searchable PDF, PPTX, DOCX, TXT, MD, or CSV.'
-const PPTX_UNREADABLE_TEXT_ERROR_PREFIX = 'PowerPoint document did not contain readable extractable slide text or speaker notes'
-const PPTX_UNREADABLE_TEXT_HELPER = 'This PowerPoint file has no extractable slide text or speaker notes. Use a PPTX with selectable text.'
-const PPTX_MALFORMED_ERROR_PREFIX = 'PowerPoint file is not a valid PPTX package'
-const PPTX_MALFORMED_HELPER = 'We could not extract this presentation. Confirm that it is a valid PPTX file.'
-const DOCUMENT_INGESTION_FAILED_REASON = 'DOCUMENT_INGESTION_FAILED'
-const DOCUMENT_INGESTION_FAILED_MESSAGE = 'Document ingestion could not produce governed evidence.'
-
-const getNestedDetailMessage = (details) => {
-  if (!details || typeof details !== 'object') return ''
-
-  const stack = [details]
-  while (stack.length > 0) {
-    const current = stack.shift()
-    if (!current || typeof current !== 'object') continue
-
-    if (typeof current.message === 'string' && current.message.trim()) {
-      return current.message.trim()
-    }
-
-    stack.push(...Object.values(current).filter((value) => value && typeof value === 'object'))
-  }
-
-  return ''
-}
-
-const formatSectionSupportingFileError = (error) => {
-  const normalizedError = normalizeError(error)
-  const nestedMessage =
-    getNestedDetailMessage(normalizedError.details?.ingestionError)
-    || getNestedDetailMessage(normalizedError.details)
-  const baseMessage = stripRequestReference(nestedMessage || normalizedError.message)
-  const message = baseMessage.startsWith(PDF_UNREADABLE_TEXT_ERROR_PREFIX)
-    ? PDF_UNREADABLE_TEXT_HELPER
-    : baseMessage.startsWith(PPTX_UNREADABLE_TEXT_ERROR_PREFIX)
-      ? PPTX_UNREADABLE_TEXT_HELPER
-      : baseMessage.startsWith(PPTX_MALFORMED_ERROR_PREFIX)
-        ? PPTX_MALFORMED_HELPER
-      : baseMessage
-  const requestReference = normalizedError.requestId
-    ? ` Reference: ${normalizedError.requestId}`
-    : ''
-
-  return `${message}${requestReference}`
-}
-
-const formatDocumentIngestionMessage = (message) => {
-  if (message.startsWith(PDF_UNREADABLE_TEXT_ERROR_PREFIX)) {
-    return PDF_UNREADABLE_TEXT_HELPER
-  }
-  if (message.startsWith(PPTX_UNREADABLE_TEXT_ERROR_PREFIX)) {
-    return PPTX_UNREADABLE_TEXT_HELPER
-  }
-  if (message.startsWith(PPTX_MALFORMED_ERROR_PREFIX)) {
-    return PPTX_MALFORMED_HELPER
-  }
-  return message
-}
-
-const formatIntelligenceHubEvidenceError = (error) => {
-  const normalizedError = normalizeError(error)
-  const acquisitionError = typeof normalizedError.details?.acquisitionError === 'string'
-    ? normalizedError.details.acquisitionError.trim()
-    : ''
-  const isDocumentIngestionError =
-    normalizedError.details?.reason === DOCUMENT_INGESTION_FAILED_REASON
-    || stripRequestReference(normalizedError.message) === DOCUMENT_INGESTION_FAILED_MESSAGE
-
-  if (!isDocumentIngestionError) {
-    return normalizedError.message
-  }
-
-  const baseMessage = stripRequestReference(acquisitionError || normalizedError.message)
-  const requestReference = normalizedError.requestId
-    ? ` Reference: ${normalizedError.requestId}`
-    : ''
-
-  return `${formatDocumentIngestionMessage(baseMessage)}${requestReference}`
 }
 
 function DocumentStorageTooltip({ id }) {
@@ -1176,89 +1008,6 @@ const getDiscoveryEvidenceObjects = ({ discovery, evidenceDetail }) => {
   if (Array.isArray(evidenceDetail?.evidenceObjects)) return evidenceDetail.evidenceObjects
   if (Array.isArray(discovery?.evidenceObjects)) return discovery.evidenceObjects
   return EMPTY_ARRAY
-}
-
-const DISCOVERY_REQUIRED_CONTEXT_FIELDS = Object.freeze([
-  {
-    key: 'websiteSources',
-    label: 'Website URL',
-    isComplete: (draftInputs = {}) => Array.isArray(draftInputs.websiteSources)
-      && draftInputs.websiteSources.some((source) => String(source || '').trim()),
-  },
-  {
-    key: 'companyName',
-    label: 'Company name',
-    isComplete: (draftInputs = {}) => Boolean(String(draftInputs.companyName || '').trim()),
-  },
-  {
-    key: 'marketRegion',
-    label: 'Market / region',
-    isComplete: (draftInputs = {}) => Boolean(String(draftInputs.marketRegion || '').trim()),
-  },
-  {
-    key: 'targetOffer',
-    label: 'Target product or offer',
-    isComplete: (draftInputs = {}) => Boolean(String(draftInputs.targetOffer || '').trim()),
-  },
-])
-
-const formatDiscoveryRequiredContextList = (values = []) => {
-  const labels = values.map((value) => String(value || '').trim()).filter(Boolean)
-  if (labels.length <= 1) return labels[0] || ''
-  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
-  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
-}
-
-const buildDiscoveryContextReadiness = (draftInputs = {}) => {
-  const rows = DISCOVERY_REQUIRED_CONTEXT_FIELDS.map((field) => ({
-    key: field.key,
-    label: field.label,
-    complete: field.isComplete(draftInputs),
-  }))
-  const missingRows = rows.filter((row) => !row.complete)
-  const missingLabels = missingRows.map((row) => row.label)
-
-  return {
-    complete: missingRows.length === 0,
-    missingLabels,
-    reason: missingLabels.length > 0
-      ? `Add ${formatDiscoveryRequiredContextList(missingLabels)} before building evidence.`
-      : '',
-    rows,
-  }
-}
-
-const normalizeWebsiteSourceDrafts = (inputValues = {}) => {
-  const explicitSources = Array.isArray(inputValues.websiteSources)
-    ? inputValues.websiteSources
-    : []
-  const candidates = [
-    ...explicitSources,
-    inputValues.companyWebsite,
-  ]
-    .map((value) => String(value || '').trim())
-    .filter(Boolean)
-  const uniqueSources = Array.from(new Set(candidates))
-  return uniqueSources.length > 0 ? uniqueSources : ['']
-}
-
-const buildDiscoveryInputsPayload = (draftInputs = {}) => {
-  const websiteSources = Array.isArray(draftInputs.websiteSources)
-    ? draftInputs.websiteSources.map((value) => String(value || '').trim()).filter(Boolean)
-    : []
-  const payload = {
-    companyWebsite: websiteSources[0] || String(draftInputs.companyWebsite || '').trim(),
-    companyName: String(draftInputs.companyName || '').trim(),
-    marketRegion: String(draftInputs.marketRegion || '').trim(),
-    targetOffer: String(draftInputs.targetOffer || '').trim(),
-    notes: String(draftInputs.notes || '').trim(),
-  }
-
-  if (websiteSources.length > 0) {
-    payload.websiteSources = websiteSources
-  }
-
-  return payload
 }
 
 const getSourceRegistryGroupKey = (source = {}) => {
@@ -4446,18 +4195,27 @@ function DiscoverySection({
     : {}
   const initialWebsiteSources = normalizeWebsiteSourceDrafts(inputValues)
   const persistedAcquisitionProfile = getDiscoveryAcquisitionProfile(discovery)
-  const [draftInputs, setDraftInputs] = useState({
+  const serverDraftInputs = {
     companyWebsite: initialWebsiteSources.find(Boolean) || inputValues.companyWebsite || '',
     websiteSources: initialWebsiteSources,
     companyName: inputValues.companyName || '',
     marketRegion: inputValues.marketRegion || '',
     targetOffer: inputValues.targetOffer || '',
     notes: inputValues.notes || '',
-  })
+  }
+  const [draftInputs, setDraftInputs] = useState(serverDraftInputs)
   const [draftDocumentSources, setDraftDocumentSources] = useState([])
   const [documentUploadError, setDocumentUploadError] = useState('')
   const [documentUploadPreparing, setDocumentUploadPreparing] = useState(false)
   const [acquisitionProfile, setAcquisitionProfile] = useState(persistedAcquisitionProfile)
+  const serverDraftSignature = JSON.stringify(serverDraftInputs)
+  const previousServerBrief = useRef({ signature: serverDraftSignature, profile: persistedAcquisitionProfile })
+  useEffect(() => {
+    const previous = previousServerBrief.current
+    setDraftInputs(current => JSON.stringify(current) === previous.signature ? JSON.parse(serverDraftSignature) : current)
+    setAcquisitionProfile(current => current === previous.profile ? persistedAcquisitionProfile : current)
+    previousServerBrief.current = { signature: serverDraftSignature, profile: persistedAcquisitionProfile }
+  }, [serverDraftSignature, persistedAcquisitionProfile])
   const [showResetWarning, setShowResetWarning] = useState(false)
   const [activeIntelligenceHubTab, setActiveIntelligenceHubTab] = useState(INTELLIGENCE_HUB_TAB_INDEXES.OVERVIEW)
   const graphProjectionEnabled = Boolean(runtimeInstanceId && customerId && tenantId)
@@ -6305,6 +6063,24 @@ function RuntimeWorkspace() {
   const { runtimeInstanceId = '' } = useParams()
   const { addToast } = useToaster()
   const { customerId, tenantId } = useTenantContext()
+  const acquisitionScopeKey = JSON.stringify([runtimeInstanceId, customerId, tenantId, getSessionRevision()])
+  const acquisitionTrackerRef = useRef(null)
+  const [, renderAcquisitionTransport] = useState(0)
+  const acquisitionMountedRef = useRef(true)
+  if (acquisitionTrackerRef.current?.key !== acquisitionScopeKey) {
+    acquisitionTrackerRef.current = Object.assign(
+      createAcquisitionRequestTracker({ runtimeInstanceId, customerId, tenantId }, getSessionRevision()),
+      { key: acquisitionScopeKey },
+    )
+  }
+  useEffect(() => {
+    acquisitionMountedRef.current = true
+    const unsubscribe = subscribeToSession(() => {
+      acquisitionTrackerRef.current = null
+      renderAcquisitionTransport(value => value + 1)
+    })
+    return () => { acquisitionMountedRef.current = false; unsubscribe() }
+  }, [])
   const runtimeStateScopeReady = Boolean(customerId && tenantId)
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(
     () => String(location.state?.runtimeWorkspace?.activeWorkspaceKey || DISCOVERY_NAV_KEY),
@@ -6434,6 +6210,11 @@ function RuntimeWorkspace() {
   const [uploadingSectionEvidencePath, setUploadingSectionEvidencePath] = useState('')
   const [executingActionKey, setExecutingActionKey] = useState('')
   const [discoveryFeedback, setDiscoveryFeedback] = useState(null)
+  useEffect(() => {
+    setSavingDiscovery(false)
+    setExecutingActionKey('')
+    setDiscoveryFeedback(null)
+  }, [acquisitionScopeKey])
   const [showEvidenceSources, setShowEvidenceSources] = useState(false)
   const [showWarningDetails, setShowWarningDetails] = useState(false)
   const [showAllSignals, setShowAllSignals] = useState(false)
@@ -6937,75 +6718,83 @@ function RuntimeWorkspace() {
     }))
   }
 
+  const runTrackedAcquisition = async (operation, check = false) => {
+    const tracker = acquisitionTrackerRef.current
+    if (!tracker || tracker.sessionRevision !== getSessionRevision()) return false
+    const attempt = tracker.begin(operation, check)
+    if (!attempt) {
+      setDiscoveryFeedback({ variant: 'error', message: tracker.pending
+        ? 'An acquisition request is already pending. Check the original request before submitting changed inputs.'
+        : 'Refresh the current revision before starting another acquisition.' })
+      return false
+    }
+    const isCurrent = () => acquisitionMountedRef.current
+      && acquisitionTrackerRef.current === tracker && tracker.sessionRevision === getSessionRevision()
+    setSavingDiscovery(true)
+    setExecutingActionKey(attempt.operation.actionKey || '')
+    setDiscoveryFeedback(null)
+    let run
+    try {
+      const original = attempt.operation
+      let response
+      try {
+        response = await (original.actionKey
+          ? executeRuntimeAction({ ...tracker.scope, actionKey: original.actionKey, body: original.body })
+          : updateRuntimeDiscoveryInputs({ runtimeInstanceId: tracker.scope.runtimeInstanceId, body: original.body })).unwrap()
+        run = tracker.settle(attempt, response)
+      } catch (error) {
+        run = tracker.settle(attempt, error, true)
+        if (isCurrent() && !run) setDiscoveryFeedback({ variant: 'error',
+          message: formatIntelligenceHubEvidenceError(error) + ' Original acquisition outcome remains unconfirmed. Check the original request; changed inputs have not been submitted.' })
+      }
+      if (!isCurrent()) return false
+      if (!run || !['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED'].includes(run.status)) {
+        if (response || run) setDiscoveryFeedback({ variant: 'error', message: 'Original acquisition outcome remains unconfirmed. Check the original request; changed inputs have not been submitted.' })
+        return false
+      }
+      setDiscoveryFeedback({ variant: run.status === 'SUCCEEDED' ? 'success' : 'warning',
+        message: acquisitionRunLabel(run) + (attempt.checking ? '. Original request checked; current changes were not submitted.' : '.') })
+      if (run.canonicalSaved) {
+        try {
+          const refreshed = await refetch()
+          if (refreshed?.error) throw new Error('Current projection unavailable')
+        } catch {
+          if (isCurrent()) setDiscoveryFeedback({ variant: 'warning', message: acquisitionRunLabel(run) + '. Current projection could not be refreshed; refresh before starting another acquisition.' })
+        }
+      }
+      return isCurrent() && !attempt.checking && run.canonicalSaved === true
+    } finally {
+      tracker.release(attempt)
+      if (isCurrent()) {
+        setSavingDiscovery(false)
+        setExecutingActionKey('')
+        renderAcquisitionTransport(value => value + 1)
+      }
+    }
+  }
+
   const handleRefreshDiscoveryEvidence = async ({ acquisitionProfile, documentSources, inputs }) => {
+    if (acquisitionTrackerRef.current?.pending) {
+      setDiscoveryFeedback({ variant: 'error', message: 'Check the original acquisition request before submitting changed inputs.' })
+      return false
+    }
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
-      setDiscoveryFeedback({
-        variant: 'error',
-        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
-      })
+      setDiscoveryFeedback({ variant: 'error', message: 'Runtime projection is missing its concurrency marker. Refresh and try again.' })
       return false
     }
-
-    setSavingDiscovery(true)
-    setDiscoveryFeedback(null)
-
-    try {
-      const currentDiscovery = getDiscoveryProjection(renderer)
-      const hasCurrentEvidence = currentDiscovery?.evidenceReady === true
-        || currentDiscovery?.state?.evidenceReady === true
-      const actionKey = hasCurrentEvidence
-        ? DISCOVERY_ACTION_KEYS.REFRESH_EVIDENCE_PACK
-        : DISCOVERY_ACTION_KEYS.BUILD_EVIDENCE_PACK
-      const discoveryAction = discoveryActionByKey[actionKey]
-        || discoveryActionByKey[DISCOVERY_ACTION_KEYS.SAVE_DISCOVERY_INPUTS]
-        || null
-
-      if (discoveryAction) {
-        if (!discoveryAction.enabled) {
-          throw new Error(discoveryAction.disabledReason || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} action is currently unavailable.`)
-        }
-        const resolvedActionKey = normalizeRuntimeActionToken(discoveryAction.governedAction || discoveryAction.actionKey)
-        setExecutingActionKey(resolvedActionKey)
-        await executeRuntimeAction({
-          runtimeInstanceId,
-          customerId,
-          tenantId,
-          actionKey: resolvedActionKey,
-          body: {
-            acquisitionProfile,
-            ...(documentSources ? { documentSources } : {}),
-            inputs,
-            expectedUpdatedAt,
-          },
-        }).unwrap()
-      } else {
-        await updateRuntimeDiscoveryInputs({
-          runtimeInstanceId,
-          body: {
-            acquisitionProfile,
-            ...(documentSources ? { documentSources } : {}),
-            inputs,
-            expectedUpdatedAt,
-          },
-        }).unwrap()
-      }
-      setDiscoveryFeedback({
-        variant: 'success',
-        message: `${INTELLIGENCE_HUB_EVIDENCE_LABEL} refreshed.`,
-      })
-      await refetch()
-      return true
-    } catch (discoveryError) {
-      setDiscoveryFeedback({
-        variant: 'error',
-        message: formatIntelligenceHubEvidenceError(discoveryError),
-      })
+    const currentDiscovery = getDiscoveryProjection(renderer)
+    const hasCurrentEvidence = currentDiscovery?.evidenceReady === true || currentDiscovery?.state?.evidenceReady === true
+    const actionKey = hasCurrentEvidence ? DISCOVERY_ACTION_KEYS.REFRESH_EVIDENCE_PACK : DISCOVERY_ACTION_KEYS.BUILD_EVIDENCE_PACK
+    const discoveryAction = discoveryActionByKey[actionKey] || discoveryActionByKey[DISCOVERY_ACTION_KEYS.SAVE_DISCOVERY_INPUTS] || null
+    if (discoveryAction && !discoveryAction.enabled) {
+      setDiscoveryFeedback({ variant: 'error', message: discoveryAction.disabledReason || INTELLIGENCE_HUB_EVIDENCE_LABEL + ' action is currently unavailable.' })
       return false
-    } finally {
-      setSavingDiscovery(false)
-      setExecutingActionKey('')
     }
+    return runTrackedAcquisition({
+      actionKey: discoveryAction ? normalizeRuntimeActionToken(discoveryAction.governedAction || discoveryAction.actionKey) : null,
+      body: { acquisitionProfile, ...(documentSources ? { documentSources } : {}), inputs, expectedUpdatedAt },
+    })
   }
 
   const handleAcceptDiscovery = async () => {
@@ -7521,6 +7310,13 @@ function RuntimeWorkspace() {
   const executeGovernedRuntimeAction = async (action, actionBody = {}) => {
     const actionKey = getRuntimeActionKey(action)
     if (!actionKey || !action?.enabled) return
+
+    if ([DISCOVERY_ACTION_KEYS.SAVE_DISCOVERY_INPUTS, DISCOVERY_ACTION_KEYS.BUILD_EVIDENCE_PACK, DISCOVERY_ACTION_KEYS.REFRESH_EVIDENCE_PACK].includes(actionKey)) {
+      if (acquisitionTrackerRef.current?.pending) setDiscoveryFeedback({ variant: 'error', message: 'Check the original acquisition request before submitting changed inputs.' })
+      else if (runtimeInstance?.updatedAt) await runTrackedAcquisition({ actionKey, body: { expectedUpdatedAt: runtimeInstance.updatedAt, ...actionBody } })
+      else setDiscoveryFeedback({ variant: 'error', message: 'Runtime projection is missing its concurrency marker. Refresh and try again.' })
+      return
+    }
 
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
@@ -8344,11 +8140,17 @@ function RuntimeWorkspace() {
         </aside>
 
         <main className="runtime-workspace__main" aria-label="Guided execution sections">
+          {acquisitionTrackerRef.current?.pending ? (
+            <Card><Card.Body>
+              <p>An original acquisition request is pending. Checking it resends its original inputs; current changes are not submitted.</p>
+              <Button type="button" disabled={savingDiscovery} onClick={() => runTrackedAcquisition(null, true)}>Check original acquisition request</Button>
+            </Card.Body></Card>
+          ) : null}
           {/* Output Lab branch is retained only for explicit internal compatibility state;
               standard customer navigation cannot select it. */}
           {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
             <DiscoverySection
-              key={`discovery-${getDiscoveryAcquisitionProfile(discovery)}-${JSON.stringify(discovery?.inputValues || {})}`}
+              key={`discovery-${acquisitionScopeKey}`}
               activity={activity}
               customerId={customerId}
               discovery={discovery}

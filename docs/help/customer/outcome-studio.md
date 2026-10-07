@@ -19,15 +19,15 @@ The final approval gate requires the actual persisted stage receipts for the sam
 
 ## When a request is blocked
 
-The workspace shows the first blocking stage and its next action. A failed or incomplete stage prevents downstream stages from being fabricated and prevents customer-ready approval. For example, an ARL Meaning Review blocker means the Working Draft needs a bounded meaning change; the narrative, shaping, and rendered-expression stages remain blocked until that review passes.
+The workspace shows the first blocking stage and its next action. A failed or incomplete stage prevents downstream stages from being fabricated and prevents customer-ready approval. If ARL Meaning Review ran and rejected the draft, its findings identify the meaning corrections needed. If ARL did not run, failed to execute, or has a missing or stale receipt, that is an execution or lineage problem; it does not establish that the draft was rejected on meaning. Narrative, shaping and rendered-expression stages remain blocked until a valid ARL pass is recorded.
 
-Retries use the existing request lineage and are idempotent. Historical plans, drafts, assets, and stage receipts are not replaced. Accepted evidence is reused, but acceptance alone does not establish that it supports every section of the selected output.
+After a failure, earlier steps may already have been saved. Retrieve the saved request and review its stage status before taking further action. An eligible retry uses the existing request lineage and verifies the current source and predecessor receipts before reusing a successful stage. Do not start a new request merely to repeat a failed generation. Historical plans, drafts, assets and stage receipts are preserved. Accepted evidence is reused, but acceptance alone does not establish that it supports every section of the selected output.
 
 ## Evidence clarification before generation
 
 Each required section needs admissible, current evidence with its original source, validation status, attribution and qualifications. Framework guidance explains how to prepare the output; it cannot establish customer facts. If a required section has unresolved, unsupported or Framework-only material, Outcome Studio shows a clarification request and stops before generation or meaning review.
 
-An unresolved optional section may be omitted only when the selected schema permits omission. The evidence readiness panel distinguishes required sections needing clarification from permitted optional omissions. Confirming your request records what you want; it does not validate evidence or grant ARL approval.
+An unresolved optional section may be omitted only when the selected schema permits omission. The evidence readiness panel distinguishes required sections needing clarification from permitted optional omissions. Confirming your request records what you want; it does not validate evidence or grant ARL approval. Workspace readiness and request readiness answer different questions: an available locked workspace may still contain a request blocked by its selected output requirements. Follow the request-specific readiness reason and next action.
 
 Read the exact clarification question and the named section, reference or missing input before taking its next action. Partial support and metadata-only sections still need admissible claims for their required content. Ready to Draft permits the Working Draft call against the saved handoff; it does not mean ARL has run or approved the result. Changing source evidence invalidates the saved readiness and requires a new request resolution.
 

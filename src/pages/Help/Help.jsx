@@ -5,10 +5,30 @@
  * and role-aware workflow support references.
  */
 
+import { useLocation } from 'react-router-dom'
+import { Link } from '../../components/Link'
+import { renderSafeMarkdown, renderSafeInlineMarkdown } from '../../utils/safeMarkdown.jsx'
+import { HELP_ARTICLES } from './helpArticles.js'
+import { getHelpArticleHref, getHelpReturnHref } from './helpNavigation.js'
+import contextIllustration from '../../../docs/help/assets/intelligence-hub-context.jpg'
 import { Fieldset } from '../../components/Fieldset'
 import './Help.css'
 
+const HELP_ASSETS = Object.freeze({ '../assets/intelligence-hub-context.jpg': contextIllustration })
+
 function Help() {
+  const { search } = useLocation()
+  const slug = new URLSearchParams(search).get('article')
+  const article = HELP_ARTICLES.find(item => item.slug === slug)
+  const returnHref = getHelpReturnHref(search)
+  const renderInline = text => String(text).split(/(!?\[[^\]\n]+\]\([^) \n]+\))/g).map((token, index) => {
+    const match = token.match(/^(!?)\[([^\]]+)\]\(([^)]+)\)$/)
+    if (!match) return renderSafeInlineMarkdown(token)
+    const [, image, label, target] = match
+    if (image && Object.hasOwn(HELP_ASSETS, target)) return <img key={index} src={HELP_ASSETS[target]} alt={label} loading="lazy" className="help__illustration" />
+    const related = !image && HELP_ARTICLES.find(item => target === item.slug + '.md')
+    return related ? <Link key={index} to={getHelpArticleHref(search, related.slug)}>{label}</Link> : token
+  })
   return (
     <section className="help container" aria-label="Help Center">
       <header className="help__header">
@@ -19,7 +39,14 @@ function Help() {
         </p>
       </header>
 
-      <div className="help__grid">
+      <nav className="help__articles" aria-label="Intelligence Hub Help articles">
+        {HELP_ARTICLES.map(item => <Link key={item.slug} to={getHelpArticleHref(search, item.slug)} aria-current={article?.slug === item.slug ? 'page' : undefined}>{item.title}</Link>)}
+      </nav>
+      {returnHref ? <Link className="help__return" to={returnHref}>Return to Intelligence Hub</Link> : null}
+      {slug ? <section id="context-help" className="help__article" aria-label={article ? article.title + ' Help article' : 'Help article unavailable'}>
+        {article ? renderSafeMarkdown(article.source, { headingOffset: 1, renderInline }) : <><h2>Help article unavailable</h2><p>This article is not in the current Help catalogue. Choose a listed topic or return to your workspace.</p><Link to={getHelpArticleHref(search)}>Open Help Center</Link></>}
+      </section> : null}
+      {!slug ? <div id="context-help" className="help__grid">
         <Fieldset variant="default" gap="lg" className="help__section">
           <Fieldset.Legend className="help__legend">
             <h2 className="help__section-title">Getting Started</h2>
@@ -93,7 +120,7 @@ function Help() {
             </p>
           </Fieldset.Content>
         </Fieldset>
-      </div>
+      </div> : null}
     </section>
   )
 }

@@ -11,12 +11,12 @@ The stage path is fail-closed:
 
 - **Framework Guidance** — the governed handoff or guidance execution is missing, stale, or failed.
 - **Working Draft** — the draft provider did not produce a valid evidence-bound draft, or its predecessor lineage is invalid.
-- **ARL Meaning Review** — the draft requires bounded changes to meaning, reality-layer classification, evidence use, or decision usefulness.
+- **ARL Meaning Review** — an actual rejection identifies changes to meaning, reality-layer classification, evidence use or decision usefulness. A stage that did not run, failed to execute or has invalid lineage is a separate execution blocker; it is not an ARL meaning rejection.
 - **Outcome Narrative Plan** — blocked until ARL Meaning Review has passed and its actual stage receipt is available.
 - **Output Shaping** — blocked until the narrative plan is persisted and predecessor fingerprints match.
 - **Rendered-Expression RL** — blocked until the shaped candidate is persisted and the rendered-expression review passes.
 
-The workspace identifies the specific blocker. A green foundation stage, resolved pack, or recorded binding does not prove that the corresponding quality stage executed.
+An available workspace does not establish that a particular request is ready. Use the request-specific blocker, affected section or reference and next action. The workspace identifies the specific blocker. A green foundation stage, resolved pack, or recorded binding does not prove that the corresponding quality stage executed.
 
 ## Snapshot completeness and section support
 
@@ -40,9 +40,9 @@ The section ledger distinguishes supported sections, partial support, metadata-o
 
 A contradiction candidate is retained with its source references. Compatible qualification or evidence about different scopes or times does not automatically block a section; unresolved provenance or materiality still needs review. The handoff never resolves the underlying evidence automatically.
 
-**Insufficient handoff** means drafting stops before the Working Draft provider or ARL call. Resolve the exact source or claim requirement through the governed runtime workflow, then resolve the request again. **Provider failure** means the drafting call failed or its response did not match the validated handoff; invalid prose is not saved as a Working Draft. **ARL meaning rejection** means an actual draft reached meaning review and needs the identified correction. Readiness does not guarantee that ARL will accept a draft.
+**Insufficient handoff** means drafting stops before the Working Draft provider or ARL call. Resolve the exact source or claim requirement through the governed runtime workflow, then resolve the request again. **Provider failure** means a preparation or drafting provider call failed. A response that fails deterministic validation is a validation failure; a valid response that cannot be saved is a persistence failure. These are separate from an ARL meaning rejection. Invalid prose is not saved as a Working Draft, and a generated response alone does not prove that a Working Draft was persisted. **ARL meaning rejection** means an actual draft reached meaning review and needs the identified correction. Readiness does not guarantee that ARL will accept a draft.
 
-Outcome Studio uses the accepted evidence already bound to the locked runtime. It does not ask the customer to upload another copy to bypass a governed gate. Provider receipts, stage execution IDs, predecessor fingerprints, and audit records must remain consistent. Retries are idempotent; historical records remain unchanged.
+Outcome Studio uses the accepted evidence already bound to the locked runtime. It does not ask the customer to upload another copy to bypass a governed gate. Provider receipts, stage execution IDs, predecessor fingerprints, and audit records must remain consistent. Earlier stages may already have been saved when a later step fails. Retrieve the saved request and inspect its recorded stages before deciding what to do next. Eligible retries verify source and predecessor lineage and reuse valid completed work; stale or changed inputs require re-resolution. Historical records remain preserved. Do not retry repeatedly to seek an ARL pass.
 
 Evidence readiness is checked against the selected output schema. Required sections need admissible current evidence with exact source references, validation status, attribution and qualifications. Accepted status alone is insufficient. Framework guidance remains separate from customer evidence and cannot support a customer claim.
 

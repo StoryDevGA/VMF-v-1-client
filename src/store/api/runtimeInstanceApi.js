@@ -163,6 +163,9 @@ export const buildRuntimeStateEvidenceQuery = ({
   pageSize = 25,
   reviewStatus = '',
   acceptanceState = '',
+  sourceId = '',
+  evidenceObjectId = '',
+  search = '',
   customerId,
   tenantId,
 }) => {
@@ -171,6 +174,9 @@ export const buildRuntimeStateEvidenceQuery = ({
   params.set('pageSize', String(pageSize))
   appendParam(params, 'reviewStatus', reviewStatus)
   appendParam(params, 'acceptanceState', acceptanceState)
+  appendParam(params, 'sourceId', sourceId)
+  appendParam(params, 'evidenceObjectId', evidenceObjectId)
+  appendParam(params, 'search', search)
 
   return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/evidence?${params.toString()}`
 }
@@ -181,10 +187,63 @@ export const buildRuntimeStateGraphManifestQuery = ({ runtimeInstanceId, custome
   return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/graph-manifest${query ? `?${query}` : ''}`
 }
 
+export const buildRuntimeStateSourcesQuery = ({ runtimeInstanceId, customerId, tenantId,
+  page = 1, pageSize = 25, search = '', sourceId = '', sourceType = '' }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  params.set('page', String(page))
+  params.set('pageSize', String(pageSize))
+  appendParam(params, 'search', search)
+  appendParam(params, 'sourceId', sourceId)
+  appendParam(params, 'sourceType', sourceType)
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/sources?${params.toString()}`
+}
+
+export const buildRuntimeStateSourceSummaryQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/source-summary?${params}`
+}
+
+export const buildRuntimeStateEvidenceInventoryQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/evidence-inventory?${params}`
+}
+
+export const buildRuntimeStateDiscoveryHealthQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/discovery-health?${params}`
+}
+
+export const buildRuntimeStateLockBasisQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/lock-basis?${params}`
+}
+
+export const buildRuntimeStateContradictionHistoryQuery = ({ runtimeInstanceId, customerId, tenantId, findingId, page = 1, pageSize = 10 }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  params.set('findingId', findingId); params.set('page', page); params.set('pageSize', pageSize)
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/contradiction-history?${params}`
+}
+
+export const buildRuntimeStateFindingsQuery = ({ runtimeInstanceId, customerId, tenantId, search = '', type = 'CONTRADICTION', population = 'OPEN', sort = 'ID_ASC', page = 1, pageSize = 4 }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  Object.entries({ search, type, population, sort, page, pageSize }).forEach(([key, value]) => params.set(key, value))
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/findings?${params}`
+}
+
 export const buildRuntimeStateGraphProjectionQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
   const params = buildRuntimeStateScopeParams({ customerId, tenantId })
   const query = params.toString()
   return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/graph-projection${query ? `?${query}` : ''}`
+}
+
+export const buildRuntimeStateGraphNeighbourhoodQuery = ({ runtimeInstanceId, customerId, tenantId, nodeId, evidenceObjectId, mode, graphHash, afterEdgeKey }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  if (nodeId) params.set('nodeId', nodeId)
+  if (evidenceObjectId) params.set('evidenceObjectId', evidenceObjectId)
+  params.set('mode', mode)
+  params.set('graphHash', graphHash)
+  if (afterEdgeKey) params.set('afterEdgeKey', afterEdgeKey)
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/graph-neighbourhood?${params}`
 }
 
 export const buildRuntimeStateOutcomeHandoffReadinessQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
@@ -488,6 +547,10 @@ export const buildReviewRuntimeDiscoveryEvidenceQuery = ({ runtimeInstanceId, ev
 export const buildRuntimeDiscoveryContradictionsQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-contradictions`
 
+export const buildReviewCompletionQuery = ({ runtimeInstanceId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/review-completion`, { customerId, tenantId })
+export const buildCompleteReviewQuery = ({ body, ...scope }) => ({ url: buildReviewCompletionQuery(scope), method: 'POST', body })
+
 export const buildReviewRuntimeDiscoveryContradictionQuery = ({ runtimeInstanceId, contradictionId, body }) => ({
   url: `${buildRuntimeDiscoveryContradictionsQuery({ runtimeInstanceId })}/${encodeURIComponent(String(contradictionId ?? '').trim())}/review`,
   method: 'PATCH',
@@ -661,6 +724,48 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 
     getRuntimeStateEvidence: build.query({
       query: buildRuntimeStateEvidenceQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateSources: build.query({
+      query: buildRuntimeStateSourcesQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateSourceSummary: build.query({
+      query: buildRuntimeStateSourceSummaryQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateEvidenceInventory: build.query({
+      query: buildRuntimeStateEvidenceInventoryQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateDiscoveryHealth: build.query({
+      query: buildRuntimeStateDiscoveryHealthQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateLockBasis: build.query({
+      query: buildRuntimeStateLockBasisQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateContradictionHistory: build.query({
+      query: buildRuntimeStateContradictionHistoryQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateFindings: build.query({
+      query: buildRuntimeStateFindingsQuery,
       providesTags: getRuntimeInstanceDetailTags,
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
@@ -911,6 +1016,42 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeRendererTags,
     }),
 
+    getRuntimeStateGraphNeighbourhood: build.query({
+      query: buildRuntimeStateGraphNeighbourhoodQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getAcquisitionRuns: build.query({
+      query: ({ runtimeInstanceId, customerId, tenantId, cursor }) => {
+        const params = new URLSearchParams()
+        appendParam(params, 'customerId', customerId); appendParam(params, 'tenantId', tenantId); appendParam(params, 'cursor', cursor)
+        return `/runtime-instances/${encodeURIComponent(runtimeInstanceId)}/acquisition-runs?${params}`
+      },
+      providesTags: getRuntimeRendererTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+    getAcquisitionRun: build.query({
+      query: ({ runtimeInstanceId, customerId, tenantId, runId }) => {
+        const params = new URLSearchParams()
+        appendParam(params, 'customerId', customerId); appendParam(params, 'tenantId', tenantId)
+        return `/runtime-instances/${encodeURIComponent(runtimeInstanceId)}/acquisition-runs/${encodeURIComponent(runId)}?${params}`
+      },
+      providesTags: getRuntimeRendererTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getReviewCompletion: build.query({
+      query: buildReviewCompletionQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+      providesTags: getRuntimeRendererTags,
+    }),
+    completeReview: build.mutation({
+      query: buildCompleteReviewQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+      invalidatesTags: getMutateRuntimeStateInvalidationTags,
+    }),
+
     reviewRuntimeDiscoveryContradiction: build.mutation({
       query: buildReviewRuntimeDiscoveryContradictionQuery,
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
@@ -951,6 +1092,8 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 })
 
 export const {
+  useGetAcquisitionRunsQuery,
+  useGetAcquisitionRunQuery,
   usePlanRuntimeOutcomeRequestMutation,
   useConfirmRuntimeOutcomeRequestPlanMutation,
   useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
@@ -965,8 +1108,16 @@ export const {
   useGetRuntimeStateBootstrapQuery,
   useGetRuntimeStateSectionSummaryQuery,
   useGetRuntimeStateEvidenceQuery,
+  useGetRuntimeStateSourcesQuery,
+  useGetRuntimeStateSourceSummaryQuery,
+  useGetRuntimeStateEvidenceInventoryQuery,
   useGetRuntimeStateGraphManifestQuery,
+  useGetRuntimeStateDiscoveryHealthQuery,
+  useGetRuntimeStateLockBasisQuery,
+  useGetRuntimeStateContradictionHistoryQuery,
+  useGetRuntimeStateFindingsQuery,
   useGetRuntimeStateGraphProjectionQuery,
+  useGetRuntimeStateGraphNeighbourhoodQuery,
   useGetRuntimeStateOutcomeHandoffReadinessQuery,
   useGetRuntimeEvidenceQuery,
   useGetRuntimeOutputAssetQuery,
@@ -1015,6 +1166,8 @@ export const {
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useGetRuntimeDiscoveryContradictionsQuery,
+  useGetReviewCompletionQuery,
+  useCompleteReviewMutation,
   useReviewRuntimeDiscoveryContradictionMutation,
   useReviewRuntimeSectionEvidenceMutation,
   useReviewAllRuntimeSectionEvidenceMutation,

@@ -1,3 +1,4 @@
+import { renderSafeMarkdown } from '../../utils/safeMarkdown.jsx'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
@@ -501,80 +502,6 @@ const getOutcomeStudioStages = ({
         }
       : stageEvidence(item.key),
   }))
-}
-
-const renderSafeInlineMarkdown = (text) => {
-  const tokens = String(text || '').split(/(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g)
-  return tokens.map((token, index) => {
-    const key = `inline-${index}-${token}`
-    if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) {
-      return <strong key={key}>{token.slice(2, -2)}</strong>
-    }
-    if ((token.startsWith('*') && token.endsWith('*')) || (token.startsWith('_') && token.endsWith('_'))) {
-      return <em key={key}>{token.slice(1, -1)}</em>
-    }
-    return token
-  })
-}
-
-const renderSafeMarkdown = (markdown) => {
-  const lines = String(markdown || '').replace(/\r\n/g, '\n').split('\n')
-  const blocks = []
-  let paragraph = []
-  let list = null
-
-  const flushParagraph = () => {
-    if (!paragraph.length) return
-    blocks.push({ type: 'paragraph', text: paragraph.join(' ') })
-    paragraph = []
-  }
-  const flushList = () => {
-    if (!list) return
-    blocks.push(list)
-    list = null
-  }
-
-  lines.forEach((line) => {
-    const trimmed = line.trim()
-    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/)
-    const unorderedItem = trimmed.match(/^[-*]\s+(.+)$/)
-    const orderedItem = trimmed.match(/^\d+[.)]\s+(.+)$/)
-
-    if (!trimmed) {
-      flushParagraph()
-      flushList()
-    } else if (heading) {
-      flushParagraph()
-      flushList()
-      blocks.push({ level: heading[1].length, text: heading[2], type: 'heading' })
-    } else if (unorderedItem || orderedItem) {
-      flushParagraph()
-      const type = orderedItem ? 'ordered-list' : 'unordered-list'
-      if (list?.type !== type) flushList()
-      if (!list) list = { items: [], type }
-      list.items.push((orderedItem || unorderedItem)[1])
-    } else {
-      flushList()
-      paragraph.push(trimmed)
-    }
-  })
-  flushParagraph()
-  flushList()
-
-  return blocks.map((block, index) => {
-    const key = `${block.type}-${index}`
-    if (block.type === 'heading') {
-      const Heading = `h${Math.min(block.level + 3, 6)}`
-      return <Heading key={key}>{renderSafeInlineMarkdown(block.text)}</Heading>
-    }
-    if (block.type === 'ordered-list') {
-      return <ol key={key}>{block.items.map((item, itemIndex) => <li key={`${itemIndex}-${item}`}>{renderSafeInlineMarkdown(item)}</li>)}</ol>
-    }
-    if (block.type === 'unordered-list') {
-      return <ul key={key}>{block.items.map((item, itemIndex) => <li key={`${itemIndex}-${item}`}>{renderSafeInlineMarkdown(item)}</li>)}</ul>
-    }
-    return <p key={key}>{renderSafeInlineMarkdown(block.text)}</p>
-  })
 }
 
 const refetchAll = async (...refetchers) => {
@@ -1654,8 +1581,13 @@ function OutcomeStudioWorkspace() {
       </div>
       <dl className="outcome-studio-workspace__summary-list">
         <div>
-          <dt>Session readiness</dt>
-          <dd><Status variant={statusVariant(readiness.state)} size="sm" showIcon>{formatRuntimeTokenLabel(readiness.state || 'UNKNOWN')}</Status></dd>
+          <dt>Workspace availability</dt>
+          <dd><Status variant={statusVariant(readiness.state)} size="sm" showIcon>{token(readiness.state) === 'READY' ? 'Available' : formatRuntimeTokenLabel(readiness.state || 'UNKNOWN')}</Status></dd>
+        </div>
+        <div>
+          <dt>Request drafting readiness</dt>
+          <dd><Status variant={!activeSessionId && !planning ? 'neutral' : responseGenerationAvailable ? 'success' : 'warning'} size="sm" showIcon>{!activeSessionId && !planning ? 'No request selected' : responseGenerationAvailable ? 'Ready to generate' : 'Blocked'}</Status></dd>
+          {(activeSessionId || planning) && generationBlockedReason ? <dd>{generationBlockedReason}</dd> : null}
         </div>
         <div>
           <dt>Information</dt>

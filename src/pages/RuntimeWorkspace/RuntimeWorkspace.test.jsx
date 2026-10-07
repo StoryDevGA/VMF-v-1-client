@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { clearTokens, setTokens } from '../../utils/tokenStorage.js'
 import AdvisorRecommendation from './AdvisorRecommendation.jsx'
 import {
   useAcceptRuntimeDiscoveryMutation,
@@ -798,11 +799,17 @@ function VmfRouteProbe() {
   )
 }
 
-function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001/workbench') {
+function RuntimeRevisionSwitchProbe() {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate('/app/runtime/value-narrative-002/workbench')}>Switch test revision</button>
+}
+
+function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001/workbench', navigationProbe = false) {
   const initialEntries = Array.isArray(initialEntry) ? initialEntry : [initialEntry]
   return (
     <ToasterProvider>
       <MemoryRouter initialEntries={initialEntries}>
+        {navigationProbe ? <RuntimeRevisionSwitchProbe /> : null}
         <Routes>
           <Route path="/app/workspaces/vmf" element={<VmfRouteProbe />} />
           <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
@@ -870,6 +877,14 @@ function buildRuntimeSection(index, label) {
     },
   }
 }
+
+const acquisitionReceipt = args => ({ data: { acquisitionRun: {
+  contractVersion: 'acquisition-run.v1', runId: '1a9b3a45-093c-4a28-8335-b3e592283711', requestKey: args.body.requestKey,
+  scope: { runtimeInstanceKey: args.runtimeInstanceId, customerId: '507f1f77bcf86cd799439012', tenantId: '507f1f77bcf86cd799439013' },
+  status: 'SUCCEEDED', canonicalSaved: true, basisStateVersion: 'fixture-version-1', outputStateVersion: 'fixture-version-2',
+  outcomes: [{ kind: 'BRIEF', inputIndex: 0, status: 'SUCCEEDED', evidenceObjectCount: 0 }],
+  audit: { admissionId: 'fixture-admission', startId: 'fixture-start', terminalId: 'fixture-terminal', saveId: 'fixture-save' },
+} } })
 
 describe('RuntimeWorkspace', () => {
   it('does not present runtime publication as published Outcome Studio assets', () => {
@@ -1427,7 +1442,11 @@ describe('RuntimeWorkspace', () => {
     HTMLAnchorElement.prototype.click = vi.fn()
     unwrapMutation.mockResolvedValue({ data: { mutation: { runtimePath: 'framework_state.sections.customer_problem' } } })
     mutateRuntimeState.mockReturnValue({ unwrap: unwrapMutation })
-    unwrapAction.mockResolvedValue({ data: { action: { actionKey: 'SUBMIT_FOR_REVIEW' } } })
+    unwrapAction.mockImplementation(async () => {
+      const args = executeRuntimeAction.mock.lastCall[0]
+      return ['SAVE_DISCOVERY_INPUTS', 'BUILD_EVIDENCE_PACK', 'REFRESH_EVIDENCE_PACK'].includes(args.actionKey)
+        ? acquisitionReceipt(args) : { data: { action: { actionKey: 'SUBMIT_FOR_REVIEW' } } }
+    })
     executeRuntimeAction.mockReturnValue({ unwrap: unwrapAction })
     unwrapCreateRuntimeOutcomeSession.mockResolvedValue({ data: { sessionId: 'outcome_session_test' } })
     createRuntimeOutcomeSession.mockReturnValue({ unwrap: unwrapCreateRuntimeOutcomeSession })
@@ -1507,7 +1526,7 @@ describe('RuntimeWorkspace', () => {
       },
     })
     exportRuntimeOutcomeAsset.mockReturnValue({ unwrap: unwrapExportRuntimeOutcomeAsset })
-    unwrapDiscoveryInputs.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
+    unwrapDiscoveryInputs.mockImplementation(async () => acquisitionReceipt(updateRuntimeDiscoveryInputs.mock.lastCall[0]))
     updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
     unwrapAcceptDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'ACCEPTED' } } } })
     acceptRuntimeDiscovery.mockReturnValue({ unwrap: unwrapAcceptDiscovery })
@@ -3863,6 +3882,167 @@ describe('RuntimeWorkspace', () => {
     expect(buildButton).toBeEnabled()
   })
 
+
+  const useEditableAcquisitionFixture = (extra = {}, inputValues = {}) => useGetRuntimeRendererQuery.mockReturnValue({
+    data: { data: { ...rendererPayload, ...extra,
+      discovery: { state: { status: 'INPUT_REQUIRED' }, inputComplete: true, evidenceReady: false,
+        accepted: false, needsRefresh: false, inputValues: { companyName: 'Acme', companyWebsite: 'https://acme.example',
+          marketRegion: 'UK', targetOffer: 'Managed proposal platform', ...inputValues }, scopedViews: {} },
+    } }, isLoading: false, isFetching: false, error: null, refetch: refetchRenderer,
+  })
+
+  it('legacy Run checks freeze original payload and preserve newly staged documents', async () => {
+    const user = userEvent.setup()
+    useEditableAcquisitionFixture()
+    unwrapDiscoveryInputs.mockRejectedValueOnce({ status: 'FETCH_ERROR' })
+    const view = renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const original = updateRuntimeDiscoveryInputs.mock.lastCall[0]
+    expect(await screen.findByText(/outcome remains unconfirmed/i)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Optional Notes'), 'New unsent notes')
+    await user.upload(screen.getByLabelText('Document Sources'), new File(['new notes'], 'new-unsent.txt', { type: 'text/plain' }))
+    expect(await screen.findByText('new-unsent.txt')).toBeInTheDocument()
+    refetchRenderer.mockImplementationOnce(async () => {
+      useEditableAcquisitionFixture({}, { companyName: 'Saved server company', notes: 'Original saved notes' })
+      view.rerender(runtimeWorkspaceTree())
+      return { data: { data: rendererPayload } }
+    })
+    await user.click(screen.getByRole('button', { name: /^check original acquisition request$/i }))
+    expect(updateRuntimeDiscoveryInputs.mock.lastCall[0]).toEqual(original)
+    expect(await screen.findByText(/current changes were not submitted/i)).toBeInTheDocument()
+    expect(screen.getByText('new-unsent.txt')).toBeInTheDocument()
+    expect(screen.getByLabelText('Optional Notes')).toHaveValue('New unsent notes')
+    expect(refetchRenderer).toHaveBeenCalledTimes(1)
+  })
+
+  it('legacy Run suppresses a deferred response after same-scope login-session change', async () => {
+    const user = userEvent.setup(); let resolve
+    useEditableAcquisitionFixture()
+    unwrapDiscoveryInputs.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const original = updateRuntimeDiscoveryInputs.mock.lastCall[0]
+    act(() => clearTokens())
+    selectIntelligenceHubTab('Context')
+    await user.upload(screen.getByLabelText('Document Sources'), new File(['new session file'], 'new-session.txt', { type: 'text/plain' }))
+    expect(await screen.findByText('new-session.txt')).toBeInTheDocument()
+    await act(async () => resolve(acquisitionReceipt(original)))
+    expect(screen.getByText('new-session.txt')).toBeInTheDocument()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Revision saved/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^check original acquisition request$/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    expect(updateRuntimeDiscoveryInputs.mock.lastCall[0].body.requestKey).not.toBe(original.body.requestKey)
+    expect(updateRuntimeDiscoveryInputs.mock.lastCall[0].body.predecessorRunId).toBeUndefined()
+  })
+
+  it('legacy Run keeps the original key through ordinary session-preserving token renewal', async () => {
+    const user = userEvent.setup()
+    useEditableAcquisitionFixture()
+    unwrapDiscoveryInputs.mockRejectedValueOnce({ status: 'FETCH_ERROR' })
+    renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const original = updateRuntimeDiscoveryInputs.mock.lastCall[0]
+    act(() => setTokens({ accessToken: null, refreshToken: null }, { preserveSession: true }))
+    await user.click(screen.getByRole('button', { name: /^check original acquisition request$/i }))
+    expect(updateRuntimeDiscoveryInputs.mock.lastCall[0]).toEqual(original)
+  })
+
+  it('legacy Run check remains reachable when new action authority and stamp become unavailable', async () => {
+    const user = userEvent.setup()
+    useEditableAcquisitionFixture({ actions: [{ actionKey: 'BUILD_EVIDENCE_PACK', enabled: true }] })
+    unwrapAction.mockRejectedValueOnce({ status: 'FETCH_ERROR' })
+    const view = renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const original = executeRuntimeAction.mock.lastCall[0]
+    useEditableAcquisitionFixture({ runtimeInstance: { ...rendererPayload.runtimeInstance, updatedAt: null },
+      actions: [{ actionKey: 'BUILD_EVIDENCE_PACK', enabled: false, disabledReason: 'Revision locked' }] })
+    view.rerender(runtimeWorkspaceTree())
+    await user.click(screen.getByRole('button', { name: /^check original acquisition request$/i }))
+    expect(executeRuntimeAction.mock.lastCall[0]).toEqual(original)
+    expect(await screen.findByText(/current changes were not submitted/i)).toBeInTheDocument()
+  })
+
+  it.each(['reject', 'resolved error'])('legacy Run retains committed outcome when projection refetch fails: %s', async mode => {
+    const user = userEvent.setup()
+    useEditableAcquisitionFixture()
+    if (mode === 'reject') refetchRenderer.mockRejectedValueOnce(new Error('unavailable'))
+    else refetchRenderer.mockResolvedValueOnce({ error: { status: 503 } })
+    renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    expect(await screen.findByText(/Current projection could not be refreshed/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^check original acquisition request$/i })).not.toBeInTheDocument()
+  })
+
+
+  it.each(['wrong key', 'wrong scope', 'missing receipt'])('legacy Run refuses saved feedback for %s', async mode => {
+    const user = userEvent.setup(); useEditableAcquisitionFixture()
+    unwrapDiscoveryInputs.mockImplementationOnce(async () => {
+      const response = acquisitionReceipt(updateRuntimeDiscoveryInputs.mock.lastCall[0])
+      if (mode === 'missing receipt') return {}
+      if (mode === 'wrong key') response.data.acquisitionRun.requestKey = '11111111-1111-4111-8111-111111111111'
+      else response.data.acquisitionRun.scope.runtimeInstanceKey = 'other-revision'
+      return response
+    })
+    renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    expect(await screen.findByText(/outcome remains unconfirmed/i)).toBeInTheDocument()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /^check original acquisition request$/i })).toBeEnabled()
+    expect(screen.queryByText(/Revision saved/i)).not.toBeInTheDocument()
+  })
+
+  it('legacy Run creates an explicit retry key with failed predecessor', async () => {
+    const user = userEvent.setup(); useEditableAcquisitionFixture()
+    unwrapDiscoveryInputs.mockImplementationOnce(async () => {
+      const response = acquisitionReceipt(updateRuntimeDiscoveryInputs.mock.lastCall[0])
+      Object.assign(response.data.acquisitionRun, { status: 'FAILED', canonicalSaved: false, outputStateVersion: null,
+        outcomes: [{ kind: 'BRIEF', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 }] })
+      delete response.data.acquisitionRun.audit.saveId
+      throw { data: { error: { details: { acquisitionRun: response.data.acquisitionRun } } } }
+    })
+    renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const first = updateRuntimeDiscoveryInputs.mock.lastCall[0]
+    expect(await screen.findByText(/FAILED · Revision not saved/i)).toBeInTheDocument()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const next = updateRuntimeDiscoveryInputs.mock.lastCall[0]
+    expect(next.body.requestKey).not.toBe(first.body.requestKey)
+    expect(next.body.predecessorRunId).toBe('1a9b3a45-093c-4a28-8335-b3e592283711')
+  })
+
+  it('legacy Run suppresses deferred response after tenant scope changes', async () => {
+    const user = userEvent.setup(); let resolve
+    useEditableAcquisitionFixture()
+    unwrapDiscoveryInputs.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    const view = renderRuntimeWorkspace(); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const original = updateRuntimeDiscoveryInputs.mock.lastCall[0]
+    useTenantContext.mockReturnValue({ customerId: '507f1f77bcf86cd799439012', tenantId: '507f1f77bcf86cd799439099' })
+    useEditableAcquisitionFixture({ runtimeInstance: { ...rendererPayload.runtimeInstance, tenantId: '507f1f77bcf86cd799439099' } })
+    view.rerender(runtimeWorkspaceTree())
+    await act(async () => resolve(acquisitionReceipt(original)))
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Revision saved/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^check original acquisition request$/i })).not.toBeInTheDocument()
+  })
+
+
+  it('legacy Run suppresses deferred response after exact revision navigation', async () => {
+    const user = userEvent.setup(); let resolve
+    useEditableAcquisitionFixture()
+    unwrapDiscoveryInputs.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    render(runtimeWorkspaceTree(undefined, true)); selectIntelligenceHubTab('Context')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    const original = updateRuntimeDiscoveryInputs.mock.lastCall[0]
+    await user.click(screen.getByRole('button', { name: 'Switch test revision' }))
+    await act(async () => resolve(acquisitionReceipt(original)))
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Revision saved/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^check original acquisition request$/i })).not.toBeInTheDocument()
+  })
+
   it('refreshes discovery evidence through the discovery inputs endpoint', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -3904,6 +4084,7 @@ describe('RuntimeWorkspace', () => {
     expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       body: {
+        requestKey: expect.any(String),
         acquisitionProfile: 'STANDARD',
         inputs: {
           companyWebsite: 'https://acme.example',
@@ -3917,8 +4098,8 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(await screen.findByText(/Intelligence Hub evidence refreshed/i)).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: /status: Intelligence Hub evidence refreshed/i })).toBeInTheDocument()
+    expect(await screen.findByText(/SUCCEEDED · Revision saved/i)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /status: SUCCEEDED · Revision saved/i })).toBeInTheDocument()
   })
 
   it('uploads selected discovery documents with the governed evidence refresh request', async () => {
@@ -3990,6 +4171,7 @@ describe('RuntimeWorkspace', () => {
     expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       body: {
+        requestKey: expect.any(String),
         acquisitionProfile: 'STANDARD',
         documentSources: [
           expect.objectContaining({
@@ -4012,7 +4194,7 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(await screen.findByText(/Intelligence Hub evidence refreshed/i)).toBeInTheDocument()
+    expect(await screen.findByText(/SUCCEEDED · Revision saved/i)).toBeInTheDocument()
   })
 
   it('shows the nested Intelligence Hub document ingestion cause when extraction fails', async () => {
@@ -4196,6 +4378,7 @@ describe('RuntimeWorkspace', () => {
       tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'BUILD_EVIDENCE_PACK',
       body: {
+        requestKey: expect.any(String),
         acquisitionProfile: 'STANDARD',
         inputs: {
           companyWebsite: 'https://acme.example',
@@ -4263,6 +4446,7 @@ describe('RuntimeWorkspace', () => {
       tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'BUILD_EVIDENCE_PACK',
       body: {
+        requestKey: expect.any(String),
         acquisitionProfile: 'ENHANCED',
         inputs: {
           companyWebsite: 'https://acme.example',

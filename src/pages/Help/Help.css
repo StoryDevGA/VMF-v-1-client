@@ -94,3 +94,35 @@
     transition: none;
   }
 }
+
+.help__articles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm) var(--spacing-lg);
+}
+
+.help__articles .link, .help__return {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(var(--spacing-xl) + var(--spacing-sm) + var(--spacing-xs));
+  overflow-wrap: anywhere;
+}
+
+.help__article {
+  display: grid;
+  gap: var(--spacing-md);
+  max-width: 75ch;
+  min-width: 0;
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.help__article h2, .help__article h3 {
+  margin-block: var(--spacing-lg) 0;
+}
+
+.help__article p, .help__article ul, .help__article ol { margin: 0; }
+.help__article ul, .help__article ol { padding-left: var(--spacing-lg); }
+.help__article li + li { margin-top: var(--spacing-sm); }
+.help__illustration { width: 100%; height: auto; border: var(--border-width-thin) solid var(--color-border); border-radius: var(--border-radius-sm); }

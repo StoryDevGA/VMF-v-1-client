@@ -1,5 +1,10 @@
 /* Graph composition measured from the SS-037 prototype. Shared controls retain
    their component API; these rules arrange and adapt the compact graph surface. */
+.intelligence-graph__identity { display: grid; gap: var(--spacing-xs); }
+.intelligence-graph__identity code, .intelligence-graph__member-list code { overflow-wrap: anywhere; white-space: normal; }
+.intelligence-graph__member-actions { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); }
+.intelligence-graph__member-list { display: grid; gap: var(--spacing-sm); }
+.intelligence-graph__member-list .btn__content { display: grid; gap: var(--spacing-xs); min-width: 0; white-space: normal; text-transform: none; text-align: start; }
 .intelligence-graph.intelligence-hub__sources-workspace { font-size: var(--font-size-intelligence-context-detail); display: flex; flex-direction: column; gap: calc(var(--spacing-sm) - var(--border-width-thin)); min-width: 0; }
 .intelligence-graph__toolbar, .intelligence-graph__context, .intelligence-graph__modebar, .intelligence-graph .intelligence-graph__footer { border: var(--border-width-thin) solid var(--color-border-subtle); border-radius: calc(var(--border-radius-md) - var(--border-width-thin)); }
 .intelligence-graph__toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: calc(var(--spacing-md) + var(--spacing-2xs)); padding: calc(var(--spacing-sm) + var(--spacing-2xs)) calc(var(--spacing-sm) + var(--spacing-xs)); background: var(--background-intelligence-graph-toolbar); }
@@ -69,6 +74,11 @@
 .intelligence-graph__inspector h4 { color: var(--color-success); font-size: var(--font-size-xs); text-transform: uppercase; margin: 0; font-weight: var(--font-weight-bold); }
 .intelligence-graph__explanation { margin-top: var(--spacing-sm); padding: var(--spacing-xs) var(--spacing-sm); background: var(--color-intelligence-review-explanation); border-inline-start: var(--border-width-medium) solid var(--color-intelligence-graph-explanation-border); }
 .intelligence-graph__explanation p { margin-top: var(--spacing-2xs); color: var(--color-intelligence-graph-explanation-text); }
+.intelligence-graph__properties { margin-top: var(--spacing-sm); overflow-wrap: anywhere; }
+.intelligence-graph__properties summary { cursor: pointer; min-height: calc(var(--spacing-md) * 2.75); padding-block: var(--spacing-xs); font-weight: var(--font-weight-semibold); }
+.intelligence-graph__properties h5 { font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.intelligence-graph__properties section, .intelligence-graph__properties ul { margin-top: var(--spacing-xs); }
+.intelligence-graph__properties ul { padding-left: var(--spacing-md); }
 .intelligence-graph__relations { border: var(--border-width-thin) solid var(--color-border-subtle); border-radius: var(--border-radius-sm); padding: calc(var(--spacing-sm) - var(--border-width-thin)); margin-top: var(--spacing-sm); background: var(--color-intelligence-graph-panel-end); }
 .intelligence-graph__relations header { display: flex; justify-content: space-between; gap: var(--spacing-xs); font-size: var(--font-size-xs); }
 .intelligence-graph__relations header > span { color: var(--color-intelligence-metric); }
@@ -106,3 +116,11 @@
   .intelligence-graph__modebar nav .btn, .intelligence-graph__search .input, .intelligence-graph__inspect, .intelligence-graph__technical.link, .intelligence-graph__footer .btn, .intelligence-graph__footer .link { min-height: calc(var(--control-height-action) + var(--spacing-sm) + var(--spacing-xs)); }
   .intelligence-graph__search .input { font-size: var(--font-size-base); }
 }
+.intelligence-graph__neighbourhood { margin-top: var(--spacing-md); border-top: var(--border-width-thin) solid var(--color-border-subtle); padding-top: var(--spacing-md); min-width: 0; display: grid; gap: var(--spacing-sm); }
+.intelligence-graph__neighbourhood-list { display: grid; gap: var(--spacing-sm); }
+.intelligence-graph__neighbourhood-list > div { display: grid; gap: var(--spacing-xs); min-width: 0; }
+.intelligence-graph__neighbourhood code { overflow-wrap: anywhere; white-space: normal; }
+.intelligence-graph__neighbourhood button { min-height: var(--control-height-touch); white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+.intelligence-graph__neighbourhood-list .btn__content { display: grid; gap: var(--spacing-xs); text-align: start; white-space: normal; min-width: 0; text-transform: none; }
+.intelligence-graph__lifecycle { display: grid; gap: var(--spacing-xs); border: var(--border-width-thin) solid var(--color-border-subtle); border-radius: var(--border-radius-md); padding: var(--spacing-sm); }
+.intelligence-graph__lifecycle .link { min-height: var(--control-height-touch); display: inline-flex; align-items: center; }

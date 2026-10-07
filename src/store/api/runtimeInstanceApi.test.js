@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { configureStore } from '@reduxjs/toolkit'
+
+it('builds literal scoped stored-finding search and independent paging without cache identity on the wire', () => {
+  const query = new URL(buildRuntimeStateFindingsQuery({ runtimeInstanceId: 'revision/2', customerId: 'customer', tenantId: 'tenant', search: 'A&B?', type: 'CONTRADICTION', population: 'RECORDED', sort: 'ID_DESC', page: 2, pageSize: 4, sessionRevision: 3, stateVersion: 'opaque' }), 'http://localhost')
+  expect(query.pathname).toBe('/runtime-instances/revision%2F2/state/findings')
+  expect(Object.fromEntries(query.searchParams)).toEqual({ customerId: 'customer', tenantId: 'tenant', search: 'A&B?', type: 'CONTRADICTION', population: 'RECORDED', sort: 'ID_DESC', page: '2', pageSize: '4' })
+})
+
+it('builds exact scoped finding history with independent page and cache-only session/version identity', () => {
+  expect(buildRuntimeStateContradictionHistoryQuery({ runtimeInstanceId: 'revision/2', customerId: 'customer', tenantId: 'tenant', findingId: 'finding/a', page: 2, pageSize: 10, sessionRevision: 2, stateVersion: 'opaque' }))
+    .toBe('/runtime-instances/revision%2F2/state/contradiction-history?customerId=customer&tenantId=tenant&findingId=finding%2Fa&page=2&pageSize=10')
+})
+
+it('builds the exact scoped lock-basis read without session cache identity in the request', () => {
+  expect(buildRuntimeStateLockBasisQuery({ runtimeInstanceId: 'revision/2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: 99 }))
+    .toBe('/runtime-instances/revision%2F2/state/lock-basis?customerId=customer-1&tenantId=tenant-1')
+})
+
+it('builds the scoped Discovery Health read without transmitting cache-only session identity', () => {
+  expect(buildRuntimeStateDiscoveryHealthQuery({ runtimeInstanceId: 'revision/2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: 99 }))
+    .toBe('/runtime-instances/revision%2F2/state/discovery-health?customerId=customer-1&tenantId=tenant-1')
+})
 import {
   buildOutcomePlanningQuery,
   buildOutcomePlanConfirmationQuery,
@@ -38,8 +59,14 @@ import {
   buildRuntimeStateBootstrapQuery,
   buildRuntimeStateSectionSummaryQuery,
   buildRuntimeStateEvidenceQuery,
+  buildRuntimeStateSourcesQuery,
   buildRuntimeStateGraphManifestQuery,
+  buildRuntimeStateDiscoveryHealthQuery,
+  buildRuntimeStateLockBasisQuery,
+  buildRuntimeStateContradictionHistoryQuery,
+  buildRuntimeStateFindingsQuery,
   buildRuntimeStateGraphProjectionQuery,
+  buildRuntimeStateGraphNeighbourhoodQuery,
   buildRuntimeStateOutcomeHandoffReadinessQuery,
   buildRuntimeEvidenceQuery,
   buildRuntimeOutputAssetQuery,
@@ -166,6 +193,21 @@ import {
 } from './runtimeInstanceApi.js'
 
 describe('runtimeInstanceApi', () => {
+  it('sends canonical evidence selection without an undefined node ID or session on the wire', () => {
+    const url = buildRuntimeStateGraphNeighbourhoodQuery({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1',
+      evidenceObjectId: 'canonical:one & exact', mode: 'Lineage', graphHash: `sha256:${'a'.repeat(64)}`, sessionRevision: 9 })
+    const parsed = new URL(url, 'http://local')
+    expect(parsed.searchParams.get('evidenceObjectId')).toBe('canonical:one & exact')
+    expect(parsed.searchParams.has('nodeId')).toBe(false); expect(parsed.searchParams.has('sessionRevision')).toBe(false)
+  })
+  it('encodes literal selected neighbourhood identities/cursor and omits session cache identity from the wire', () => {
+    const url = buildRuntimeStateGraphNeighbourhoodQuery({ runtimeInstanceId: 'revision/2', customerId: 'customer 1', tenantId: 'tenant/1',
+      nodeId: 'source:outside & exact', mode: 'Lineage', graphHash: `sha256:${'a'.repeat(64)}`, afterEdgeKey: 'edge:cursor&2', sessionRevision: 7 })
+    const parsed = new URL(url, 'http://local')
+    expect(parsed.pathname).toBe('/runtime-instances/revision%2F2/state/graph-neighbourhood')
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({ customerId: 'customer 1', tenantId: 'tenant/1', nodeId: 'source:outside & exact', mode: 'Lineage', graphHash: `sha256:${'a'.repeat(64)}`, afterEdgeKey: 'edge:cursor&2' })
+    expect(runtimeInstanceApi.endpoints.getRuntimeStateGraphNeighbourhood).toBeDefined()
+  })
   it('exports scoped planning endpoints and hooks without using session execution routes', () => {
     expect(typeof usePlanRuntimeOutcomeRequestMutation).toBe('function')
     expect(typeof useConfirmRuntimeOutcomeRequestPlanMutation).toBe('function')
@@ -193,7 +235,7 @@ describe('runtimeInstanceApi', () => {
       middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(runtimeInstanceApi.middleware),
     })
     try {
-      for (const endpoint of ['getRuntimeDiscoveryContradictions', 'getRuntimeRenderer']) {
+      for (const endpoint of ['getRuntimeDiscoveryContradictions', 'getRuntimeRenderer', 'getRuntimeStateFindings', 'getRuntimeStateContradictionHistory']) {
         await store.dispatch(runtimeInstanceApi.util.upsertQueryData(endpoint,
           { runtimeInstanceId: 'runtime-1' }, { data: { candidates: [], runtimeInstance: { id: 'runtime-1' } } }))
       }
@@ -202,7 +244,7 @@ describe('runtimeInstanceApi', () => {
       const tags = getMutateRuntimeStateInvalidationTags({ data: {} }, null, { runtimeInstanceId: 'runtime-1' })
       const invalidated = runtimeInstanceApi.util.selectInvalidatedBy(store.getState(), tags)
       expect(invalidated.map((entry) => entry.endpointName).sort())
-        .toEqual(['getRuntimeDiscoveryContradictions', 'getRuntimeRenderer'])
+        .toEqual(['getRuntimeDiscoveryContradictions', 'getRuntimeRenderer', 'getRuntimeStateContradictionHistory', 'getRuntimeStateFindings'])
       expect(invalidated.every((entry) => entry.originalArgs.runtimeInstanceId === 'runtime-1')).toBe(true)
     } finally {
       store.dispatch(runtimeInstanceApi.util.resetApiState())
@@ -1240,5 +1282,20 @@ describe('runtimeInstanceApi', () => {
       { type: 'RuntimeInstance', id: 'value-narrative-001' },
       runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])
+  })
+})
+
+describe('SS-042 canonical provenance query contracts', () => {
+  it('encodes exact scope and literal source/evidence search without dropping focus', () => {
+    const scope = { runtimeInstanceId: 'revision/a', customerId: 'customer-1', tenantId: 'tenant-1' }
+    const source = new URL(buildRuntimeStateSourcesQuery({ ...scope, page: 3, search: 'a.*[$]', sourceId: 's/a', sourceType: 'WEBSITE' }), 'http://localhost')
+    expect(source.pathname).toBe('/runtime-instances/revision%2Fa/state/sources')
+    expect(Object.fromEntries(source.searchParams)).toEqual({ customerId: 'customer-1', tenantId: 'tenant-1', page: '3', pageSize: '25', search: 'a.*[$]', sourceId: 's/a', sourceType: 'WEBSITE' })
+    const evidence = new URL(buildRuntimeStateEvidenceQuery({ ...scope, sourceId: 's/a', evidenceObjectId: 'e?one', search: 'literal & needle' }), 'http://localhost')
+    expect(evidence.searchParams.get('sourceId')).toBe('s/a')
+    expect(evidence.searchParams.get('evidenceObjectId')).toBe('e?one')
+    expect(evidence.searchParams.get('search')).toBe('literal & needle')
+    expect(evidence.searchParams.get('tenantId')).toBe('tenant-1')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateSources')
   })
 })
