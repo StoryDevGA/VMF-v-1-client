@@ -544,6 +544,11 @@ export const buildReviewRuntimeDiscoveryEvidenceQuery = ({ runtimeInstanceId, ev
   body,
 })
 
+export const buildRecordRuntimeSourceVerificationQuery = ({ runtimeInstanceId, sourceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-sources/${encodeURIComponent(String(sourceId ?? '').trim())}/verification`,
+  method: 'PATCH', body,
+})
+
 export const buildRuntimeDiscoveryContradictionsQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-contradictions`
 
@@ -1009,6 +1014,10 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       query: buildReviewRuntimeDiscoveryEvidenceQuery,
       invalidatesTags: getReviewRuntimeDiscoveryEvidenceInvalidationTags,
     }),
+    recordRuntimeSourceVerification: build.mutation({
+      query: buildRecordRuntimeSourceVerificationQuery,
+      invalidatesTags: getReviewRuntimeDiscoveryEvidenceInvalidationTags,
+    }),
 
     getRuntimeDiscoveryContradictions: build.query({
       query: buildRuntimeDiscoveryContradictionsQuery,
@@ -1165,6 +1174,7 @@ export const {
   useClearRuntimeSectionEvidenceMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
+  useRecordRuntimeSourceVerificationMutation,
   useGetRuntimeDiscoveryContradictionsQuery,
   useGetReviewCompletionQuery,
   useCompleteReviewMutation,

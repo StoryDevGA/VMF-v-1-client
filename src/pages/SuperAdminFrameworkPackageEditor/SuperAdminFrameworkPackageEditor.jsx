@@ -1,5 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import DisplayRevisionPanel from './DisplayRevisionPanel.jsx'
+import DiscoveryPolicyPanel from './DiscoveryPolicyPanel.jsx'
+import SectionHeader from './FrameworkPackageSectionHeader.jsx'
+import { discoveryPolicyInputError } from './discoveryPolicyFields.js'
 import { MdContentCopy, MdExpandMore, MdInfoOutline } from 'react-icons/md'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
@@ -1038,20 +1041,22 @@ const FRAMEWORK_PACKAGE_EDITOR_TABS = Object.freeze({
   PACKAGE_IDENTITY: 1,
   ACCESS: 2,
   SECTIONS: 3,
-  RUNTIME: 4,
-  VALIDATION: 5,
-  WORKFLOWS: 6,
-  OUTPUTS: 7,
-  UI_CONTRACT: 8,
-  STATE_CONTRACT: 9,
-  DEPENDENCIES: 10,
-  INTEGRITY: 11,
-  RUNTIME_VALIDATION: 12,
-  AUDIT: 13,
-  JSON_DIFF: 14,
+  DISCOVERY_POLICY: 4,
+  RUNTIME: 5,
+  VALIDATION: 6,
+  WORKFLOWS: 7,
+  OUTPUTS: 8,
+  UI_CONTRACT: 9,
+  STATE_CONTRACT: 10,
+  DEPENDENCIES: 11,
+  INTEGRITY: 12,
+  RUNTIME_VALIDATION: 13,
+  AUDIT: 14,
+  JSON_DIFF: 15,
 })
 
 const FRAMEWORK_PACKAGE_EDITOR_TAB_QUERY = Object.freeze({
+  'discovery-policy': FRAMEWORK_PACKAGE_EDITOR_TABS.DISCOVERY_POLICY,
   dependencies: FRAMEWORK_PACKAGE_EDITOR_TABS.DEPENDENCIES,
   'dependency-snapshot': FRAMEWORK_PACKAGE_EDITOR_TABS.DEPENDENCIES,
   integrity: FRAMEWORK_PACKAGE_EDITOR_TABS.INTEGRITY,
@@ -1293,15 +1298,6 @@ function PackageEditorErrorState({ message, onBack }) {
         </div>
       </Card.Body>
     </Card>
-  )
-}
-
-function SectionHeader({ id, title, copy }) {
-  return (
-    <div className="super-admin-framework-package-editor__section-header">
-      <h2 id={id} className="super-admin-framework-package-editor__section-title">{title}</h2>
-      <p className="super-admin-framework-package-editor__section-copy">{copy}</p>
-    </div>
   )
 }
 
@@ -2315,9 +2311,13 @@ function SuperAdminFrameworkPackageEditor() {
     } catch (err) {
       const appError = normalizeError(err)
       const fieldErrors = getRuntimeControlFieldErrorMap(appError, SERVER_ERROR_FIELDS)
+      for (const [path, message] of Object.entries(appError.details || {})) {
+        if (path.startsWith('discoveryPolicy') && typeof message === 'string') fieldErrors[path] = message
+      }
 
       if (Object.keys(fieldErrors).length > 0) {
         setErrors(fieldErrors)
+        if (Object.keys(fieldErrors).some((field) => field.startsWith('discoveryPolicy'))) setActiveTab(FRAMEWORK_PACKAGE_EDITOR_TABS.DISCOVERY_POLICY)
         return
       }
       addToast({
@@ -2392,8 +2392,11 @@ function SuperAdminFrameworkPackageEditor() {
     if (isCloneMode && !payload.packageKey) {
       nextErrors.packageKey = 'Package key is required for cloned packages.'
     }
+    const policyError = discoveryPolicyInputError(form.discoveryPolicy)
+    if (policyError && !isCloneMode) nextErrors.discoveryPolicy = policyError
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
+      if (nextErrors.discoveryPolicy) setActiveTab(FRAMEWORK_PACKAGE_EDITOR_TABS.DISCOVERY_POLICY)
       return
     }
 
@@ -2577,6 +2580,7 @@ function SuperAdminFrameworkPackageEditor() {
     packageIdentity: countErrorsForFields(errors, ['packageScope', 'packageType', 'packageKey', 'packageName', 'description']),
     access: countErrorsForFields(errors, ['visibility', 'customerAccessMode', 'assignedCustomerIds']),
     sections: countErrorsForFields(errors, ['sections', 'sectionsText']),
+    discoveryPolicy: Object.keys(errors).filter((field) => field.startsWith('discoveryPolicy')).length,
     runtime: countErrorsForFields(errors, ['runtimeSettings', 'executionModel']),
     validation: countErrorsForFields(errors, ['validationBindings']),
     workflows: countErrorsForFields(errors, ['workflowBindings']),
@@ -3349,6 +3353,9 @@ function SuperAdminFrameworkPackageEditor() {
                     </div>
                   </TabView.Tab>
 
+                  <TabView.Tab label={renderTabLabel('Discovery Policy', tabErrorCounts.discoveryPolicy)}>
+                    <DiscoveryPolicyPanel value={form.discoveryPolicy} onChange={(discoveryPolicy) => setForm((current) => ({ ...current, discoveryPolicy }))} disabled={directEditLocked || isCloneMode} summary={loadedPackage?.discoveryPolicySummary} errors={errors} />
+                  </TabView.Tab>
                   <TabView.Tab label={renderTabLabel('Runtime', tabErrorCounts.runtime)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader

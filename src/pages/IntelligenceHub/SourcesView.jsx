@@ -8,6 +8,7 @@ import { useGetRuntimeStateSourcesQuery, useGetRuntimeStateEvidenceQuery } from 
 import { displayHubToken, getHubPayload } from './intelligenceHubModel.js'
 import { sourceProcessingLabel, sourceProcessingExplanation } from './sourceSummaryModel.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
+import SourceVerificationForm from './SourceVerificationForm.jsx'
 
 const STATE_KEYS = ['sourceQuery', 'sourceType', 'sourcePage', 'sourceId', 'evidenceObjectId', 'evidencePage', 'sourceEvidencePage', 'sourceContext']
 const label = source => source?.label || source?.sourceRef || source?.sourceId || 'Source unavailable'
@@ -61,7 +62,8 @@ function ReadMessage({ read, payload, empty, loading }) {
 }
 
 export default function SourcesView({ workspaceId, revisionId, customerId, tenantId, active, canRead,
-  stateVersion, pendingCount, countsLoading, locked, onOpen, onSelectView, sourceSummary, sourceSummaryLoading, onRefreshSummary, refreshToken = 0 }) {
+  stateVersion, pendingCount, countsLoading, locked, onOpen, onSelectView, sourceSummary, sourceSummaryLoading, onRefreshSummary,
+  reviewAuthority, onSourceReviewed, refreshToken = 0 }) {
   const [params, setParams] = useSearchParams()
   const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
   const contextKey = `${workspaceId}:${revisionId}:${customerId}:${tenantId}`
@@ -87,6 +89,16 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
     setParams(next)
   }
   const scope = { runtimeInstanceId: revisionId, customerId, tenantId, stateVersion, sessionRevision }
+  const verificationFrame = useRef(null)
+  const verificationOwnerKey = `${contextKey}:${sessionRevision}:${params.toString()}`
+  useLayoutEffect(() => {
+    const owner = { key: verificationOwnerKey, active, canRead, locked }
+    verificationFrame.current = owner
+    return () => { if (verificationFrame.current === owner) verificationFrame.current = null }
+  }, [verificationOwnerKey, active, canRead, locked])
+  const ownsVerification = () => verificationFrame.current?.key === verificationOwnerKey
+    && verificationFrame.current.active && verificationFrame.current.canRead && !verificationFrame.current.locked
+    && getSessionRevision() === sessionRevision
   const usableScope = active && canRead && identity(stateVersion)
   const skip = !usableScope || !valid
   const registryRead = useGetRuntimeStateSourcesQuery({ ...scope, page: sourcePage || 1, pageSize: 25, search: query, sourceType }, { skip })
@@ -224,6 +236,25 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
           }}>Return to search results</Button> : null}
         </div></Card.Header>
         <Card.Body><div ref={detailRef} role="region" aria-label={searching ? 'Evidence search results' : 'Selected source detail'} tabIndex={0}>
+          {!searching && selected ? <section aria-label="Recorded source verification">
+            <h3>Source verification</h3>
+            <p>{selected.verificationContext ? selected.verificationContext.sourceFingerprint === selected.materialFingerprint
+              ? `Recorded review · ${displayHubToken(selected.verificationContext.authenticity)} · ${selected.verificationContext.reviewedAt}`
+              : 'The recorded source review is stale. Review the current source before assessment.'
+              : 'No source verification review is recorded.'}</p>
+            {reviewAuthority && onSourceReviewed ? <SourceVerificationForm key={`${selected.sourceId}:${stateVersion}:${sessionRevision}`}
+              source={selected} scope={scope} authority={reviewAuthority} locked={locked} ownsIntent={ownsVerification} refresh={async receipt => {
+                if (!ownsVerification()) return false
+                const read = await exactRead.refetch()
+                if (!ownsVerification() || read.error) return false
+                const saved = getHubPayload(read.data)
+                const row = saved?.sourceRegistry?.find(item => item.sourceId === receipt.sourceId)
+                if (saved?.control?.stateVersion !== receipt.stateVersion || saved.control.customerId !== customerId
+                  || saved.control.tenantId !== tenantId || row?.materialFingerprint !== receipt.verificationContext.sourceFingerprint
+                  || JSON.stringify(row?.verificationContext) !== JSON.stringify(receipt.verificationContext)) return false
+                return onSourceReviewed()
+              }} /> : null}
+          </section> : null}
           {!searching && selectedId && !selected ? <ReadMessage read={exactRead} payload={exact} empty="The requested source is unavailable." loading="Loading exact source…" />
             : objects.length ? objects.map(item => {
               const source = evidence.sourceRegistry?.find(row => row.sourceId === item.sourceId)

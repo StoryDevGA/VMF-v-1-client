@@ -1,4 +1,5 @@
 import { baseApi } from './baseApi.js'
+import { discoveryPolicyInputError } from '../../pages/SuperAdminFrameworkPackageEditor/discoveryPolicyFields.js'
 import {
   cloneFrameworkPackage,
   DEPRECATED_FRAMEWORK_PACKAGE_FIELD_MESSAGES,
@@ -2106,6 +2107,7 @@ const buildMockRuntimeActivationReadiness = (pkg, checkpoint = null) => {
     runtimeVerdictReason = 'RUNTIME_VERDICT_DEPENDENCY_LOCK_NOT_CERTIFIED'
   }
   const requirements = [
+    ...(pkg?.discoveryPolicy === undefined ? [] : [{ key: 'discoveryPolicy', status: 'FAIL', reason: 'DISCOVERY_POLICY_MAPPING_UNVERIFIED', message: 'Discovery Policy requires authoritative VMF mappings verified by VMF Engineering.' }]),
     buildMockFrameworkPackageActivationStatusRequirement(pkg),
     {
       key: 'checkpoint',
@@ -2497,6 +2499,11 @@ const buildMockDependencyResolutionIntegrityChecks = (dependencies = {}) => {
 
 const buildMockFrameworkPackageIntegrity = (pkg) => {
   const checks = []
+  checks.push({ key: 'discoveryPolicy.contract', group: 'Discovery Policy Integrity',
+    severity: pkg.discoveryPolicy === undefined ? 'PASS' : 'FAIL', field: 'discoveryPolicy',
+    message: pkg.discoveryPolicy === undefined ? 'Discovery Policy is absent; legacy behaviour applies.'
+      : discoveryPolicyInputError(pkg.discoveryPolicy) || 'Discovery Policy requires authoritative VMF mappings verified by VMF Engineering.',
+  })
   const ready = ['VALIDATED', 'ACTIVE'].includes(String(pkg.status ?? '').trim().toUpperCase())
   const packageKey = String(pkg.packageKey ?? '').trim()
   checks.push({
@@ -3978,6 +3985,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         if (deprecatedFieldError) {
           return deprecatedFieldError
         }
+        const policyError = discoveryPolicyInputError(runtimePayload.discoveryPolicy)
+        if (policyError || (runtimePayload.discoveryPolicy !== undefined && ['VALIDATED', 'ACTIVE'].includes(runtimePayload.status))) {
+          return buildValidationFailedError('Please check the form for errors.', { discoveryPolicy: policyError || 'Discovery Policy requires authoritative VMF mappings verified by VMF Engineering.' })
+        }
 
         const duplicatePackage = runtimeControlState.frameworkPackages.find(
           (pkg) =>
@@ -4495,6 +4506,16 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const nextStatus = payload.status ?? existingPackage.status
+
+        if (Object.hasOwn(runtimePayload, 'discoveryPolicy') && existingPackage.status !== 'DRAFT'
+          && JSON.stringify(runtimePayload.discoveryPolicy) !== JSON.stringify(existingPackage.discoveryPolicy)) {
+          return buildConflictError('Discovery Policy can only be edited on a persisted draft package.', { field: 'discoveryPolicy', reason: 'DISCOVERY_POLICY_STRUCTURE_LOCKED' })
+        }
+        const policy = runtimePayload.discoveryPolicy === undefined ? existingPackage.discoveryPolicy : runtimePayload.discoveryPolicy
+        const policyError = discoveryPolicyInputError(policy)
+        if (policyError || (policy !== undefined && ['VALIDATED', 'ACTIVE'].includes(nextStatus))) {
+          return buildValidationFailedError('Please check the form for errors.', { discoveryPolicy: policyError || 'Discovery Policy requires authoritative VMF mappings verified by VMF Engineering.' })
+        }
 
         const nextPackage = cloneFrameworkPackage({
           ...existingPackage,

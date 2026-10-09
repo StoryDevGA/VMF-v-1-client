@@ -1622,3 +1622,35 @@
     grid-template-columns: 1fr;
   }
 }
+.super-admin-framework-package-editor__discovery-fields {
+  width: 100%;
+}
+
+.super-admin-framework-package-editor__discovery-fields > .fieldset {
+  grid-column: 1 / -1;
+}
+
+.super-admin-framework-package-editor__discovery-policy .btn {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.super-admin-framework-package-editor__discovery-policy .super-admin-framework-package-editor__table-actions,
+.super-admin-framework-package-editor__discovery-policy .super-admin-framework-package-editor__field-group {
+  min-width: 0;
+  width: 100%;
+}
+
+.super-admin-framework-package-editor__discovery-policy .accordion__content {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.super-admin-framework-package-editor__discovery-policy .fieldset__legend {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.super-admin-framework-package-editor__discovery-policy code,
+.super-admin-framework-package-editor__discovery-policy li {
+  overflow-wrap: anywhere;
+}

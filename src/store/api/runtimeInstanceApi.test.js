@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { configureStore } from '@reduxjs/toolkit'
 
+it('encodes the exact source review endpoint and transmits only its guarded body', () => {
+  const body = { expectedUpdatedAt: '2026-10-09T10:00:00Z', expectedSourceFingerprint: `sha256:${'a'.repeat(64)}`, facts: { authenticity: 'UNVERIFIED' } }
+  expect(buildRecordRuntimeSourceVerificationQuery({ runtimeInstanceId: 'revision/2', sourceId: 'source?one', body, sessionRevision: 9 }))
+    .toEqual({ url: '/runtime-instances/revision%2F2/discovery-sources/source%3Fone/verification', method: 'PATCH', body })
+})
+
 it('builds literal scoped stored-finding search and independent paging without cache identity on the wire', () => {
   const query = new URL(buildRuntimeStateFindingsQuery({ runtimeInstanceId: 'revision/2', customerId: 'customer', tenantId: 'tenant', search: 'A&B?', type: 'CONTRADICTION', population: 'RECORDED', sort: 'ID_DESC', page: 2, pageSize: 4, sessionRevision: 3, stateVersion: 'opaque' }), 'http://localhost')
   expect(query.pathname).toBe('/runtime-instances/revision%2F2/state/findings')
@@ -22,6 +28,7 @@ it('builds the scoped Discovery Health read without transmitting cache-only sess
     .toBe('/runtime-instances/revision%2F2/state/discovery-health?customerId=customer-1&tenantId=tenant-1')
 })
 import {
+  buildRecordRuntimeSourceVerificationQuery,
   buildOutcomePlanningQuery,
   buildOutcomePlanConfirmationQuery,
   buildOutcomePlanRetrievalQuery,

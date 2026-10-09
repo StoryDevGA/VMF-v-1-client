@@ -103,6 +103,7 @@ function renderBundleSummary(_value, row) {
       <span>{sectionCount} section{sectionCount === 1 ? '' : 's'}</span>
       <span>{validationCount} validation{validationCount === 1 ? '' : 's'}</span>
       <span>{hasUiContract ? 'UI Contract' : 'No UI Contract'}</span>
+      <span>{row.discoveryPolicy === undefined ? 'Discovery: legacy fallback' : `Discovery: ${row.discoveryPolicySummary?.status?.toLowerCase() || 'verification pending'}`}</span>
     </div>
   )
 }

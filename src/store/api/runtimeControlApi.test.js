@@ -161,6 +161,24 @@ const prepareMockCertifiedFrameworkPackage = async (store, packageId = 'pkg-vmf-
 }
 
 describe('runtimeControlApi', () => {
+  const discoveryPolicy = { contractVersion: 'framework-package-discovery-policy-v1', policyKey: 'test-policy', policyVersion: '1.0.0' }
+  it.each(['VALIDATED', 'ACTIVE', 'DEPRECATED'])('mock rejects policy edits on persisted %s packages', async (status) => {
+    const store = createTestStore()
+    __mutateRuntimeControlApiStateForTests((state) => ({ ...state, frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230' ? { ...pkg, status } : pkg) }))
+    const result = await store.dispatch(runtimeControlApi.endpoints.updateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230', status: 'DRAFT', discoveryPolicy }))
+    expect(result.error?.status).toBe(409)
+    expect(result.error?.data?.error?.details?.reason).toBe('DISCOVERY_POLICY_STRUCTURE_LOCKED')
+  })
+  it('mock allows draft policy and blocks validation and activation readiness', async () => {
+    const store = createTestStore()
+    __mutateRuntimeControlApiStateForTests((state) => ({ ...state, frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230' ? { ...pkg, status: 'DRAFT', discoveryPolicy } : pkg) }))
+    const update = await store.dispatch(runtimeControlApi.endpoints.updateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230', discoveryPolicy: { ...discoveryPolicy, label: 'Draft proposal' } }))
+    expect(update.error).toBeUndefined()
+    const validation = await store.dispatch(runtimeControlApi.endpoints.validateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }))
+    expect(validation.error?.status).toBe(422)
+    const readiness = await store.dispatch(runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230', { forceRefetch: true }))
+    expect(readiness.data?.data?.blockingReasons).toContain('DISCOVERY_POLICY_MAPPING_UNVERIFIED')
+  })
   beforeEach(() => {
     globalThis.__RUNTIME_CONTROL_API_MOCK__ = true
     __resetRuntimeControlApiStateForTests()

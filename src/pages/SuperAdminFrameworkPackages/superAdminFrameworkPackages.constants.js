@@ -452,6 +452,7 @@ export function cloneFrameworkPackage(pkg) {
 
   return {
     ...source,
+    ...(source.discoveryPolicy === undefined ? {} : { discoveryPolicy: structuredClone(source.discoveryPolicy) }),
     assignedCustomerIds: [...(source.assignedCustomerIds ?? [])],
     sections: (source.sections ?? []).map((section) => ({ ...section })),
     executionModel: {
@@ -838,6 +839,7 @@ export function mapFrameworkPackageToForm(pkg) {
   const workflowBindings = normalizeWorkflowBindings(pkg.workflowBindings, pkg.workflowPolicyConfig)
 
   return {
+    ...(pkg.discoveryPolicy === undefined ? {} : { discoveryPolicy: structuredClone(pkg.discoveryPolicy) }),
     frameworkKey: pkg.frameworkKey ?? '',
     frameworkName: pkg.frameworkName ?? '',
     version: pkg.version ?? '',
@@ -1038,6 +1040,7 @@ export function validateFrameworkPackageForm(
   return {
     errors,
     payload: {
+      ...(formState.discoveryPolicy === undefined ? {} : { discoveryPolicy: structuredClone(formState.discoveryPolicy) }),
       frameworkKey,
       frameworkName,
       version,
