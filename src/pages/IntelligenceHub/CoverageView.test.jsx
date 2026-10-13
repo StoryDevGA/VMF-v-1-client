@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -30,26 +30,26 @@ describe('CoverageView', () => {
   it.each(['filtered', 'missing', 'invalid'])('does not substitute a domain for a %s request', kind => {
     show({ ...props(), inspection: { filter: kind === 'filtered' ? 'Gaps' : 'All', selectedDomain: kind === 'missing' ? 'Proof' : 'Company', notice: kind === 'invalid' ? 'Invalid inspection; reset it.' : '' } })
     const detail = screen.getByRole('region', { name: 'Selected coverage domain' })
-    expect(detail).not.toHaveTextContent('Company domain')
-    expect(screen.queryByRole('button', { name: 'Search sources and evidence for this domain →' })).not.toBeInTheDocument()
+    expect(detail).not.toHaveTextContent('Company')
+    expect(screen.queryByRole('button', { name: 'Search domain sources' })).not.toBeInTheDocument()
   })
   it('drops current details if the selected domain disappears from the current read', () => {
     const next = props(), inspection = { filter: 'All', selectedDomain: 'Company', notice: '' }
     const { rerender } = render(<MemoryRouter><CoverageView {...next} inspection={inspection} onInspectionChange={vi.fn()} /></MemoryRouter>)
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Company domain')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Company')
     rerender(<MemoryRouter><CoverageView {...next} graphCoverage={{ ...coverage, coverage: { ...coverage.coverage, domains: [domain('Services', 'ADEQUATE', 1)] } }} inspection={inspection} onInspectionChange={vi.fn()} /></MemoryRouter>)
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).not.toHaveTextContent('Services domain')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).not.toHaveTextContent('Services')
   })
   it('uses graph counts and server states without inventing domain scores or source diversity', () => {
     show({ ...props(), discovery: { acquisitionEffectiveness: { metrics: { coveragePercent: 100, sourceCount: 36 } } } })
     expect(screen.getByText('67%')).toBeInTheDocument()
     expect(screen.queryByText('100%')).not.toBeInTheDocument()
     const detail = within(screen.getByRole('region', { name: 'Selected coverage domain' }))
-    expect(detail.getByText('2 objects')).toBeInTheDocument()
-    expect(detail.getByText('Per-domain percentage unavailable')).toBeInTheDocument()
+    expect(detail.getByText('2',{exact:true})).toBeInTheDocument()
+    expect(detail.getByText(/Per-domain percentage unavailable/)).toBeInTheDocument()
     expect(detail.getByText('Source diversity').nextSibling).toHaveTextContent('Unavailable')
     expect(detail.getByText('Connected sources').nextSibling).toHaveTextContent('Unavailable')
-    expect(screen.getAllByLabelText('Domain coverage percentage unavailable')).toHaveLength(3)
+    expect(screen.queryByLabelText('Domain coverage percentage unavailable')).not.toBeInTheDocument()
   })
 
   it('selects exactly one domain, filters to a matching detail and preserves Missing instead of assigning materiality', async () => {
@@ -60,11 +60,11 @@ describe('CoverageView', () => {
     expect(map.getAllByRole('button', { pressed: true })).toHaveLength(1)
     await user.click(map.getByRole('button', { name: /Problems/ }))
     expect(map.getAllByRole('button', { pressed: true })).toHaveLength(1)
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Problems domainMissing')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('ProblemsMissing')
     await user.click(screen.getByRole('button', { name: 'Adequate', exact: true }))
     expect(map.getAllByRole('button')).toHaveLength(1)
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Services domainAdequate')
-    expect(screen.queryByRole('link', { name: 'Open Intelligence Quality →' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('ServicesAdequate')
+    expect(screen.getByRole('link', { name: 'Open Intelligence Quality →' })).toHaveAttribute('href', '/quality?workspace=w&revision=r')
   })
 
   it('shows an empty filter without keeping a hidden domain selected', async () => {
@@ -72,7 +72,7 @@ describe('CoverageView', () => {
     show({ ...props(), graphCoverage: { ...coverage, coverage: { ...coverage.coverage, domains: [domain('Company', 'STRONG', 2)] } } })
     await user.click(screen.getByRole('button', { name: 'Gaps', exact: true }))
     expect(screen.getByText('No domains match this filter.')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).not.toHaveTextContent('Company domain')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).not.toHaveTextContent('Company')
   })
 
   it.each([{ isLoading: true, expected: 'Loading selected revision coverage…' }, { error: { status: 503 }, expected: 'Coverage could not be loaded. Refresh to retry.' }, { graphCoverage: { available: false, coverage: { ...coverage.coverage, coveragePercent: 0 } }, expected: 'No domain coverage projection is available for this selected revision.' }])('suppresses cached metrics and domains during an unsuccessful read: $expected', next => {
@@ -86,11 +86,34 @@ describe('CoverageView', () => {
     const user = userEvent.setup()
     const next = props()
     show(next)
-    await user.click(screen.getByRole('button', { name: 'Search sources and evidence for this domain →' }))
+    await user.click(screen.getByRole('button', { name: 'Search domain sources' }))
     expect(next.onOpenSources).toHaveBeenCalledWith('Company')
-    expect(screen.getByRole('link', { name: 'Open acquisition in Context →' })).toHaveAttribute('href', next.acquisitionHref)
-    await user.click(screen.getByRole('button', { name: '← Review' }))
-    await user.click(screen.getByRole('button', { name: 'Continue to Readiness & publish →' }))
-    expect(next.onSelectView.mock.calls).toEqual([['Review'], ['Readiness & publish']])
+    expect(screen.getByRole('link', { name: 'Gather evidence' })).toHaveAttribute('href', next.acquisitionHref)
+    await user.click(screen.getByRole('button', { name: 'After lock' }))
+    await user.click(screen.getByRole('button', { name: 'Intelligence Graph' }))
+    expect(next.onSelectView.mock.calls).toEqual([['After lock'], ['Intelligence Graph']])
   })
+
+  it.each([{ isLoading: true }, { error: { status: 503 } }])('keeps the approved footer journey available during an unsuccessful coverage read %#', async state => {
+    const next = { ...props(), ...state }, user = userEvent.setup()
+    show(next)
+    await user.click(screen.getByRole('button', { name: 'After lock' }))
+    await user.click(screen.getByRole('button', { name: 'Intelligence Graph' }))
+    expect(next.onSelectView.mock.calls).toEqual([['After lock'], ['Intelligence Graph']])
+  })
+})
+
+const coverageGuardCalls=vi.hoisted(()=>({handlers:{}}))
+vi.mock('../../components/Button',async original=>{const actual=await original();return {...actual,Button:props=>{const text=Array.isArray(props.children)?props.children.filter(c=>typeof c==='string').join(''):props.children;if(typeof text==='string')coverageGuardCalls.handlers[text]=props.onClick;return <actual.Button {...props}/>}}})
+it('matches the three-summary structure and inspects actual domain basis',async()=>{
+  show(props());expect(screen.getByLabelText('Coverage summary')).toHaveTextContent('67%Domain coverage2 of 3Domains supported1Missing domains')
+  const opener=screen.getByRole('button',{name:'Inspect evidence and source basis'});await userEvent.click(opener)
+  const dialog=screen.getByRole('dialog',{name:'Company: evidence and source basis'});expect(dialog).toHaveTextContent('Not supplied');expect(within(dialog).getAllByRole('option')).toHaveLength(1)
+  await userEvent.click(screen.getByRole('button',{name:'Back to Coverage'}));expect(opener).toHaveFocus()
+})
+it.each([{active:false},{canInspect:false},{stateVersion:'new-version'},{route:'new-route'},{isLoading:true},{error:{status:503}},{graphCoverage:{available:false}}])('invalidates inspector and retained actions on owner departure %j',changes=>{
+  const next=props(),inspection={filter:'All',selectedDomain:'Company',notice:''};const tree=extra=><MemoryRouter><CoverageView {...next} inspection={inspection} onInspectionChange={vi.fn()} {...extra}/></MemoryRouter>
+  const view=render(tree());fireEvent.click(screen.getByRole('button',{name:'Inspect evidence and source basis'}));const retained=coverageGuardCalls.handlers['Search domain sources']
+  view.rerender(tree(changes));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();act(()=>retained());expect(next.onOpenSources).not.toHaveBeenCalled()
+  view.rerender(tree());expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })

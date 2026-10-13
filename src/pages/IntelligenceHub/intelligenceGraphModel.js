@@ -1,3 +1,5 @@
+import { getHubDestinationHref, validateHubContext } from './intelligenceHubModel.js'
+
 // Types and statuses are contract-owned; titles use explicitly customer-visible API labels.
 export const GRAPH_MODES = Object.freeze(['Journey', 'Lineage', 'Impact', 'Gaps', 'Contradictions'])
 export const GRAPH_INSPECTION_KEYS = Object.freeze(['graphInspectionContext', 'graphMode', 'graphQuery', 'graphObjectId', 'graphEvidenceObjectId', 'graphObjectView', 'graphAfterEdgeKey'])
@@ -55,9 +57,41 @@ const recordedId = value => typeof value === 'string' && value.trim() && value.t
 
 export function graphSourceFocus(selected) {
   if (!selected || selected.diagnostic || selected.memberKeys?.length > 1 || !selected.sourceId) return null
-  if (selected.layer === 'source') return { sourceId: selected.sourceId }
-  return selected.layer === 'evidence' && selected.evidenceObjectId
-    ? { sourceId: selected.sourceId, evidenceObjectId: selected.evidenceObjectId } : null
+  const focus = selected.layer === 'source' ? { sourceId: selected.sourceId }
+    : selected.layer === 'evidence' && selected.evidenceObjectId
+      ? { sourceId: selected.sourceId, evidenceObjectId: selected.evidenceObjectId } : null
+  return focus && selected.sectionLocal ? { ...focus, sectionLocal: true, sectionKey: selected.sectionKey } : focus
+}
+
+// Section receipts have a different owner from global Sources. Namespace identifies
+// local fail-closed posture only; explicit current renderer membership supplies the route.
+export function graphSourceDestination(renderer, focus, scope) {
+  if (!focus || recordedId(focus.sourceId) !== focus.sourceId
+    || (focus.evidenceObjectId && recordedId(focus.evidenceObjectId) !== focus.evidenceObjectId)) return null
+  const rows = Array.isArray(renderer?.sections) ? renderer.sections : []
+  const documents = rows.flatMap(row => Array.isArray(row?.sectionEvidence?.documents)
+    ? row.sectionEvidence.documents.filter(doc => doc?.sourceId === focus.sourceId).map(doc => ({ row, doc })) : [])
+  const evidence = focus.evidenceObjectId ? rows.flatMap(row => Array.isArray(row?.sectionEvidence?.evidenceObjects)
+    ? row.sectionEvidence.evidenceObjects.filter(item => item?.evidenceObjectId === focus.evidenceObjectId).map(item => ({ row, item })) : []) : []
+  if (!focus.sectionLocal && !documents.length && !evidence.length) return { kind: 'global' }
+  const unavailable = { kind: 'unavailable', label: 'Section source unavailable' }
+  if (!validateHubContext({ renderer, ...scope }).valid || renderer.sectionStateSource !== 'runtime_state_v2'
+    || documents.length !== 1 || (focus.evidenceObjectId && evidence.length !== 1)
+    || rows.some(row => !recordedId(row?.sectionKey) || !/^framework_state\.sections\.[a-zA-Z0-9_]+$/.test(row?.runtimePath))
+    || new Set(rows.map(row => row.sectionKey)).size !== rows.length
+    || new Set(rows.map(row => row.runtimePath)).size !== rows.length) return unavailable
+  const { row, doc } = documents[0]
+  const nativeKey = row.runtimePath.split('.').at(-1)
+  if (row.visible !== true || doc.sectionDocumentId !== doc.sourceId
+    || (focus.sectionKey != null && ![row.sectionKey, nativeKey].includes(focus.sectionKey))
+    || (focus.evidenceObjectId && (evidence[0].row !== row || evidence[0].item.sourceId !== focus.sourceId
+      || evidence[0].item.sectionKey !== row.sectionKey || evidence[0].item.runtimePath !== row.runtimePath))) return unavailable
+  const href = getHubDestinationHref('structure', scope.workspaceId, scope.revisionId)
+  if (!href) return unavailable
+  const [path, query] = href.split('?'), params = new URLSearchParams(query)
+  params.set('section', row.sectionKey)
+  params.set('sectionView', focus.evidenceObjectId ? 'review' : 'context')
+  return { kind: 'section', href: `${path}?${params}`, label: focus.evidenceObjectId ? 'Open section evidence review →' : 'Open supporting files →' }
 }
 
 export function graphSourceParams(params, contextKey, focus) {
@@ -207,6 +241,8 @@ export function buildGraphViewModel(graph, mode = 'Journey', search = '') {
     const evidenceObjectId = node.customerVisible === true && definition[0] === 'evidence' ? recordedId(node.evidenceObjectId) : ''
     return [{ key: node.nodeId, layer: definition[0], typeLabel: definition[1], label: details.title || definition[1], domain, state,
       sourceId, evidenceObjectId,
+      sectionLocal: node.customerVisible === true && (Boolean(node.sectionKey) || /^(?:evidence:section:|source:section-document-)/.test(node.nodeId)),
+      sectionKey: node.customerVisible === true ? node.sectionKey : undefined,
       recordedConfidence: details.recordedConfidence || '', confidenceDetails: details.confidenceDetails || null,
       review, quality, validation: details.validation, reasoning: details.reasoning,
       subtitle: [domain, state, quality !== state ? quality : '', details.confidence].filter(Boolean).join(' · '), diagnostic: false }]

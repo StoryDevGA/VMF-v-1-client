@@ -28,6 +28,7 @@ const CustomerJourneyPlaceholder = lazy(
   () => import('../pages/CustomerJourney/CustomerJourneyPlaceholder'),
 )
 const IntelligenceHub = lazy(() => import('../pages/IntelligenceHub/IntelligenceHub'))
+const WorkspaceStructure = lazy(() => import('../pages/WorkspaceStructure/WorkspaceStructure'))
 const CustomerAttention = lazy(
   () => import('../pages/CustomerAttention'),
 )
@@ -340,7 +341,9 @@ export const router = createBrowserRouter([
                 path: 'workspace-structure',
                 element: (
                   <CustomerTierRoute requiredTier="CORE">
-                    <CustomerJourneyPlaceholder section="Workspace Structure" />
+                    <ProtectedRoute requiredSelectedScopePermission="VMF_VIEW" unauthorizedRedirect="/app/dashboard">
+                      <WorkspaceStructure />
+                    </ProtectedRoute>
                   </CustomerTierRoute>
                 ),
               },

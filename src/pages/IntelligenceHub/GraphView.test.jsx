@@ -1,10 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import GraphView from './GraphView.jsx'
-import { buildGraphViewModel, graphRelationships, readGraphInspection, writeGraphInspection, resolveGraphSelection, graphSourceFocus, graphSourceParams, graphSourceReturnHref, graphContextReturnHref } from './intelligenceGraphModel.js'
+import { buildGraphViewModel, graphRelationships, readGraphInspection, writeGraphInspection, resolveGraphSelection, graphSourceFocus, graphSourceDestination, graphSourceParams, graphSourceReturnHref, graphContextReturnHref } from './intelligenceGraphModel.js'
 
 const graph = {
   graphHash: 'hash-1', graphVersion: '2.2',
@@ -18,11 +18,59 @@ const graph = {
   ], coverage: { missingDomains: ['ECONOMICS', 'private domain'] }, projection: { truncated: true },
 }
 const props = { manifest: { status: 'CURRENT', graphHash: 'hash-1', graphVersion: '2.2', counts: { nodeCount: 100, edgeCount: 150 } }, graph, workspaceName: 'Current Workspace', revisionLabel: 'R3', qualityHref: '/app/intelligence-quality?revisionId=r3', workbenchHref: '/app/runtime/r3/workbench', onSelectView: vi.fn(), onOpenSources: vi.fn() }
+
+describe('section-local graph source ownership', () => {
+  const scope = { workspaceId: 'workspace', revisionId: 'revision', customerId: 'customer', tenantId: 'tenant' }
+  const focus = { sourceId: 'document', evidenceObjectId: 'fact', sectionLocal: true, sectionKey: 'strategic_objectives' }
+  const fixture = () => ({ sectionStateSource: 'runtime_state_v2', runtimeInstance: { id: 'revision', customerId: 'customer', tenantId: 'tenant' },
+    revision: { rootRuntimeInstanceKey: 'workspace', lineage: [{ runtimeInstanceId: 'revision', relationship: 'CURRENT' }] },
+    sections: [{ sectionKey: 'strategic-objectives', runtimePath: 'framework_state.sections.strategic_objectives', visible: true,
+      sectionEvidence: { documents: [{ sourceId: 'document', sectionDocumentId: 'document' }],
+        evidenceObjects: [{ evidenceObjectId: 'fact', sourceId: 'document', sectionKey: 'strategic-objectives', runtimePath: 'framework_state.sections.strategic_objectives' }] } }] })
+  it.each(['strategic_objectives', 'strategic-objectives'])('uses explicit owning membership with declared/native parity %s', sectionKey => {
+    const result = graphSourceDestination(fixture(), { ...focus, sectionKey }, scope)
+    expect(result).toEqual({ kind: 'section', label: 'Open section evidence review →', href: '/app/workspace-structure?runtimeInstanceId=workspace&revisionId=revision&section=strategic-objectives&sectionView=review' })
+  })
+  it('locates source-only receipts without inventing a native section key', () => {
+    expect(graphSourceDestination(fixture(), { sourceId: 'document' }, scope)).toMatchObject({ kind: 'section', label: 'Open supporting files →', href: expect.stringContaining('sectionView=context') })
+  })
+  it('keeps unrelated global sources on their existing contract', () => {
+    expect(graphSourceDestination(fixture(), { sourceId: 'global', evidenceObjectId: 'global-fact' }, scope)).toEqual({ kind: 'global' })
+  })
+  it.each(['missing document', 'missing evidence', 'duplicate document', 'duplicate evidence', 'different source', 'different path', 'different declared key', 'different native key', 'hidden section', 'wrong tenant', 'wrong revision', 'duplicate section', 'legacy owner', 'invalid path'])('withholds known-local %s instead of global fallback', condition => {
+    const renderer = fixture(), row = renderer.sections[0], item = row.sectionEvidence.evidenceObjects[0]
+    const selected = { ...focus }
+    if (condition === 'missing document') row.sectionEvidence.documents = []
+    if (condition === 'missing evidence') row.sectionEvidence.evidenceObjects = []
+    if (condition === 'duplicate document') row.sectionEvidence.documents.push({ ...row.sectionEvidence.documents[0] })
+    if (condition === 'duplicate evidence') row.sectionEvidence.evidenceObjects.push({ ...item })
+    if (condition === 'different source') item.sourceId = 'other'
+    if (condition === 'different path') item.runtimePath = 'framework_state.sections.other'
+    if (condition === 'different declared key') item.sectionKey = 'other'
+    if (condition === 'different native key') selected.sectionKey = 'other'
+    if (condition === 'hidden section') row.visible = false
+    if (condition === 'wrong tenant') renderer.runtimeInstance.tenantId = 'other'
+    if (condition === 'wrong revision') renderer.runtimeInstance.id = 'other'
+    if (condition === 'duplicate section') renderer.sections.push(structuredClone(row))
+    if (condition === 'legacy owner') renderer.sectionStateSource = 'framework_state'
+    if (condition === 'invalid path') row.runtimePath += '.nested'
+    expect(graphSourceDestination(renderer, selected, scope)).toEqual({ kind: 'unavailable', label: 'Section source unavailable' })
+  })
+  it('uses canonical local namespace only to reject missing ownership', () => {
+    const selected = buildGraphViewModel({ nodes: [{ nodeId: 'evidence:section:opaque', nodeType: 'EVIDENCE', customerVisible: true, sourceId: 'missing', evidenceObjectId: 'missing-fact' }] }).nodes[0]
+    expect(graphSourceDestination(fixture(), graphSourceFocus(selected), scope).kind).toBe('unavailable')
+  })
+  it('retains the actual native key as provenance without converting it to a route slug', () => {
+    const selected = buildGraphViewModel({ nodes: [{ nodeId: 'opaque', nodeType: 'EVIDENCE', customerVisible: true, sourceId: 'document', evidenceObjectId: 'fact', sectionKey: 'strategic_objectives' }] }).nodes[0]
+    expect(graphSourceFocus(selected)).toEqual(focus)
+  })
+})
 function ControlledGraph({ overrides }) {
   const [inspection, setInspection] = useState(overrides?.inspection || { mode: 'Journey', search: '', selectedKey: '', invalid: false })
   return <GraphView {...props} {...overrides} inspection={inspection} onInspectionChange={patch => setInspection(current => ({ ...current, ...patch, invalid: false }))} />
 }
-const show = overrides => render(<MemoryRouter><ControlledGraph overrides={overrides} /></MemoryRouter>)
+const inspectCurrent=()=>{const button=screen.queryByRole('button',{name:'Inspect selected',exact:true});if(button&&!button.disabled){fireEvent.click(button);const advanced=screen.queryByText('Recorded object inspection',{selector:'summary'});if(advanced)fireEvent.click(advanced)}}
+const show=overrides=>{const view=render(<MemoryRouter><ControlledGraph overrides={overrides}/></MemoryRouter>);inspectCurrent();return view}
 
 describe('scoped Graph inspection URL', () => {
   const context = 'workspace:revision:customer:tenant'
@@ -86,6 +134,21 @@ const groupedGraph = {
 }
 
 describe('bounded individual Graph inspection', () => {
+  it('keeps a clicked multi-object entry in group inspection', async () => {
+    const change = vi.fn()
+    render(<MemoryRouter><GraphView {...props} graph={groupedGraph}
+      inspection={{ mode: 'Journey', search: '', selectedKey: 'intel-1', objectView: 'object', invalid: false }} onInspectionChange={change} /></MemoryRouter>)
+    await userEvent.setup().click(within(screen.getByRole('region', { name: 'Evidence objects' })).getByRole('button'))
+    expect(change).toHaveBeenCalledWith({ selectedKey: 'first', objectView: 'group', afterEdgeKey:'' })
+  })
+  it('keeps a coverage diagnostic out of native object inspection', async () => {
+    const change = vi.fn()
+    render(<MemoryRouter><GraphView {...props}
+      inspection={{ mode: 'Gaps', search: '', selectedKey: 'gap:ECONOMICS', objectView: 'group', invalid: false }} onInspectionChange={change} /></MemoryRouter>)
+    await userEvent.setup().click(within(screen.getByRole('region', { name: 'Intelligence objects' })).getByRole('button'))
+    expect(change).toHaveBeenCalledWith({ selectedKey: 'gap:ECONOMICS', objectView: 'group', afterEdgeKey:'' })
+    expect(screen.queryByRole('region', { name: 'Selected object neighbourhood' })).not.toBeInTheDocument()
+  })
   it('opens delivered member identities, inspects only one object relationships and returns to the group', async () => {
     const user = userEvent.setup()
     show({ graph: groupedGraph, inspection: { mode: 'Journey', search: '', selectedKey: 'first', objectView: 'group', invalid: false } })
@@ -94,13 +157,15 @@ describe('bounded individual Graph inspection', () => {
     expect(within(dialog).getByText('first')).toBeInTheDocument(); expect(within(dialog).getByText('second')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Products second' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    inspectCurrent()
     const inspector = screen.getByRole('region', { name: 'Selected graph object' })
     expect(within(inspector).getByText('second')).toBeInTheDocument()
     expect(within(inspector).getByText('Second intelligence', { exact: false })).toBeInTheDocument()
     expect(within(inspector).queryByText('First intelligence', { exact: false })).not.toBeInTheDocument()
     expect(within(inspector).getByText(/Exact source\/evidence provenance is unavailable/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Return to group' }))
-    expect(within(inspector).getByText('3 separate objects with the same displayed details.')).toBeInTheDocument()
+    inspectCurrent()
+    expect(within(screen.getByRole('region',{name:'Selected graph object'})).getByText('3 separate objects with the same displayed details.')).toBeInTheDocument()
   })
   it.each(['first', 'second', 'third'])('resolves exact individual %s despite reordered group representatives', key => {
     const model = buildGraphViewModel({ ...groupedGraph, nodes: [...groupedGraph.nodes].reverse() })
@@ -131,6 +196,7 @@ describe('bounded individual Graph inspection', () => {
     await user.click(screen.getByRole('button', { name: 'Inspect 3 individual objects' }))
     await user.click(screen.getByRole('button', { name: 'Close member inspection' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    inspectCurrent()
     expect(within(screen.getByRole('region', { name: 'Selected graph object' })).getByText('second')).toBeInTheDocument()
   })
   it('wraps keyboard focus inside the member dialog in both directions', async () => {
@@ -264,35 +330,40 @@ describe('Intelligence Graph', () => {
     show({ inspection: { mode: 'Journey', invalid: false, ...state } })
     expect(within(screen.getByRole('region', { name: 'Selected graph object' })).getByText(/requested graph object is not displayed/)).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Selected graph object' })).queryByRole('heading')).not.toBeInTheDocument()
+    expect(screen.getByText(/Change the mode or search, or choose a displayed object/)).toBeInTheDocument()
+  })
+  it('directs an omitted exact object to its existing neighbourhood without claiming that read succeeded', () => {
+    show({ inspection: { mode: 'Lineage', search: '', selectedKey: 'section-truth:runtime:customer-context:hash', objectView: 'object', invalid: false }, neighbourhoodEnabled: true, neighbourhoodLoading: true })
+    expect(screen.getByText(/Inspect its object neighbourhood below; another object is not substituted if that read is unavailable/)).toBeInTheDocument()
+    expect(screen.queryByText(/Change the mode or search/)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Selected object neighbourhood' })).toHaveTextContent('Loading recorded connections')
   })
   it('invalid same-scope navigation hides retained data and choosing a mode restores inspection', async () => {
     const user = userEvent.setup()
     show({ inspection: { mode: 'Journey', search: '', selectedKey: '', invalid: true } })
     expect(screen.queryByText('100')).not.toBeInTheDocument()
-    expect(screen.getAllByText(/inspection link is invalid/)).toHaveLength(2)
+    expect(screen.getAllByRole('status').some(node=>node.textContent.includes('inspection link is invalid'))).toBe(true); expect(within(screen.getByRole('region',{name:'Graph layers'})).queryByRole('button')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Lineage' }))
-    expect(screen.getByText('100')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('view')
   })
   it('hidden Graph panels never automatically persist a selection', () => {
     const change = vi.fn()
     render(<MemoryRouter><GraphView {...props} active={false} inspection={{ mode: 'Journey', search: '', selectedKey: '', invalid: false }} onInspectionChange={change} /></MemoryRouter>)
     expect(change).not.toHaveBeenCalled()
   })
-  it('renders six layers and truthful totals, selects objects and clears search', async () => {
-    const user = userEvent.setup()
-    show()
-    expect(screen.getByText('100')).toBeInTheDocument()
-    expect(screen.getByText('150')).toBeInTheDocument()
-    expect(screen.getByText(/Partial projection/)).toBeInTheDocument()
-    const inspector = screen.getByRole('region', { name: 'Selected graph object' })
-    await user.click(screen.getByRole('button', { name: /^Source Company/ }))
-    expect(within(inspector).getByRole('heading', { name: 'Source' })).toBeInTheDocument()
-    expect(within(inspector).getByText('Produces evidence')).toBeInTheDocument()
-    await user.type(screen.getByRole('textbox', { name: 'Search this graph view' }), 'no match')
-    expect(screen.queryByRole('button', { name: /^Source Company/ })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Clear graph search' }))
-    expect(screen.getByRole('textbox', { name: 'Search this graph view' })).toHaveFocus()
-    expect(screen.getByRole('button', { name: /^Source Company/ })).toBeInTheDocument()
+  it('renders six layers and inspects truthful totals, selects objects and clears search', async () => {
+    const user=userEvent.setup();show()
+    await user.click(screen.getByRole('button',{name:'Back to Intelligence Graph'}));await user.click(screen.getByRole('button',{name:'Graph basis',exact:true}))
+    expect(screen.getByRole('dialog')).toHaveTextContent('100 objects; 150 relationships')
+    await user.click(screen.getByRole('button',{name:'Back to Intelligence Graph'}))
+    expect(screen.getAllByRole('heading',{level:2})).toHaveLength(6)
+    await user.click(within(screen.getByRole('region',{name:'Source objects'})).getByRole('button'))
+    inspectCurrent();const inspector=screen.getByRole('region',{name:'Selected graph object'});expect(within(inspector).getByText('Produces evidence')).toBeInTheDocument()
+    await user.click(screen.getByRole('button',{name:'Back to Intelligence Graph'}))
+    await user.type(screen.getByRole('searchbox',{name:'Search this graph view'}),'no match')
+    expect(within(screen.getByRole('region',{name:'Source objects'})).queryByRole('button')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button',{name:'Clear graph search'}));expect(screen.getByRole('searchbox',{name:'Search this graph view'})).toHaveFocus()
+    expect(within(screen.getByRole('region',{name:'Source objects'})).getByRole('button')).toBeInTheDocument()
     expect(screen.queryByText(/private/)).not.toBeInTheDocument()
   })
   it.each([{ isLoading: true }, { error: { status: 503 } }, { manifest: { status: 'STALE' } }, { graph: null }, { graph: { ...graph, graphHash: 'different-generation' } }, { graph: { ...graph, graphVersion: 'old-version' } }])('hides retained graph and totals when unavailable: %j', overrides => {
@@ -301,18 +372,13 @@ describe('Intelligence Graph', () => {
     expect(screen.queryByText('100')).not.toBeInTheDocument()
     expect(screen.queryByText('150')).not.toBeInTheDocument()
   })
-  it('preserves selected context in destination links and source/view actions', async () => {
-    const user = userEvent.setup()
-    show()
-    expect(screen.getByRole('link', { name: /Existing workspace workbench/ })).toHaveAttribute('href', props.workbenchHref)
-    await user.click(screen.getByRole('button', { name: 'Search sources by domain →' }))
-    expect(props.onOpenSources).toHaveBeenCalledWith('Company')
-    await user.click(screen.getByRole('button', { name: /Gaps/ }))
-    expect(screen.getByRole('link', { name: 'Open in Intelligence Quality →' })).toHaveAttribute('href', props.qualityHref)
-    await user.click(screen.getByRole('button', { name: '← Readiness & publish' }))
-    expect(props.onSelectView).toHaveBeenCalledWith('Readiness & publish')
-  })
-})
+  it('preserves selected context in source and modern peer navigation',async()=>{
+    const user=userEvent.setup();show();expect(screen.queryByRole('link',{name:/workbench/})).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button',{name:'Search sources by domain →'}));expect(props.onOpenSources).toHaveBeenCalledWith('Company')
+    await user.click(screen.getByRole('button',{name:'Back to Intelligence Graph'}));await user.click(screen.getByRole('button',{name:'Gaps',exact:true}));inspectCurrent()
+    expect(screen.getByRole('link',{name:'Open in Intelligence Quality →'})).toHaveAttribute('href',props.qualityHref)
+    await user.click(screen.getByRole('button',{name:'Back to Intelligence Graph'}));await user.click(screen.getByRole('button',{name:'Coverage',exact:true}));expect(props.onSelectView).toHaveBeenCalledWith('Coverage')
+  })})
 
 
  describe('recorded exact Graph provenance', () => {
@@ -410,19 +476,19 @@ describe('Intelligence Graph', () => {
     const node = individual.nodes[0], other = { ...node, nodeId: 'other', label: 'Other object' }
     const read = { ...individual, nodes: [node, other] }
     const renderView = (overrides = {}) => <MemoryRouter><GraphView {...props} graph={read} inspection={inspection} onInspectionChange={vi.fn()} {...overrides} /></MemoryRouter>
-    const { rerender } = render(renderView())
+    const { rerender } = render(renderView());inspectCurrent()
     const user = userEvent.setup()
     await user.click(screen.getByText('Recorded confidence details'))
     expect(screen.getByText('Recorded confidence details').closest('details').open).toBe(true)
     rerender(renderView({ graph: { ...read, graphHash: 'hash-2' }, manifest: { ...props.manifest, graphHash: 'hash-2' } }))
-    expect(screen.getByText('Recorded confidence details').closest('details').open).toBe(false)
+    inspectCurrent();expect(screen.getByText('Recorded confidence details').closest('details').open).toBe(false)
     await user.click(screen.getByText('Recorded confidence details'))
     rerender(renderView({ inspection: { ...inspection, selectedKey: 'other' } }))
-    expect(screen.getByText('Recorded confidence details').closest('details').open).toBe(false)
+    inspectCurrent();expect(screen.getByText('Recorded confidence details').closest('details').open).toBe(false)
     rerender(renderView({ isLoading: true }))
     expect(screen.queryByText('Recorded confidence details')).not.toBeInTheDocument()
     rerender(renderView())
-    expect(screen.getByText('Recorded confidence details').closest('details').open).toBe(false)
+    inspectCurrent();expect(screen.getByText('Recorded confidence details').closest('details').open).toBe(false)
   })
   it('names the unavailable relationship projection for a coverage diagnostic', () => {
     show({ inspection: { mode: 'Gaps', search: '', selectedKey: 'gap:ECONOMICS' } })
@@ -431,3 +497,64 @@ describe('Intelligence Graph', () => {
     expect(screen.queryByText('Not projected')).not.toBeInTheDocument()
   })
  })
+
+const graphGuardCalls=vi.hoisted(()=>({handlers:{}}))
+vi.mock('../../components/Button',async original=>{const actual=await original();return {...actual,Button:props=>{const text=Array.isArray(props.children)?props.children.filter(c=>typeof c==='string').join(''):props.children;if(typeof text==='string')graphGuardCalls.handlers[text]=props.onClick;return <actual.Button {...props}/>}}})
+it('loads only the currently selected exact singleton through existing inspection change',()=>{
+  const change=vi.fn();render(<MemoryRouter><GraphView {...props} inspection={{mode:'Journey',search:'',selectedKey:'n2',objectView:'group'}} onInspectionChange={change}/></MemoryRouter>)
+  fireEvent.click(screen.getByRole('button',{name:'Load connected journey'}));expect(change).toHaveBeenCalledWith({selectedKey:'n2',objectView:'object',afterEdgeKey:''})
+})
+it('binds connection inspection to the exact recorded relationship',()=>{
+  show({inspection:{mode:'Journey',search:'',selectedKey:'n2',objectView:'object'}})
+  fireEvent.click(screen.getByRole('button',{name:'Back to Intelligence Graph'}))
+  const buttons=screen.getAllByRole('button',{name:'Inspect connection'});fireEvent.click(buttons[0])
+  const first=screen.getByRole('dialog');expect(first).toHaveTextContent('Recorded relationship');expect(first).toHaveTextContent('n1');expect(first).toHaveTextContent('n2')
+  fireEvent.click(screen.getByRole('button',{name:'Back to Intelligence Graph'}));fireEvent.click(buttons[1]);expect(screen.getByRole('dialog')).toHaveTextContent('n4')
+})
+it.each([{active:false},{canInspect:false},{stateVersion:'next'},{route:'changed'},{isLoading:true},{graph:{...graph,graphHash:'new'}},{inspection:{mode:'Lineage',search:'',selectedKey:'n2',objectView:'object'}}])('rejects retained dialog, loading and member callbacks on ownership departure %j',changes=>{
+  const inspection={mode:'Journey',search:'',selectedKey:'n2',objectView:'object'},change=vi.fn()
+  const tree=extra=><MemoryRouter><GraphView {...props} inspection={inspection} onInspectionChange={change} {...extra}/></MemoryRouter>
+  const view=render(tree());fireEvent.click(screen.getByRole('button',{name:'Inspect selected'}));const retained=graphGuardCalls.handlers['Load connected journey']
+  view.rerender(tree(changes));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();act(()=>retained());expect(change).not.toHaveBeenCalled()
+  view.rerender(tree());expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
+
+
+it('loads an exact native individual without a grouped-count field',()=>{
+  const change=vi.fn();render(<MemoryRouter><GraphView {...props} inspection={{mode:'Journey',search:'',selectedKey:'n2',objectView:'object'}} onInspectionChange={change}/></MemoryRouter>)
+  fireEvent.click(screen.getByRole('button',{name:'Load connected journey'}));expect(change).toHaveBeenCalledWith({selectedKey:'n2',objectView:'object',afterEdgeKey:''})
+  fireEvent.click(screen.getByRole('button',{name:'Inspect selected'}));expect(screen.getByRole('dialog')).toHaveTextContent('Objects in selection1')
+})
+it.each([{graph:groupedGraph,inspection:{mode:'Journey',search:'',selectedKey:'first',objectView:'group'}},{inspection:{mode:'Gaps',search:'',selectedKey:'gap:ECONOMICS',objectView:'group'}},{isLoading:true},{graph:null}])('does not load a group, diagnostic or unavailable native selection %j',changes=>{
+  render(<MemoryRouter><GraphView {...props} inspection={{mode:'Journey',search:'',selectedKey:'n2',objectView:'object'}} onInspectionChange={vi.fn()} {...changes}/></MemoryRouter>)
+  expect(screen.getByRole('button',{name:'Load connected journey'})).toBeDisabled()
+})
+
+it('qualifies representative endpoints when a connection combines multiple recorded edges', async () => {
+  const graph = { graphHash: 'hash-1', graphVersion: '2.2',
+    nodes: [{ nodeId: 'e1', nodeType: 'EVIDENCE', coverageDomain: 'COMPANY' }, { nodeId: 'e2', nodeType: 'EVIDENCE', coverageDomain: 'COMPANY' }, { nodeId: 'i1', nodeType: 'INTELLIGENCE', coverageDomain: 'COMPANY' }],
+    edges: [{ fromNodeId: 'e1', toNodeId: 'i1', edgeType: 'EVIDENCE_DERIVES_INTELLIGENCE' }, { fromNodeId: 'e2', toNodeId: 'i1', edgeType: 'EVIDENCE_DERIVES_INTELLIGENCE' }] }
+  render(<MemoryRouter><GraphView {...props} graph={graph} inspection={{ mode: 'Journey', search: '', selectedKey: 'e1', objectView: 'group' }} /></MemoryRouter>)
+  await userEvent.click(screen.getByRole('button', { name: 'Inspect connection', exact: true }))
+  const dialog = within(screen.getByRole('dialog'))
+  expect(dialog.getByText('Representative from object')).toBeInTheDocument()
+  expect(dialog.getByText('Representative to object')).toBeInTheDocument()
+  expect(dialog.getByText('Recorded relationship count').nextElementSibling).toHaveTextContent('2')
+  expect(dialog.getByText(/These endpoints do not identify every edge in the group/)).toBeInTheDocument()
+  expect(dialog.queryByText('From object', { exact: true })).not.toBeInTheDocument()
+})
+it.each([{ active: false }, { canInspect: false }, { stateVersion: 'next' }, { refreshing: true }])('refreshes current graph reads and rejects retained callbacks after %j', async changes => {
+  const refresh = vi.fn()
+  const tree = extra => <MemoryRouter><GraphView {...props} onRefresh={refresh} inspection={{ mode: 'Journey', search: '', selectedKey: 'n2', objectView: 'object' }} {...extra} /></MemoryRouter>
+  const view = render(tree())
+  await userEvent.click(screen.getByRole('button', { name: 'Graph basis' }))
+  await userEvent.click(screen.getByText('Technical graph basis', { selector: 'summary' }))
+  const button = screen.getByRole('button', { name: 'Refresh graph reads' })
+  expect(button).toBeEnabled()
+  const retained = graphGuardCalls.handlers['Refresh graph reads']
+  await userEvent.click(button)
+  expect(refresh).toHaveBeenCalledTimes(1)
+  view.rerender(tree(changes))
+  act(() => retained())
+  expect(refresh).toHaveBeenCalledTimes(1)
+})

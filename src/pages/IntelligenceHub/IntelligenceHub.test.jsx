@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,7 +31,7 @@ const renderer = {
   },
 }
 
-const calls = { execute: vi.fn(), update: vi.fn(), evidence: vi.fn(), manifest: vi.fn(), graph: vi.fn(), coverage: vi.fn(), refresh: vi.fn(), coverageView: vi.fn(), completion: vi.fn(), health: vi.fn(), headerRefresh: vi.fn(), reportRefresh: vi.fn() }
+const calls = { execute: vi.fn(), update: vi.fn(), evidence: vi.fn(), manifest: vi.fn(), graph: vi.fn(), coverage: vi.fn(), refresh: vi.fn(), coverageView: vi.fn(), completion: vi.fn(), health: vi.fn(), headerRefresh: vi.fn(), afterLockHeader: vi.fn(), readinessRefresh: vi.fn(), reportRefresh: vi.fn(), sectionSource: vi.fn(), reviewReturn: vi.fn() }
 vi.mock('./CoverageView.jsx', async importOriginal => {
   const actual = await importOriginal()
   return { ...actual, default: props => { calls.coverageView(props); return <actual.default {...props} /> } }
@@ -39,12 +39,17 @@ vi.mock('./CoverageView.jsx', async importOriginal => {
 vi.mock('../../components/Button', async importOriginal => {
   const actual = await importOriginal()
   return { ...actual, Button: props => {
-    if (props.children === '↻ Refresh') calls.headerRefresh(props)
+    if (props.children === '↻ Refresh' || props.children === 'Refresh lock reads' || props.children === 'Refresh coverage reads') calls.headerRefresh(props)
+    if (props.className === 'intelligence-hub__after-lock-basis') calls.afterLockHeader(props)
+    if (props.children === 'Refresh readiness reads') calls.readinessRefresh(props)
     if (props.children === 'Refresh report') calls.reportRefresh(props)
+    if (props.children === 'Return to Review search') calls.reviewReturn(props)
+    if (props.children === 'Open section evidence review →' || props.children === 'Open supporting files →') calls.sectionSource(props)
     return <actual.Button {...props} />
   } }
 })
 let readinessFields = {}
+let summaryControlOverrides = {}
 let contextInputs
 let cachedContextRevision = false
 let staleOverviewDetails = false
@@ -192,6 +197,7 @@ const queries = {
   },
   }
   return { useExecuteRuntimeActionMutation: () => [calls.execute],
+  useAcceptRuntimeDiscoveryMutation: () => [vi.fn()],
   useGetAcquisitionRunsQuery: () => ({ refetch: vi.fn() }),
   useGetAcquisitionRunQuery: () => ({}),
   useCompleteReviewMutation: () => [vi.fn()],
@@ -201,7 +207,7 @@ const queries = {
     if (name === 'useGetRuntimeStateDiscoveryHealthQuery') calls.health(...args)
     const result = query(...args)
     if (name === 'useGetRuntimeStateEvidenceQuery' && result.data?.data) {
-      result.data.data = { ...result.data.data, control: { ...renderer.runtimeInstance, id: args[0].runtimeInstanceId } }
+      result.data.data = { ...result.data.data, control: { ...renderer.runtimeInstance, id: args[0].runtimeInstanceId, ...(args[0].pageSize === 1 && !args[0].reviewStatus ? summaryControlOverrides : {}) } }
       if (args[0].sourceId || args[0].evidenceObjectId) result.data.data.evidenceObjects = (result.data.data.evidenceObjects || [])
         .filter(item => (!args[0].sourceId || item.sourceId === args[0].sourceId) && (!args[0].evidenceObjectId || item.evidenceObjectId === args[0].evidenceObjectId))
     }
@@ -250,14 +256,80 @@ function RevisionSwitchReview({ view }) {
   </>
 }
 
+const openReadinessReport = async () => {
+  const basis=screen.getByText('Current readiness read basis',{selector:'summary'})
+  if (!basis.parentElement.open) await userEvent.click(basis)
+  await userEvent.click(screen.getByRole('button',{name:'Preview assurance report'}))
+}
+
 describe('Intelligence Hub', () => {
-  it('rejects retained Readiness Refresh while current completion is fetching', () => {
+  it('matches the compact Overview header and opens its qualified inventory basis with focus return', async () => {
+    show()
+    expect(screen.queryByText('Last updated')).not.toBeInTheDocument()
+    expect(screen.queryByText('Discover, acquire and govern the customer intelligence that supports accepted truth and outcomes.')).not.toBeInTheDocument()
+    const opener = screen.getByRole('button', { name: 'View basis' })
+    await userEvent.click(opener)
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('combobox', { name: 'Record' })).toHaveValue('Evidence inventory and snapshot')
+    expect(within(dialog).getByText('Last successful frozen snapshot membership').nextElementSibling).toHaveTextContent('Not supplied')
+    expect(within(dialog).getByText('Inventory captured').nextElementSibling).toHaveTextContent('Unavailable')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Back to Overview' }))
+    expect(opener).toHaveFocus()
+    await userEvent.click(opener)
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Inspect sources' }))
+    expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('rejects a retained Overview View basis callback after departure and return', async () => {
+    show()
+    const opener = screen.getByRole('button', { name: 'View basis' })
+    const captured = opener[Object.keys(opener).find(key => key.startsWith('__reactProps'))].onClick
+    await userEvent.click(screen.getByRole('tab', { name: 'Context' }))
+    act(() => captured({ currentTarget: opener }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Overview' }))
+    act(() => captured({ currentTarget: opener }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'View basis' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+  it.each(['renderer', 'inventory'])('disables Overview View basis during %s refresh', state => {
+    rendererRefreshing = state === 'renderer'
+    inventoryBusy = state === 'inventory'
+    show()
+    expect(screen.getByRole('button', { name: 'View basis' })).toBeDisabled()
+  })
+  it.each(['refresh', 'scope'])('does not resurrect the captured Overview basis after %s recovery', async state => {
+    const mounted = show()
+    await userEvent.click(screen.getByRole('button', { name: 'View basis' }))
+    const ui = <MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2']}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>
+    rendererRefreshing = state === 'refresh'
+    staleOverviewDetails = state === 'scope'
+    mounted.rerender(ui)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    rendererRefreshing = false
+    staleOverviewDetails = false
+    mounted.rerender(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2']}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'View basis' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+  it('keeps Sources View basis disabled without a current exact source and omits dated Refresh header', () => {
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    expect(screen.getByRole('button', {name:'View basis'})).toBeDisabled()
+    expect(screen.queryByRole('button', {name:'↻ Refresh'})).not.toBeInTheDocument()
+    expect(screen.queryByText('Last updated')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', {name:'Sources'})).toHaveAttribute('aria-selected','true')
+  })
+  it('rejects retained Readiness Refresh while current completion is fetching', async () => {
     const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish'
     const { rerender } = show(search)
-    const retained = calls.headerRefresh.mock.calls.at(-1)[0].onClick
+    await userEvent.click(screen.getByText('Current readiness read basis',{selector:'summary'}))
+    const retained = calls.readinessRefresh.mock.calls.at(-1)[0].onClick
     completionBusy = true
     rerender(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
-    expect(screen.getByRole('button', { name: '↻ Refresh' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Refresh readiness reads' })).toBeDisabled()
     calls.refresh.mockClear(); act(() => retained()); expect(calls.refresh).not.toHaveBeenCalled()
   })
   it.each(['evidence-readiness', 'readiness-publish', 'after-lock'])('inspects current recorded lock metadata on %s and hides retained failed reads', async view => {
@@ -265,7 +337,7 @@ describe('Intelligence Hub', () => {
     const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=' + view
     const { rerender } = show(search)
     if (view === 'evidence-readiness') await userEvent.click(screen.getByRole('button', { name: 'Advanced evidence inspection' }))
-    const panelName = { 'evidence-readiness': 'Evidence readiness', 'readiness-publish': 'Readiness & publish', 'after-lock': 'After lock' }[view]
+    const panelName = { 'evidence-readiness': 'Readiness & publish', 'readiness-publish': 'Readiness & publish', 'after-lock': 'After lock' }[view]
     const panel = () => within(screen.getByRole('tabpanel', { name: panelName }))
     expect(panel().getByRole('region', { name: 'Recorded lock basis' })).toHaveTextContent('lock-receipt-2')
     expect(panel().getByRole('region', { name: 'Recorded lock basis' })).toHaveTextContent('have not been independently verified')
@@ -283,6 +355,16 @@ describe('Intelligence Hub', () => {
     calls.refresh.mockClear(); act(() => retained()); expect(calls.refresh).not.toHaveBeenCalled()
     act(() => clearTokens()); act(() => retained()); expect(calls.refresh).not.toHaveBeenCalled()
   })
+  it('places explicit pack acceptance only in modern Review and never treats incomplete native basis as permission', async () => {
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    await userEvent.click(screen.getByText('Evidence-pack acceptance', {selector:'summary',exact:true}))
+    expect(screen.getByRole('region', { name: 'Evidence-pack acceptance' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Accept reviewed evidence pack' })).toBeDisabled()
+    expect(screen.getByText(/does not accept generated Understanding/)).toBeVisible()
+    expect(calls.evidence).toHaveBeenCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', reviewStatus: 'REJECTED', pageSize: 1 }), { skip: false })
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     lockFixture = undefined; lockBusy = false; lockFailure = false; lockMissing = false
     neighbourhoodFixture = undefined; neighbourhoodFailure = false; neighbourhoodBusy = false
@@ -291,6 +373,7 @@ describe('Intelligence Hub', () => {
     inventoryFixture = undefined; inventoryBusy = false; inventoryFailure = false
     completionOverrides = {}; completionBusy = false; completionFailure = false
     readinessFields = {}
+    summaryControlOverrides = {}
     contextInputs = undefined
     retainedSummaryError = false
     invalidSummaryTotal = undefined
@@ -321,7 +404,7 @@ describe('Intelligence Hub', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=' + view)
     expect(screen.getByRole('region', { name: 'Recorded Discovery Health assessment' })).toHaveTextContent('Recorded Partially Ready')
     expect(calls.health).toHaveBeenLastCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: expect.any(Number) }), { skip: false })
-    await userEvent.setup().click(screen.getByRole('button', { name: '↻ Refresh' }))
+    await userEvent.setup().click(screen.getByRole('button', { name: view === 'coverage' ? 'Refresh coverage reads' : 'Refresh readiness reads', hidden:true }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateDiscoveryHealthQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2' }))
     expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
   })
@@ -350,7 +433,7 @@ describe('Intelligence Hub', () => {
   })
   it('replaces an open report assessment with unavailable on failed refresh and includes its exact subscriber in report recovery', async () => {
     const mounted = show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     const report = screen.getByRole('region', { name: 'Assurance report content' })
     expect(within(report).getByRole('region', { name: 'Recorded Discovery Health assessment' })).toHaveTextContent('Recorded Partially Ready')
     healthFailure = true
@@ -372,7 +455,7 @@ describe('Intelligence Hub', () => {
   })
   it('blocks retained report Refresh while Discovery assessment is loading and recovers a failed assessment', async () => {
     const mounted = show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     const retained = calls.reportRefresh.mock.calls.at(-1)[0].onClick
     healthBusy = true
     mounted.rerender(<MemoryRouter><Routes><Route path='/app/intelligence' element={<IntelligenceHub />} /></Routes></MemoryRouter>)
@@ -382,6 +465,19 @@ describe('Intelligence Hub', () => {
     mounted.rerender(<MemoryRouter><Routes><Route path='/app/intelligence' element={<IntelligenceHub />} /></Routes></MemoryRouter>)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh report' }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateDiscoveryHealthQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2' }))
+  })
+  it.each(['Journey', 'Lineage'])('opens a clicked singleton through the current scoped %s neighbourhood', async mode => {
+    neighbourhoodFixture = args => graphNeighbourhoodFixture({ nodeId: args.nodeId, mode: args.mode })
+    const params = new URLSearchParams({ runtimeInstanceId: 'workspace-1', revisionId: 'revision-2', view: 'intelligence-graph',
+      graphInspectionContext: 'workspace-1:revision-2:customer-1:tenant-1', graphMode: mode })
+    render(<MemoryRouter initialEntries={['/app/intelligence?' + params]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    await userEvent.setup().click(within(screen.getByRole('region', { name: 'Source objects' })).getByRole('button'))
+    expect(screen.getByTestId('route-proof')).toHaveTextContent('graphObjectId=source-1')
+    expect(screen.getByTestId('route-proof')).toHaveTextContent('graphObjectView=object')
+    const neighbourhood = screen.getByRole('region', { name: 'Selected object neighbourhood' })
+    expect(within(neighbourhood).getByText('source-1')).toBeInTheDocument()
+    expect(within(neighbourhood).getByRole('button', { name: /Connected evidence 000/ })).toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
   })
   it('keeps requested canonical evidence and finding context through current outside-flat Graph, Sources and return', async () => {
     neighbourhoodFixture = args => graphNeighbourhoodFixture({ nodeId: 'actual:outside', evidenceObjectId: args.evidenceObjectId, mode: args.mode })
@@ -415,10 +511,10 @@ describe('Intelligence Hub', () => {
     const params = new URLSearchParams({ runtimeInstanceId: 'workspace-1', revisionId: 'revision-2', view: 'intelligence-graph',
       graphInspectionContext: 'workspace-1:revision-2:customer-1:tenant-1', graphMode: 'Impact', graphQuery: 'Evidence', graphObjectId: 'evidence-2', graphObjectView: 'object', graphAfterEdgeKey: 'edge:a:047' })
     render(<MemoryRouter initialEntries={['/app/intelligence?' + params]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
-    expect(screen.getByText('Locked revision inspection. Frozen accepted evidence and truth remain unchanged.')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Selected graph object' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Selected graph object' })).toBeInTheDocument()
     const user = userEvent.setup()
-    await user.click(screen.getByRole('link', { name: 'Inspect acquisition and revision routes in Context →' }))
+    await user.click(screen.getByRole('button', { name: 'Graph basis' })); await user.click(screen.getByText('Technical graph basis', { selector: 'summary' })); await user.click(screen.getByRole('link', { name: 'Inspect acquisition and revision routes in Context →' }))
     expect(screen.getByTestId('route-proof')).toHaveTextContent('graphContextReturn=inspection')
     expect(screen.getByText(/This revision is locked. Inspect its sources/)).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'Return to graph inspection →' }))
@@ -435,7 +531,7 @@ describe('Intelligence Hub', () => {
     manifestRefreshPromise = new Promise(resolve => { settle = resolve })
     show('?' + params)
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    await refreshCurrentView(user)
     if (departure === 'selection') await user.click(screen.getByRole('button', { name: /Connected evidence 000/ }))
     if (departure === 'tab') await user.click(screen.getByRole('tab', { name: 'Context', exact: true }))
     const manifest = coverageManifestFixture(); manifest.manifest.graphHash = neighbourhoodHash
@@ -473,16 +569,70 @@ describe('Intelligence Hub', () => {
     expect(screen.queryByRole('button', { name: /Connected evidence 000/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Open selected object’s exact source/ })).not.toBeInTheDocument()
   })
-  it('restores scoped Graph mode/search/member identity and carries it into Help and Quality links', () => {
+  it('restores scoped Graph mode/search/member identity and carries it into Help and Quality links', async () => {
     const params = new URLSearchParams({ runtimeInstanceId: 'workspace-1', revisionId: 'revision-2', view: 'intelligence-graph',
       graphInspectionContext: 'workspace-1:revision-2:customer-1:tenant-1', graphMode: 'Journey', graphQuery: 'Evidence', graphObjectId: 'evidence-2' })
     render(<MemoryRouter initialEntries={['/app/intelligence?' + params]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
-    expect(screen.getByRole('textbox', { name: 'Search this graph view' })).toHaveValue('Evidence')
+    expect(screen.getByRole('searchbox', { name: 'Search this graph view' })).toHaveValue('Evidence')
+    await inspectGraphObject()
     expect(within(screen.getByRole('region', { name: 'Selected graph object' })).getByRole('heading', { name: 'Evidence' })).toBeInTheDocument()
     const help = screen.getByRole('link', { name: /Help/ })
     expect(help.getAttribute('href')).toContain('graphObjectId=evidence-2')
-    expect(screen.getByRole('link', { name: /Continue to Intelligence Quality/ }).getAttribute('href')).toContain('graphObjectId=evidence-2')
+    expect(screen.getByRole('link', { name: 'Inspect Quality', exact: true }).getAttribute('href')).toContain('graphObjectId=evidence-2')
     expect(screen.getByTestId('route-proof').textContent).toContain('graphQuery=Evidence')
+  })
+  const sectionSourceRows = (sourceId = 'canonical-source', evidenceObjectId = 'canonical-evidence') => ({ sectionStateSource: 'runtime_state_v2',
+    sections: [{ sectionKey: 'strategic-objectives', runtimePath: 'framework_state.sections.strategic_objectives', visible: true,
+      sectionEvidence: { documents: [{ sourceId, sectionDocumentId: sourceId }],
+        evidenceObjects: [{ evidenceObjectId, sourceId, sectionKey: 'strategic-objectives', runtimePath: 'framework_state.sections.strategic_objectives' }] } }] })
+  const sectionGraphSearch = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph&graphInspectionContext=workspace-1%3Arevision-2%3Acustomer-1%3Atenant-1&graphMode=Journey&graphObjectId=evidence-2&graphObjectView=object'
+  it('opens section evidence in its declared modern Review rather than global Sources', async () => {
+    readinessFields = sectionSourceRows()
+    graphEvidenceProvenance = { customerVisible: true, label: 'Section evidence', sectionKey: 'strategic_objectives', sourceId: 'canonical-source', evidenceObjectId: 'canonical-evidence' }
+    render(<MemoryRouter initialEntries={['/app/intelligence' + sectionGraphSearch]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    await inspectGraphObject()
+    await userEvent.click(screen.getByRole('button', { name: 'Open section evidence review →' }))
+    const next = new URLSearchParams(screen.getByTestId('route-proof').textContent)
+    expect(next.get('section')).toBe('strategic-objectives'); expect(next.get('sectionView')).toBe('review')
+    expect(next.get('runtimeInstanceId')).toBe('workspace-1'); expect(next.get('revisionId')).toBe('revision-2')
+    expect(next.has('sourceId')).toBe(false); expect(next.has('view')).toBe(false)
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('opens source-only neighbourhood membership in the owning modern supporting-file Context', async () => {
+    readinessFields = sectionSourceRows('recorded-source')
+    neighbourhoodFixture = args => graphNeighbourhoodFixture({ nodeId: args.nodeId, mode: args.mode })
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph&graphInspectionContext=workspace-1%3Arevision-2%3Acustomer-1%3Atenant-1&graphMode=Lineage&graphObjectId=source%3Aoutside&graphObjectView=object']}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Open supporting files →' }))
+    expect(screen.getByTestId('route-proof')).toHaveTextContent('section=strategic-objectives&sectionView=context')
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+  })
+  it.each(['missing', 'duplicate', 'different source'])('blocks %s section evidence ownership without global fallback', async condition => {
+    readinessFields = sectionSourceRows()
+    const row = readinessFields.sections[0]
+    if (condition === 'missing') row.sectionEvidence.evidenceObjects = []
+    if (condition === 'duplicate') readinessFields.sections.push(structuredClone(row))
+    if (condition === 'different source') row.sectionEvidence.evidenceObjects[0].sourceId = 'other'
+    graphEvidenceProvenance = { customerVisible: true, label: 'Section evidence', sectionKey: 'strategic_objectives', sourceId: 'canonical-source', evidenceObjectId: 'canonical-evidence' }
+    render(<MemoryRouter initialEntries={['/app/intelligence' + sectionGraphSearch]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    await inspectGraphObject()
+    await userEvent.click(screen.getByRole('button', { name: 'Section source unavailable' }))
+    expect(screen.getByTestId('route-proof')).toHaveTextContent('view=intelligence-graph')
+    expect(screen.getByTestId('route-proof')).not.toHaveTextContent('view=sources')
+  })
+  it.each(['renderer fetch', 'session', 'changed membership', 'changed selection'])('rejects a retained section navigation after %s', async departure => {
+    readinessFields = sectionSourceRows()
+    graphEvidenceProvenance = { customerVisible: true, label: 'Section evidence', sectionKey: 'strategic_objectives', sourceId: 'canonical-source', evidenceObjectId: 'canonical-evidence' }
+    const mounted = render(<MemoryRouter initialEntries={['/app/intelligence' + sectionGraphSearch]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    await inspectGraphObject()
+    const retained = calls.sectionSource.mock.calls.at(-1)[0].onClick
+    if (departure === 'session') act(() => clearTokens())
+    if (departure === 'renderer fetch') rendererRefreshing = true
+    if (departure === 'changed membership') readinessFields = sectionSourceRows('other')
+    if (departure === 'changed selection') await userEvent.click(screen.getByRole('button', { name: 'Impact' }))
+    mounted.rerender(<MemoryRouter initialEntries={['/app/intelligence' + sectionGraphSearch]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    act(() => retained())
+    expect(screen.getByTestId('route-proof')).not.toHaveTextContent('sectionView=review')
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
   })
   it('opens recorded exact Graph evidence in Sources, clears old Source filters and returns even if the source is unavailable', async () => {
     graphEvidenceProvenance = { customerVisible: true, label: 'Evidence', sourceId: 'canonical-source', evidenceObjectId: 'canonical-evidence' }
@@ -491,7 +641,7 @@ describe('Intelligence Hub', () => {
       sourceQuery: 'old', sourceType: 'WEBSITE', sourcePage: '3', evidencePage: '2', sourceEvidencePage: '4' })
     render(<MemoryRouter initialEntries={['/app/intelligence?' + params]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Open exact source and evidence →' }))
+    await inspectGraphObject(user); await user.click(screen.getByRole('button', { name: 'Open exact source and evidence →' }))
     const next = new URLSearchParams(screen.getByTestId('route-proof').textContent)
     expect(next.get('sourceId')).toBe('canonical-source'); expect(next.get('evidenceObjectId')).toBe('canonical-evidence')
     expect(next.get('view')).toBe('sources'); expect(next.get('graphObjectId')).toBe('evidence-2')
@@ -499,8 +649,8 @@ describe('Intelligence Hub', () => {
     for (const key of ['sourceQuery', 'sourceType', 'sourcePage', 'evidencePage', 'sourceEvidencePage']) expect(next.has(key)).toBe(false)
     expect(screen.getAllByText(/The requested source is unavailable/).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('link', { name: 'Return to graph inspection →' }))
-    expect(screen.getByRole('textbox', { name: 'Search this graph view' })).toHaveValue('Evidence')
-    expect(within(screen.getByRole('region', { name: 'Selected graph object' })).getByText('evidence-2')).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search this graph view' })).toHaveValue('Evidence')
+    await inspectGraphObject(user); expect(within(screen.getByRole('region', { name: 'Selected graph object' })).getByText('evidence-2')).toBeInTheDocument()
     expect(screen.getByTestId('route-proof')).not.toHaveTextContent('sourceReturn=graph')
   })
   it('records default stable identity with replace and restores Graph mode through browser history', async () => {
@@ -544,19 +694,19 @@ describe('Intelligence Hub', () => {
     expect(screen.getByText('Brief details unavailable for this revision.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Company name')).not.toBeInTheDocument()
     expect(screen.queryByText('0/4 brief fields')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Build evidence' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Acquire new evidence' })).toBeDisabled()
   })
   it('renders brief independently of missing evidence and fails closed without action authority', () => {
     contextInputs = { companyName: 'Acme', marketRegion: 'UK', targetOffer: 'Cloud', companyWebsite: 'https://acme.example/', notes: 'Focus on proof' }
     missingSummaryEvidence = true
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
-    expect(screen.getByLabelText('Company name')).toHaveValue('Acme')
-    expect(screen.getByLabelText('Optional notes')).toHaveValue('Focus on proof')
+    expect(screen.getByText('Company name', { selector: 'dt' }).nextElementSibling).toHaveTextContent('Acme')
+    expect(screen.queryByRole('textbox', { name: /Additional notes/ })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Website URL 1')).toHaveValue('https://acme.example/')
-    expect(screen.getByLabelText('Company name')).toBeDisabled()
-    expect(screen.getByText('4/4 brief fields')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit evidence gathering brief' })).toBeDisabled()
+    expect(screen.getByText('Product or service', { selector: 'dt' }).nextElementSibling).toHaveTextContent('Cloud')
     expect(screen.queryByRole('button', { name: 'Start over with evidence' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Open existing acquisition workbench/ })).toHaveAttribute('href', '/app/runtime/revision-2/workbench')
+    expect(screen.getByRole('button', { name: 'Acquire new evidence' })).toBeDisabled(); expect(calls.execute).not.toHaveBeenCalled()
   })
   it('shows unique brief URLs without treating them as connected sources', () => {
     contextInputs = { companyWebsite: 'https://acme.example/', websiteSources: ['https://acme.example/', 'https://docs.acme.example/'] }
@@ -576,9 +726,9 @@ describe('Intelligence Hub', () => {
   it('distinguishes an exposed empty brief and preserves navigation context', async () => {
     contextInputs = {}
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
-    expect(screen.getByText('0/4 brief fields')).toBeInTheDocument()
-    expect(screen.getByLabelText('Optional notes')).toHaveValue('')
-    await userEvent.click(screen.getByRole('button', { name: 'View current sources' }))
+    expect(screen.getAllByText('Missing', { selector: 'dd' })).toHaveLength(3)
+    expect(screen.queryByRole('textbox', { name: /Additional notes/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect connected sources' }))
     expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
   })
   it('refreshes the scoped acquisition metadata and bounded Context counts', async () => {
@@ -593,8 +743,8 @@ describe('Intelligence Hub', () => {
   it('keeps brief visible while counts load', () => {
     initialOverviewPending = true; contextInputs = { companyName: 'Acme' }
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
-    expect(screen.getByLabelText('Company name')).toHaveValue('Acme')
-    expect(screen.getByText('Loading Context evidence counts…')).toBeInTheDocument()
+    expect(screen.getByText('Company name', { selector: 'dt' }).nextElementSibling).toHaveTextContent('Acme')
+    expect(screen.getByRole('button', { name: 'Acquire new evidence' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '↻ Refresh' })).toBeDisabled()
   })
 
@@ -611,18 +761,59 @@ describe('Intelligence Hub', () => {
   })
 
 
-  it.each(['capped', null, 'unknown', -1])('does not classify filtered missing as empty using an invalid base total (%s)', (total) => {
+  it('matches the modern Review header and exposes current loaded evidence through the combined controls', () => {
+    sourcePageFixture=sourceFixture()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    expect(screen.getByRole('heading',{name:'Review queue'})).toBeInTheDocument()
+    expect(screen.getByRole('searchbox',{name:'Find a review item'})).toBeInTheDocument()
+    expect(screen.getByRole('link',{name:'＋ Add Evidence'})).toHaveAttribute('href',expect.stringContaining('view=context'))
+    expect(screen.queryByText('Last updated')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'Evidence decisions'})).not.toBeInTheDocument()
+    expect(screen.getByText('2 loaded items · bounded subset')).toBeInTheDocument()
+    expect(calls.evidence.mock.calls.some(([args])=>args.pageSize===25&&args.reviewStatus==='')).toBe(true)
+  })
+  it('maps the modern Review evidence-needing filter to the existing pending API contract', async () => {
+    sourcePageFixture=sourceFixture()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    await userEvent.click(screen.getByRole('button',{name:'Evidence needing review'}))
+    expect(calls.evidence.mock.calls.some(([args])=>args.pageSize===25&&args.reviewStatus==='PENDING')).toBe(true)
+    expect(screen.getByRole('region',{name:'Evidence candidate queue'})).toHaveTextContent('Market research')
+    expect(screen.getByRole('region',{name:'Evidence candidate queue'})).not.toHaveTextContent('Website discusses observability.')
+  })
+  it('clears modern Review inspection during a renderer refresh and never resurrects it', async () => {
+    sourcePageFixture=sourceFixture()
+    const view=show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    await userEvent.click(screen.getByRole('button',{name:'Supporting evidence'}))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    const tree=<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review']}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>
+    rendererRefreshing=true;view.rerender(tree)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    rendererRefreshing=false;view.rerender(tree)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+  it('routes modern Review supporting evidence to the exact existing Sources pair', async () => {
+    sourcePageFixture=sourceFixture()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    await userEvent.click(screen.getByRole('button',{name:'Supporting evidence'}))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'Open source'}))
+    expect(screen.getByRole('tab',{name:'Sources'})).toHaveAttribute('aria-selected','true')
+    expect(screen.getByRole('link',{name:'Help ↗'})).toHaveAttribute('href',expect.stringContaining('sourceId=web'))
+    expect(screen.getByRole('link',{name:'Help ↗'})).toHaveAttribute('href',expect.stringContaining('evidenceObjectId=one'))
+  })
+  it.each(['capped', null, 'unknown', -1])('does not classify filtered missing as empty using an invalid base total (%s)', async (total) => {
     invalidSummaryTotal = total
     emptyFilteredReview = true
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
-    expect(screen.getByText('Evidence candidates could not be loaded. Refresh to retry.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Evidence needing review' }))
+    expect(within(screen.getByRole('region', { name: 'Evidence candidate queue' })).getByText('Evidence candidates could not be loaded. Refresh to retry.')).toBeInTheDocument()
     expect(screen.queryByText('No candidates match this review filter in the selected revision.')).not.toBeInTheDocument()
   })
-  it('does not convert a filtered missing read to empty success using a failed retained base read', () => {
+  it('does not convert a filtered missing read to empty success using a failed retained base read', async () => {
     retainedSummaryError = true
     emptyFilteredReview = true
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
-    expect(screen.getByText('Evidence candidates could not be loaded. Refresh to retry.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Evidence needing review' }))
+    expect(within(screen.getByRole('region', { name: 'Evidence candidate queue' })).getByText('Evidence candidates could not be loaded. Refresh to retry.')).toBeInTheDocument()
     expect(screen.queryByText('No candidates match this review filter in the selected revision.')).not.toBeInTheDocument()
   })
   it('does not present retained status counts as current after failed reads', () => {
@@ -630,20 +821,36 @@ describe('Intelligence Hub', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
     const summary = within(screen.getByLabelText('Evidence review summary'))
     expect(summary.queryByText('99')).not.toBeInTheDocument()
-    expect(summary.getAllByText('Unavailable')).toHaveLength(2)
+    expect(summary.getByText(/Unavailable already accepted/)).toBeInTheDocument()
+    expect(summary.getByText(/Unavailable evidence awaiting review/)).toBeInTheDocument()
   })
-  it('makes the Review summary a named keyboard-focusable region', async () => {
+  it('keeps the Review queue before the mounted completion and pack acceptance panels', async () => {
+    sourcePageFixture = sourceFixture()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    const queue = screen.getByRole('region', { name: 'Evidence candidate queue' })
+    const detail = screen.getByRole('region', { name: 'Selected evidence candidate' })
+    const completion = screen.getByRole('region', { name: 'Review Completion' })
+    const acceptance = screen.getByRole('region', { name: 'Evidence-pack acceptance' })
+    expect(queue.compareDocumentPosition(completion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(detail.compareDocumentPosition(acceptance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Confirm review completion' })).toBeDisabled()
+    await userEvent.click(screen.getByText('Evidence-pack acceptance', {selector:'summary',exact:true}))
+    expect(screen.getByRole('button', { name: 'Accept reviewed evidence pack' })).toBeDisabled()
+    expect(screen.getByText('Complete four-type findings unavailable · loaded evidence page and up to eight contradiction candidates only.')).toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('keeps the modern Review search and queue keyboard accessible', async () => {
     sourcePageFixture = sourceFixture()
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
-    const summary = screen.getByRole('region', { name: 'Evidence review summary' })
-    expect(summary).toHaveAttribute('tabindex', '0')
-    await user.click(screen.getByRole('textbox', { name: 'Search all review evidence' }))
+    const queue = screen.getByRole('region', { name: 'Evidence candidate queue' })
+    expect(queue).toHaveAttribute('tabindex', '0')
+    await user.click(screen.getByRole('searchbox', { name: 'Find a review item' }))
     await user.tab()
     expect(screen.getByRole('button', { name: 'Search review' })).toHaveFocus()
-    await user.tab()
-    expect(summary).toHaveFocus()
-    expect(within(summary).getByText('Evidence awaiting review')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Shared review filters' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Quality finding type')).toBeInTheDocument()
   })
   it('submits complete scoped Review search and retains it across filters', async () => {
     sourcePageFixture = sourceFixture()
@@ -651,27 +858,29 @@ describe('Intelligence Hub', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
     const queue = within(screen.getByRole('region', { name: 'Evidence candidate queue' }))
     const detail = within(screen.getByRole('region', { name: 'Selected evidence candidate' }))
-    const search = screen.getByRole('textbox', { name: 'Search all review evidence' })
+    const search = screen.getByRole('searchbox', { name: 'Find a review item' })
     await user.type(search, 'market')
     await user.click(screen.getByRole('button', { name: 'Search review' }))
     expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'market', page: 1 }), expect.anything())
-    expect(queue.getByText('Specialised infrastructure demand.')).toBeInTheDocument()
+    expect(queue.getByText('Market research')).toBeInTheDocument()
     expect(detail.getByRole('heading')).toHaveTextContent('Website discusses observability.')
     await user.click(screen.getByRole('button', { name: 'All', exact: true }))
     expect(search).toHaveValue('market')
     await user.click(screen.getByRole('button', { name: 'Clear evidence search' }))
     expect(search).toHaveFocus()
-    expect(screen.getByRole('button', { name: '✓ Accept evidence' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '× Reject' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Record Review Completion' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Accept evidence', exact: true })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reject evidence', exact: true })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Confirm review completion' })).toBeDisabled()
   })
-  it.each([0, null])('renders actual confidence without fabricating missing scores (%s)', (score) => {
+  it.each([0, null])('does not infer classification from candidate confidence (%s)', async (score) => {
     sourcePageFixture = sourceFixture()
     sourcePageFixture.evidenceObjects[0].confidence = score === null ? null : { score, level: 'LOW' }
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
-    const detail = within(screen.getByRole('region', { name: 'Selected evidence candidate' }))
-    expect(detail.getByText('Confidence').nextSibling).toHaveTextContent(score === null ? 'Unavailable' : 'Low · 0%')
-    expect(detail.getByText('Coverage area').nextSibling).toHaveTextContent('Unavailable')
+    await userEvent.click(screen.getByRole('button', { name: 'Detailed inspection' }))
+    const detail = within(screen.getByRole('dialog'))
+    expect(detail.getByRole('heading', { name: 'Classification' })).toBeInTheDocument()
+    expect(detail.getByText('Not assessed; acceptance does not mean independently verified.')).toBeInTheDocument()
+    expect(detail.queryByText('Low · 0%')).not.toBeInTheDocument()
   })
   it('opens the selected source preserving exact revision and evidence identity', async () => {
     sourcePageFixture = sourceFixture()
@@ -679,16 +888,18 @@ describe('Intelligence Hub', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
     await user.click(screen.getByRole('button', { name: 'Next page', exact: true }))
     await user.click(within(screen.getByRole('region', { name: 'Evidence candidate queue' })).getByRole('button', { name: /Market research/ }))
-    await user.click(screen.getByRole('button', { name: 'Open source →' }))
+    await user.click(screen.getByRole('button', { name: 'Supporting evidence', exact:true }))
+    await user.click(screen.getByRole('button', { name: 'Open source', exact:true }))
     expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('heading', { name: 'Report.pdf' })).toBeInTheDocument()
     expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-2', sourceId: 'doc', evidenceObjectId: 'two', page: 1, pageSize: 25 }), expect.anything())
   })
   it('does not substitute another source when the linked source is absent', async () => {
-    sourcePageFixture = (args) => ({ ...sourceFixture(), sourceRegistry: args.reviewStatus ? sourceFixture().sourceRegistry : [sourceFixture().sourceRegistry[1]] })
+    sourcePageFixture = (args) => ({ ...sourceFixture(), sourceRegistry: args.sourceId ? [sourceFixture().sourceRegistry[1]] : sourceFixture().sourceRegistry })
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
-    await user.click(screen.getByRole('button', { name: 'Open source →' }))
+    await user.click(screen.getByRole('button', { name: 'Supporting evidence' }))
+    await user.click(screen.getByRole('button', { name: 'Open source', exact: true }))
     expect(screen.getByText(/The requested source is unavailable in this revision/)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Report.pdf' })).not.toBeInTheDocument()
   })
@@ -700,7 +911,7 @@ describe('Intelligence Hub', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
     const queue = within(screen.getByRole('region', { name: 'Evidence candidate queue' }))
     expect(queue.queryByText('Website discusses observability.')).not.toBeInTheDocument()
-    expect(queue.getByText(state === 'error' ? 'Evidence candidates could not be loaded. Refresh to retry.' : state === 'missing' ? 'Evidence candidates are unavailable for this revision.' : 'Loading evidence candidates…')).toBeInTheDocument()
+    expect(queue.getByText(state === 'error' ? 'Evidence candidates could not be loaded. Refresh to retry.' : state === 'missing' ? 'Current evidence items are unavailable.' : 'Loading review items…')).toBeInTheDocument()
   })
   it('resets Review search and filters when switching to a cached revision', async () => {
     cachedContextRevision = true
@@ -709,12 +920,12 @@ describe('Intelligence Hub', () => {
     render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review']}>
       <Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="review" />} /></Routes>
     </MemoryRouter>)
-    await user.click(screen.getByRole('button', { name: 'Accepted', exact: true }))
-    await user.type(screen.getByRole('textbox', { name: 'Search all review evidence' }), 'market')
+    await user.click(screen.getByRole('button', { name: 'Completed decisions', exact: true }))
+    await user.type(screen.getByRole('searchbox', { name: 'Find a review item' }), 'market')
     await user.click(screen.getByRole('button', { name: 'Switch revision' }))
-    expect(screen.getByRole('textbox', { name: 'Search all review evidence' })).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'Needs review', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-3', reviewStatus: 'PENDING', page: 1 }), expect.anything())
+    expect(screen.getByRole('searchbox', { name: 'Find a review item' })).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-3', reviewStatus: '', page: 1 }), expect.anything())
   })
 
   // Sources scoped query, paging, stale/error, exact provenance and history cases now live
@@ -723,27 +934,27 @@ describe('Intelligence Hub', () => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review&reviewContext=workspace-1%3Arevision-2%3Acustomer-1%3Atenant-1&reviewQuery=unrelated&reviewSourceId=doc&reviewEvidenceObjectId=two')
     expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ sourceId: 'doc', evidenceObjectId: 'two', search: '' }), expect.anything())
-    expect(within(screen.getByRole('region', { name: 'Selected evidence candidate' })).getByRole('heading')).toHaveTextContent('Specialised infrastructure demand.')
+    expect(within(screen.getByRole('region', { name: 'Selected evidence candidate' })).getByRole('heading')).toHaveTextContent('Market research')
     await user.click(screen.getByRole('button', { name: 'Return to Review search' }))
-    expect(screen.getByRole('textbox', { name: 'Search all review evidence' })).toHaveFocus()
+    expect(screen.getByRole('searchbox', { name: 'Find a review item' })).toHaveFocus()
     expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ sourceId: '', evidenceObjectId: '', search: 'unrelated' }), expect.anything())
-    expect(screen.getByRole('textbox', { name: 'Search all review evidence' })).toHaveValue('unrelated')
+    expect(screen.getByRole('searchbox', { name: 'Find a review item' })).toHaveValue('unrelated')
   })
   // in SourcesView.test.jsx against the canonical registry/evidence contracts.
   it('keeps Sources search when switching tabs in the same revision', async () => {
     sourcePageFixture = sourceFixture()
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
-    await user.type(screen.getByRole('textbox', { name: 'Search all sources and evidence' }), 'market')
+    await user.type(screen.getByRole('searchbox', { name: 'Find a source or evidence' }), 'market')
     await user.click(screen.getByRole('button', { name: 'Search', exact: true }))
     await user.click(screen.getByRole('tab', { name: 'Overview' }))
     await user.click(screen.getByRole('tab', { name: 'Sources' }))
-    expect(screen.getByRole('textbox', { name: 'Search all sources and evidence' })).toHaveValue('market')
+    expect(screen.getByRole('searchbox', { name: 'Find a source or evidence' })).toHaveValue('market')
   })
   it('ignores exact Review focus belonging to another scope', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review&reviewContext=another-scope&reviewSourceId=old-source&reviewEvidenceObjectId=old-evidence')
     expect(calls.evidence.mock.calls.filter(([query]) => query.pageSize === 25).at(-1)[0])
-      .toMatchObject({ sourceId: '', evidenceObjectId: '', reviewStatus: 'PENDING' })
+      .toMatchObject({ sourceId: '', evidenceObjectId: '', reviewStatus: '' })
   })
   it('labels Sources inspection using the canonical lock flag without a timestamp', () => {
     readinessFields = { lock: { locked: true } }
@@ -751,11 +962,12 @@ describe('Intelligence Hub', () => {
     expect(screen.getByText('Locked revision · inspection is read-only.')).toBeInTheDocument()
   })
 
-  it('refreshes eight bounded Overview reads including current review population', async () => {
+  it('refreshes nine bounded Overview reads including current review population', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: /Refresh/ }))
-    expect(calls.refresh).toHaveBeenCalledTimes(8)
+    await refreshCurrentView(user)
+    expect(calls.refresh).toHaveBeenCalledTimes(9)
+    expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateEvidenceInventoryQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: expect.any(Number) }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetReviewCompletionQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', workspaceId: 'workspace-1', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: expect.any(Number) }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeRendererQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2' }))
     for (const reviewStatus of [undefined, 'ACCEPTED', 'PENDING', 'REJECTED']) {
@@ -770,15 +982,15 @@ describe('Intelligence Hub', () => {
     render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2']}>
       <Routes><Route path="/app/intelligence" element={<RevisionSwitchReview />} /></Routes>
     </MemoryRouter>)
-    expect(screen.getByText(/70% evidence mapped/i)).toBeInTheDocument()
+    expect(screen.getByText(/7 of 10 domains supported/i)).toBeInTheDocument()
     staleOverviewDetails = true
     await user.click(screen.getByRole('button', { name: 'Switch revision' }))
     expect(screen.getByText('R3 · Current')).toBeInTheDocument()
     expect(screen.getByText('Loading Overview details…')).toBeInTheDocument()
     expect(screen.getAllByRole('status')).toHaveLength(1)
-    expect(screen.queryByText(/70% evidence mapped/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/7 of 10 domains supported/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /Evidence status distribution:/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Refresh/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'View basis', exact: true })).toBeDisabled()
   })
 
   it('distinguishes initial pending reads from unavailable evidence', () => {
@@ -787,7 +999,7 @@ describe('Intelligence Hub', () => {
     expect(screen.getByText('Loading Overview details…')).toBeInTheDocument()
     expect(screen.getAllByRole('status')).toHaveLength(1)
     expect(screen.queryByText('Evidence status distribution unavailable')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Refresh/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'View basis', exact: true })).toBeDisabled()
   })
 
   it('shows loading while the current renderer is absent even when prior data remains cached', () => {
@@ -795,14 +1007,15 @@ describe('Intelligence Hub', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-3')
     expect(screen.getByText('Loading selected revision…')).toBeInTheDocument()
     expect(screen.queryByText('The selected revision could not be verified.')).not.toBeInTheDocument()
-    expect(screen.queryByText(/70% evidence mapped/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/7 of 10 domains supported/i)).not.toBeInTheDocument()
   })
 
   it('disables Refresh while the renderer is already fetching', async () => {
     rendererRefreshing = true
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: /Refresh/ }))
+    expect(screen.getByRole('button', { name: 'View basis', exact: true })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'View basis', exact: true }))
     expect(calls.refresh).not.toHaveBeenCalled()
   })
 
@@ -812,14 +1025,14 @@ describe('Intelligence Hub', () => {
     show()
     expect(screen.getByRole('heading', { name: 'Intelligence Hub' })).toBeInTheDocument()
     expect(screen.getByText('Acme Workspace')).toBeInTheDocument()
-    expect(screen.getAllByRole('tab')).toHaveLength(10)
+    expect(screen.getAllByRole('tab')).toHaveLength(8)
     const overviewPanel = screen.getByRole('tabpanel', { name: 'Overview' })
     const summary = within(overviewPanel).getByLabelText('Intelligence summary')
     expect(summary.compareDocumentPosition(within(overviewPanel).getByRole('heading', { name: 'Acquisition summary' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Inspect connected sources →' }).closest('.intelligence-hub__metric'))
+    expect(screen.getByRole('button', { name: /^Sources .*Inspect details/ }).closest('.intelligence-hub__metric'))
       .toHaveTextContent('2')
-    expect(within(overviewPanel).getByText('Sources connected').nextElementSibling).toHaveTextContent('2')
-    expect(screen.getByText('Evidence accepted').nextElementSibling).toHaveTextContent('2')
+    expect(within(overviewPanel).getByText('Sources recorded').nextElementSibling).toHaveTextContent('2')
+    expect(screen.getByText('Evidence retained').nextElementSibling).toHaveTextContent('3')
     const overviewStatusReads = calls.evidence.mock.calls.filter(([query]) => ['ACCEPTED', 'PENDING', 'REJECTED'].includes(query.reviewStatus))
     expect(overviewStatusReads).toHaveLength(3)
     expect(overviewStatusReads.every(([query, options]) => query.pageSize === 1 && options.skip === false)).toBe(true)
@@ -836,52 +1049,131 @@ describe('Intelligence Hub', () => {
   it.each(['READY', 'PARTIALLY_READY', 'NOT_READY', undefined, 'UNRECOGNISED'])('keeps Coverage distinct from recorded readiness %s', state => {
     coverageHealthFixture = { readiness: { state }, coveragePercent: 99 }
     show()
-    const card = screen.getByRole('button', { name: 'Check evidence coverage →' }).closest('.intelligence-hub__metric')
-    expect(within(card).getByText('70%', { exact: true })).toBeInTheDocument()
-    expect(within(card).getByText('Evidence Coverage', { exact: true })).toBeInTheDocument()
+    const card = document.querySelector('.intelligence-hub__overview-coverage')
+    expect(within(card).getByText(/7 of 10 domains supported/)).toBeInTheDocument()
+    expect(within(card).getByText('Domain coverage', { exact: true })).toBeInTheDocument()
     expect(card).not.toHaveTextContent('99%')
   })
-  it.each([['Check evidence coverage →', 'Coverage'], ['Open evidence readiness →', 'Evidence readiness']])('opens the correct view from Overview action %s', async (name, destination) => {
+  it('shows every recorded Overview domain without presenting domain support as evidence readiness', () => {
+    const { container } = show()
+    const domains = [...container.querySelectorAll('.intelligence-hub__overview-coverage .intelligence-hub__domain')]
+    expect(domains).toHaveLength(10)
+    for (const domain of ['Services', 'Consequences', 'Proof', 'Differentiation']) {
+      expect(domains.some(tile => tile.textContent.includes(domain))).toBe(true)
+    }
+    const coveragePanel = container.querySelector('.intelligence-hub__overview-coverage')
+    expect(coveragePanel).toHaveTextContent('7 of 10 domains supported')
+    expect(coveragePanel).toHaveTextContent('Not a confidence or readiness score.')
+    expect(coveragePanel).not.toHaveTextContent('evidence mapped')
+  })
+  it.each([['Inspect Review', 'Review']])('opens the correct view from Overview action %s', async (name, destination) => {
     const user = userEvent.setup()
     show()
     await user.click(screen.getByRole('button', { name, exact: true }))
     expect(screen.getByRole('tab', { name: destination, exact: true })).toHaveAttribute('aria-selected', 'true')
-    if (destination === 'Evidence readiness') expect(screen.getByRole('heading', { name: destination, exact: true })).toBeInTheDocument()
+    expect(within(screen.getByRole('group', { name: 'Shared review filters' })).getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
     expect(calls.evidence.mock.calls.some(([query]) => query.runtimeInstanceId === 'revision-2' && query.customerId === 'customer-1' && query.tenantId === 'tenant-1')).toBe(true)
+  })
+  it('matches the five prototype block titles and keeps Assurance inspection with focus return', async () => {
+    inventoryFixture = evidenceInventoryFixture()
+    const user = userEvent.setup()
+    const { container } = show()
+    const labels = [...container.querySelectorAll('[aria-label="Intelligence summary"] .intelligence-hub__metric-label')].map(el => el.textContent)
+    expect(labels).toEqual(['Intelligence assurance', 'Sources', 'Evidence objects', 'Evidence readiness', 'Needs attention'])
+    const tile = screen.getByRole('button', { name: /^Intelligence assurance .*Inspect details/ })
+    await user.click(tile)
+    expect(screen.getByRole('dialog')).toHaveTextContent('Assurance is shown only')
+    await user.click(screen.getByRole('button', { name: 'Back to Overview' }))
+    expect(tile).toHaveFocus()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['Sources', 'Sources', 'sources'],
+    ['Evidence objects', 'Sources', 'sources'],
+    ['Evidence readiness', 'Readiness & publish', 'readiness-publish'],
+    ['Needs attention', 'Readiness & publish', 'readiness-publish'],
+  ])('routes the %s summary card directly to the prototype destination', async (label, destination, view) => {
+    const params = new URLSearchParams({ runtimeInstanceId: 'workspace-1', revisionId: 'revision-2', view: 'overview',
+      sourceQuery: 'customer evidence', sourceContext: 'workspace-1:revision-2:customer-1:tenant-1' })
+    render(<MemoryRouter initialEntries={['/app/intelligence?' + params]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: new RegExp('^' + label + ' ') }))
+    expect(screen.getByRole('tab', { name: destination, exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const route = new URLSearchParams(screen.getByTestId('route-proof').textContent)
+    expect(route.get('view')).toBe(view)
+    for (const key of ['runtimeInstanceId', 'revisionId', 'sourceQuery', 'sourceContext']) expect(route.get(key)).toBe(params.get(key))
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it.each(['loading', 'failed', 'version', 'tenant', 'currency'])('withholds the Overview inventory label for %s receipts', state => {
+    inventoryFixture = evidenceInventoryFixture()
+    if (state === 'loading') inventoryBusy = true
+    if (state === 'failed') inventoryFailure = true
+    if (state === 'version') inventoryFixture.stateVersion = 'old'
+    if (state === 'tenant') inventoryFixture.scope.tenantId = 'other'
+    if (state === 'currency') inventoryFixture.currency = 'STALE'
+    const { container } = show()
+    expect(container.querySelector('.intelligence-hub__metric--readiness')).not.toHaveTextContent('Complete inventory')
+    expect(calls.execute).not.toHaveBeenCalled()
   })
   it('preserves the selected view across an explanation popup', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: 'Select to view assurance details' }))
+    await user.click(screen.getByRole('button', { name: /^Intelligence assurance .*Inspect details/ }))
     expect(screen.getByRole('dialog')).toHaveTextContent('Assurance is shown only')
     await user.click(screen.getByRole('button', { name: 'Back to Overview' }))
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('uses graph coverage instead of conflicting acquisition coverage and keeps Advisor explanations informational', async () => {
+  it('uses graph coverage and opens the exact scoped domain from Overview', async () => {
     const user = userEvent.setup()
     show()
-    expect(screen.getByText(/70% evidence mapped/i)).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Evidence status distribution: Accepted 2, Pending review 1, Rejected 0; total 3.' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Products 12 evidence objects Domain coverage percentage unavailable Strong' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Resolve outstanding contradiction decisions/ })).toHaveTextContent('2 contradiction decisions outstanding.')
-    expect(screen.getByRole('link', { name: /Resolve outstanding contradiction decisions/ })).toHaveAttribute('href', expect.stringContaining('revisionId=revision-2'))
-    expect(screen.getByRole('button', { name: /Review Problems coverage/ })).toHaveTextContent('0 connected evidence · 0 pending review')
-    expect(screen.getByRole('link', { name: 'Open quality findings →' })).toHaveAttribute('href', expect.stringContaining('runtimeInstanceId=workspace-1'))
-    await user.click(screen.getByRole('button', { name: /Review Problems coverage/ }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('informational recommendation')
-    expect(screen.getByRole('dialog')).toHaveTextContent('a person must review')
-    await user.click(screen.getByRole('button', { name: 'Back to Overview' }))
-    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText(/7 of 10 domains supported/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Products Strong 12 connected evidence' }))
+    expect(screen.getByRole('tab', { name: 'Coverage' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Products')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
   })
+
+  it('opens all three Next useful actions with truthful unavailable facts and modern destinations', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(screen.getByRole('button', { name: 'Inspect unresolved references: Inspect' }))
+    let dialog = screen.getByRole('dialog', { name: 'Section references and mapping' })
+    expect(dialog).toHaveTextContent('Unresolved stored referencesUnavailable')
+    expect(within(dialog).getByRole('link', {name:'Open Workspace Structure'})).toHaveAttribute('href', '/app/workspace-structure?runtimeInstanceId=workspace-1&revisionId=revision-2')
+    await user.click(screen.getByRole('button', { name: 'Back to Overview' }))
+    await user.click(screen.getByRole('button', { name: 'Inspect frozen evidence membership: Inspect' }))
+    dialog = screen.getByRole('dialog', { name: 'Evidence inventory and snapshot' })
+    expect(dialog).toHaveTextContent('Last successful frozen snapshot membershipNot supplied')
+    expect(dialog).toHaveTextContent('Inventory capturedUnavailable')
+    await user.click(within(dialog).getByRole('button', { name: 'Inspect sources' }))
+    expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: 'Overview' }))
+    await user.click(screen.getByRole('button', { name: 'Review completion and Quality scope: Inspect' }))
+    dialog = screen.getByRole('dialog', { name: 'Review completion and decision history' })
+    expect(dialog).toHaveTextContent('Other Quality populationsNot assessed')
+    await user.click(within(dialog).getByRole('button', { name: 'Open Review' }))
+    expect(screen.getByRole('tab', { name: 'Review' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: 'Overview' }))
+    await user.click(screen.getByRole('button', { name: 'Add missing customer evidence' }))
+    expect(screen.getByRole('tab', { name: 'Context' })).toHaveAttribute('aria-selected', 'true')
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  }, 15000)
 
   it.each([0, 1])('uses outstanding contradiction decisions %s instead of the saved candidate count', pendingFindings => {
     completionOverrides = { population: { completeness: 'COMPLETE', policy: 'revision-evidence-contradiction-decisions.v1', hash: 'a'.repeat(64), pendingEvidence: 1, pendingFindings, decisionCount: 7, confirmedReadinessBlockers: 1 } }
     const { container } = show()
     expect(container.querySelector('.intelligence-hub__metric--review .intelligence-hub__metric-value')).toHaveTextContent(String(pendingFindings))
-    expect(screen.getByText('Outstanding contradiction decisions only. Other finding types unavailable.')).toBeVisible()
-    if (pendingFindings === 0) expect(screen.queryByRole('link', { name: /Resolve outstanding contradiction decisions/ })).not.toBeInTheDocument()
-    else expect(screen.getByRole('link', { name: /Resolve outstanding contradiction decisions/ })).toHaveTextContent('1 contradiction decision outstanding.')
+    expect(screen.getByText('Other Quality types not assessed')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Review completion and Quality scope: Inspect' })).toBeVisible()
     expect(calls.execute).not.toHaveBeenCalled()
     expect(calls.update).not.toHaveBeenCalled()
   })
@@ -902,19 +1194,44 @@ describe('Intelligence Hub', () => {
       pendingEvidence: 1, pendingFindings: 2, decisionCount: state === 'invalid-counts' ? 1 : 7,
     }
     const { container } = show()
-    expect(container.querySelector('.intelligence-hub__metric--review .intelligence-hub__metric-value')).toHaveTextContent(['fetching', 'renderer-refresh'].includes(state) ? 'Loading…' : 'Unavailable')
+    expect(container.querySelector('.intelligence-hub__metric--review .intelligence-hub__metric-value')).toHaveTextContent(['fetching', 'renderer-refresh'].includes(state) ? 'Loading…' : 'Not assessed')
     expect(screen.queryByRole('link', { name: /Resolve outstanding contradiction decisions/ })).not.toBeInTheDocument()
-    expect(screen.getByText('Outstanding contradiction decisions only. Other finding types unavailable.')).toBeVisible()
+    expect(screen.getByText('Other Quality types not assessed')).toBeVisible()
   })
 
-  it('routes evidence summaries to their matching server review filter', async () => {
+  it('keeps Inspect Review navigation separate from source navigation', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: 'Inspect accepted evidence →' }))
-    expect(calls.evidence.mock.calls.at(-1)[0].reviewStatus).toBe('ACCEPTED')
+    await user.click(screen.getByRole('button', { name: /^Evidence objects .*Inspect details/ }))
+    expect(screen.getByRole('tab', { name: 'Sources', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('tab', { name: 'Overview' }))
-    await user.click(screen.getByRole('button', { name: 'Review exceptions →' }))
-    expect(calls.evidence.mock.calls.at(-1)[0].reviewStatus).toBe('PENDING')
+    await user.click(screen.getByRole('button', { name: 'Inspect Review' }))
+    expect(calls.evidence.mock.calls.at(-1)[0].reviewStatus).toBe('')
+    expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(within(screen.getByRole('group', { name: 'Shared review filters' })).getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('preserves exact coverage context through its approved After lock and Graph footer journey', async () => {
+    const params = new URLSearchParams({ runtimeInstanceId: 'workspace-1', revisionId: 'revision-2', view: 'coverage',
+      coverageContext: 'workspace-1:revision-2:customer-1:tenant-1', coverageFilter: 'Strong', coverageDomain: 'Proof' })
+    render(<MemoryRouter initialEntries={['/app/intelligence?' + params]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'After lock' }))
+    expect(screen.getByRole('tab', { name: 'After lock' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: 'Coverage', exact: true }))
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Proof')
+    await user.click(screen.getByRole('button', { name: 'Intelligence Graph' }))
+    expect(screen.getByRole('tab', { name: 'Intelligence Graph' })).toHaveAttribute('aria-selected', 'true')
+    const route = new URLSearchParams(screen.getByTestId('route-proof').textContent.split('?')[1])
+    for (const key of ['runtimeInstanceId', 'revisionId', 'coverageContext', 'coverageFilter', 'coverageDomain']) {
+      expect(route.get(key)).toBe(params.get(key))
+    }
+    await user.click(screen.getByRole('button', { name: 'Coverage', exact: true }))
+    expect(screen.getByRole('tab', { name: 'Coverage', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Proof')
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
   })
 
   it('uses the same bounded graph manifest coverage without loading graph elements', async () => {
@@ -925,8 +1242,8 @@ describe('Intelligence Hub', () => {
     expect(calls.manifest.mock.calls.at(-1)[1].skip).toBe(false)
     expect(calls.graph.mock.calls.at(-1)[1].skip).toBe(true)
     expect(within(screen.getByRole('tabpanel', { name: 'Coverage' })).getByText('70%')).toBeInTheDocument()
-    expect(screen.getByText('Per-domain percentage unavailable')).toBeInTheDocument()
-    expect(screen.getByText('Connected evidence')).toBeInTheDocument()
+    expect(screen.getByText(/Per-domain percentage unavailable/)).toBeInTheDocument()
+    expect(screen.getByText('Connected accepted evidence')).toBeInTheDocument()
   })
 
   it.each(['loading', 'error'])('preserves scoped Discovery Health independently of evidence-summary %s', (state) => {
@@ -960,13 +1277,13 @@ describe('Intelligence Hub', () => {
       sourceId: 'old', evidenceObjectId: 'old', sourcePage: '3', sourceReturn: 'graph', graphContextReturn: 'inspection' })
     render(<MemoryRouter initialEntries={['/app/intelligence?' + params]}><IntelligenceHub /><GraphHistoryProof /></MemoryRouter>)
     const user = userEvent.setup()
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Proof domain')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Proof')
     expect(screen.getByRole('link', { name: /Help/ })).toHaveAttribute('href', expect.stringContaining('coverageDomain=Proof'))
     await user.click(screen.getByRole('button', { name: 'Gaps', exact: true }))
     expect(screen.getByTestId('route-proof')).toHaveTextContent('coverageDomain=Problems')
     await user.click(screen.getByRole('button', { name: 'History back' }))
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Proof domain')
-    await user.click(screen.getByRole('button', { name: 'Search sources and evidence for this domain →' }))
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Proof')
+    await user.click(screen.getByRole('button', { name: 'Search domain sources' }))
     const next = new URLSearchParams(screen.getByTestId('route-proof').textContent)
     expect(next.get('sourceQuery')).toBe('Proof'); expect(next.get('coverageDomain')).toBe('Proof')
     for (const key of ['sourceId', 'evidenceObjectId', 'sourcePage', 'sourceReturn', 'graphContextReturn']) expect(next.has(key)).toBe(false)
@@ -975,19 +1292,19 @@ describe('Intelligence Hub', () => {
   it('refreshes Coverage reads and opens scoped supporting evidence search with revision context', async () => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=coverage')
-    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    await user.click(screen.getByRole('button', { name: 'Refresh coverage reads', hidden:true }))
     expect(calls.refresh).toHaveBeenCalledTimes(4)
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateGraphManifestQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: expect.any(Number) }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateDiscoveryHealthQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: expect.any(Number) }))
-    await user.click(screen.getByRole('button', { name: 'Search sources and evidence for this domain →' }))
+    await user.click(screen.getByRole('button', { name: 'Search domain sources' }))
     expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('textbox', { name: 'Search all sources and evidence' })).toHaveValue('Company')
+    expect(screen.getByRole('searchbox', { name: 'Find a source or evidence' })).toHaveValue('Company')
     expect(calls.evidence.mock.calls.at(-1)[0]).toMatchObject({ runtimeInstanceId: 'revision-2', page: 1, pageSize: 25 })
     await user.click(screen.getByRole('button', { name: 'Clear search' }))
-    expect(screen.getByRole('textbox', { name: 'Search all sources and evidence' })).toHaveValue('')
+    expect(screen.getByRole('searchbox', { name: 'Find a source or evidence' })).toHaveValue('')
     await user.click(screen.getByRole('tab', { name: 'Coverage' }))
-    await user.click(screen.getByRole('button', { name: 'Search sources and evidence for this domain →' }))
-    expect(screen.getByRole('textbox', { name: 'Search all sources and evidence' })).toHaveValue('Company')
+    await user.click(screen.getByRole('button', { name: 'Search domain sources' }))
+    expect(screen.getByRole('searchbox', { name: 'Find a source or evidence' })).toHaveValue('Company')
   })
 
   it('resets Coverage filters and selected domain when a cached revision replaces the context', async () => {
@@ -995,11 +1312,11 @@ describe('Intelligence Hub', () => {
     const user = userEvent.setup()
     render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=coverage']}><Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="coverage" />} /></Routes></MemoryRouter>)
     await user.click(screen.getByRole('button', { name: 'Gaps', exact: true }))
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Problems domain')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Problems')
     await user.click(screen.getByRole('button', { name: 'Switch revision' }))
     expect(screen.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Company domain')
-    const destination = new URL(screen.getByRole('link', { name: 'Open acquisition in Context →' }).getAttribute('href'), 'http://local')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Company')
+    const destination = new URL(screen.getByRole('link', { name: 'Gather evidence' }).getAttribute('href'), 'http://local')
     expect(destination.searchParams.get('runtimeInstanceId')).toBe('workspace-1')
     expect(destination.searchParams.get('revisionId')).toBe('revision-3')
     expect(destination.searchParams.get('view')).toBe('context')
@@ -1020,125 +1337,119 @@ describe('Intelligence Hub', () => {
     expect(screen.getAllByText('Graph could not be loaded. Refresh to retry.').length).toBeGreaterThan(0)
     graphReadError = false
     rendered.rerender(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph']}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
-    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    await refreshCurrentView(user)
     expect(calls.refresh.mock.calls.map(call => call[0])).toEqual(['useGetRuntimeStateGraphManifestQuery', 'useGetRuntimeStateGraphProjectionQuery'])
   })
 
-  it('uses server review filters and explains graph relationships without raw source text', async () => {
+  it('uses the existing pending and unfiltered contracts for modern Review filters', async () => {
+    sourcePageFixture = sourceFixture()
     const user = userEvent.setup()
     show()
     await user.click(screen.getByRole('tab', { name: 'Review' }))
+    await user.click(screen.getByRole('button', { name: 'Evidence needing review' }))
     expect(calls.evidence.mock.calls.at(-1)[0].reviewStatus).toBe('PENDING')
-    await user.click(screen.getByRole('button', { name: 'Accepted', exact: true }))
-    expect(calls.evidence.mock.calls.at(-1)[0].reviewStatus).toBe('ACCEPTED')
-    await user.click(screen.getByRole('tab', { name: 'Intelligence Graph' }))
+    await user.click(screen.getByRole('button', { name: 'Completed decisions', exact: true }))
+    expect(calls.evidence.mock.calls.at(-1)[0].reviewStatus).toBe('')
+    expect(screen.getByRole('region', { name: 'Evidence candidate queue' })).not.toHaveTextContent('Market research')
+  })
+  it('explains recorded graph relationships and modes without raw source text', async () => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph')
     expect(calls.graph.mock.calls.at(-1)[1].skip).toBe(false)
     expect(screen.queryByText('private raw source text')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /^Source Review\/quality state unavailable/ }))
-    expect(screen.getByText('Supports understanding')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Source' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Gaps/ }))
-    expect(screen.getAllByText('Economics').length).toBeGreaterThan(0)
-    await user.click(screen.getByRole('button', { name: 'Impact' }))
-    expect(screen.getAllByText('Output Reference').length).toBeGreaterThan(0)
-    await user.click(screen.getByRole('button', { name: /Contradictions/ }))
-    expect(screen.getAllByText('Contradicts').length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: /^Source 1 object/ }))
+    expect(screen.getByText(/Recorded relationship: Supports understanding/)).toBeInTheDocument()
+    await inspectGraphObject(user)
+    expect(within(screen.getByRole('region', { name: 'Selected graph object' })).getByRole('heading', { name: 'Source' })).toBeInTheDocument()
+  })
+  it.each([
+    ['Gaps', /Economics/],
+    ['Impact', /Output Reference/],
+    ['Contradictions', /Recorded relationship: Contradicts/],
+  ])('renders the scoped %s graph mode without raw source text', async (mode, expected) => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph')
+    await user.click(screen.getByRole('button', { name: mode, exact: true }))
+    expect(screen.getAllByText(expected).length).toBeGreaterThan(0)
+    expect(screen.queryByText('private raw source text')).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
   })
 
   it('keeps After lock inactive while the selected revision is unlocked', async () => {
-    const user = userEvent.setup()
-    show()
+    const user = userEvent.setup(); show()
     await user.click(screen.getByRole('tab', { name: 'After lock' }))
-    expect(screen.getByRole('heading', { name: 'After-lock review starts when the selected revision is locked' })).toBeInTheDocument()
-    expect(screen.getAllByText('Not active').length).toBeGreaterThan(0)
+    expect(screen.getByRole('status', { name: 'Post-lock discovery inbox' })).toHaveTextContent('After-lock review not active')
     expect(screen.getByText('Post-lock inbox is not active because the selected revision is unlocked.')).toBeInTheDocument()
   })
-
-  it('uses recorded lock receipts without inventing a post-lock inbox or decision', () => {
+  it('uses recorded lock receipts without inventing a post-lock inbox or decision', async () => {
     lockFixture = lockBasisFixture()
-    readinessFields = { readiness: { state: 'LOCKED' }, publish: { published: true }, lock: { state: 'LOCKED', locked: true, lockedAt: '2026-09-17T18:14:00Z', snapshot: { snapshotId: 'lock-receipt-2' } } }
+    readinessFields = { readiness: { state: 'LOCKED' }, publish: { published: true }, lock: { state: 'LOCKED', locked: true } }
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
-    expect(screen.getByText('Published and locked')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'After lock summary' })).toHaveTextContent('Unavailable')
-    expect(screen.getByText(/Snapshot lock-receipt-2/)).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Post-lock discovery inbox' })).toHaveTextContent('not available')
-    expect(screen.getByRole('button', { name: 'Save decision' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Inspect source details →' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '○ Supports current revision' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '○ No change to current revision' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '○ Updated revision required' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: /Could require|Current revision may need review|Awaiting impact assessment/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/Evidence acceptance is separate from impact assessment/)).toHaveTextContent('Every result preserves frozen truth; Updated revision required does not create a successor automatically.')
-    expect(screen.queryByText('Awaiting impact assessment', { exact: true })).not.toBeInTheDocument()
-    expect(within(screen.getByRole('tabpanel', { name: 'After lock' })).queryByText(/0 items shown/)).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Open acquisition in Context →' })).toHaveLength(2)
-    expect(screen.queryByRole('link', { name: '＋ Start discovery' })).not.toBeInTheDocument()
+    expect(screen.getByText('R2 is frozen. New evidence is reviewed separately before any updated revision is created.')).toBeInTheDocument()
+    expect(screen.getByRole('status', {name:'Post-lock discovery inbox'})).toHaveTextContent('Post-lock inbox not supplied')
+    expect(screen.getByRole('status', {name:'Post-lock discovery inbox'})).toHaveTextContent('This is not a zero-item result.')
+    expect(screen.queryByRole('button', {name:'Save decision'})).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', {name:/Approve assessment/})).not.toBeInTheDocument()
+    expect(screen.getByRole('region', {name:'Recorded lock basis'})).toHaveTextContent('lock-receipt-2')
+    await userEvent.click(screen.getByRole('button', {name:'View basis'}))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Not supplied · frozen membership not recorded')
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
   })
-
-  it.each([{}, { state: 'LOCKED', locked: false }])('does not assert protection when lock state is missing or conflicting (%j)', (lock) => {
-    lockFailure = true
-    readinessFields = { lock }
+  it.each([{}, { state:'LOCKED', locked:false }])('does not assert protection when lock state is missing or conflicting (%j)', lock => {
+    lockFailure=true; readinessFields={lock}
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
-    expect(screen.getByRole('heading', { name: 'Confirm the lock state before reviewing post-lock evidence' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Post-lock discovery inbox' })).toHaveTextContent('could not be verified')
-    expect(screen.queryByText('R2 is protected')).not.toBeInTheDocument()
-    expect(screen.queryByText('Not active')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', {name:'Post-lock discovery inbox'})).toHaveTextContent('Lock basis unavailable')
+    expect(screen.queryByText(/R2 is frozen/)).not.toBeInTheDocument()
   })
-
-  it.each([{}, { state: 'LOCKED', locked: false }, { state: 'UNLOCKED', locked: false }])('keeps the protection explanation policy-only without a verified lock (%j)', async (lock) => {
-    const user = userEvent.setup()
-    readinessFields = { lock }
-    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
-    expect(screen.getByText(/These protections apply only after a verified lock/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Why this is separate →' }))
-    const dialog = screen.getByRole('dialog', { name: 'Why new evidence is reviewed separately' })
-    expect(dialog).toHaveTextContent('This view does not establish a lock for the selected revision.')
-    expect(dialog).toHaveTextContent('When a revision is locked')
-    expect(dialog).not.toHaveTextContent('R2 is a point-in-time reference')
-    expect(dialog).not.toHaveTextContent('R2 remains the reference')
+  it.each([{}, { state:'LOCKED', locked:false }, {state:'UNLOCKED',locked:false}])('keeps the protection explanation policy-only without a verified lock (%j)', async lock => {
+    readinessFields={lock}; show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    await userEvent.click(screen.getByRole('button', {name:'Why this is separate'}))
+    const dialog=screen.getByRole('dialog', {name:'After-lock basis and impact history'})
+    expect(dialog).not.toHaveTextContent('Recorded locked R2')
+    expect(dialog).toHaveTextContent('Locked Context cannot acquire evidence')
   })
-
   it('preserves After lock on explanation close and navigates with selected context', async () => {
-    const user = userEvent.setup()
-    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
-    const opener = screen.getByRole('button', { name: 'Why this is separate →' })
-    await user.click(opener)
-    expect(screen.getByRole('dialog', { name: 'Why new evidence is reviewed separately' })).toBeInTheDocument()
-    expect(screen.getByText('An updated revision is created only when needed')).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Why new evidence is reviewed separately' })).toHaveTextContent('One recorded assessment states No change to current revision, Supports current revision or Updated revision required. Evidence acceptance is a separate decision.')
-    await user.click(screen.getByRole('button', { name: 'Return to evidence' }))
-    expect(screen.getByRole('tab', { name: 'After lock' })).toHaveAttribute('aria-selected', 'true')
-    expect(opener).toHaveFocus()
-    await user.click(screen.getByRole('button', { name: 'View readiness and history →' }))
-    expect(screen.getByRole('tab', { name: 'Readiness & publish' })).toHaveAttribute('aria-selected', 'true')
-    await user.click(screen.getByRole('tab', { name: 'After lock' }))
-    await user.click(screen.getByRole('button', { name: 'Current revision' }))
-    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+    const user=userEvent.setup(); show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    const opener=screen.getByRole('button', {name:'Why this is separate'}); await user.click(opener)
+    await user.click(screen.getByRole('button', {name:'Back to After lock'}))
+    expect(screen.getByRole('tab', {name:'After lock'})).toHaveAttribute('aria-selected','true'); expect(opener).toHaveFocus()
+    await user.click(screen.getByRole('button', {name:'Readiness & publish',exact:true}))
+    expect(screen.getByRole('tab', {name:'Readiness & publish'})).toHaveAttribute('aria-selected','true')
+    await user.click(screen.getByRole('tab', {name:'After lock'})); await user.click(screen.getByRole('button', {name:'Coverage',exact:true}))
+    expect(screen.getByRole('tab', {name:'Coverage'})).toHaveAttribute('aria-selected','true')
     expect(calls.evidence.mock.calls.at(-1)[0].runtimeInstanceId).toBe('revision-2')
   })
-
-  it.each([0, 1])('opens exact locked Context from After Lock control %i without intake', async (index) => {
-    readinessFields = { lock: { state: 'LOCKED', locked: true } }
-    const user = userEvent.setup()
-    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock&sourceId=source-1&evidenceId=evidence-1&findingId=finding-1&sourceSearch=proof&returnView=graph']}><IntelligenceHub /><LocationProof /></MemoryRouter>)
-    expect(screen.queryByRole('button', { name: /Start discovery/ })).not.toBeInTheDocument()
-    await user.click(screen.getAllByRole('button', { name: 'Open acquisition in Context →' })[index])
-    expect(screen.getByRole('tab', { name: 'Context' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('What should we review?')).not.toBeInTheDocument()
-    expect(screen.getByTestId('route-proof')).toHaveTextContent('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context&sourceId=source-1&evidenceId=evidence-1&findingId=finding-1&sourceSearch=proof&returnView=graph')
-    expect(calls.execute).not.toHaveBeenCalled()
-    expect(calls.update).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Build evidence' })).toBeDisabled()
-    expect(calls.evidence.mock.calls.at(-1)[0]).toMatchObject({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1' })
-    expect(screen.getByRole('link', { name: /Open existing acquisition workbench/ })).toHaveAttribute('href', '/app/runtime/revision-2/workbench')
+  it('opens exact locked Context from After Lock without intake', async () => {
+    readinessFields={lock:{state:'LOCKED',locked:true}}
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock&sourceId=source-1&findingId=finding-1']}><IntelligenceHub/><LocationProof/></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', {name:'Gather separate evidence',exact:true}))
+    expect(screen.getByRole('tab', {name:'Context'})).toHaveAttribute('aria-selected','true')
+    expect(screen.getByTestId('route-proof')).toHaveTextContent('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context&sourceId=source-1&findingId=finding-1')
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', {name:'Acquire new evidence'})).toBeDisabled()
   })
 
+  it('rejects retained After lock header callbacks across revision departures', async () => {
+    cachedContextRevision=true
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock']}><Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="after-lock"/>}/></Routes></MemoryRouter>)
+    const retained=calls.afterLockHeader.mock.calls.at(-1)[0].onClick
+    await userEvent.click(screen.getByRole('button',{name:'Switch revision'}))
+    act(()=>retained({currentTarget:document.body}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button',{name:'View basis'}));expect(screen.getByRole('dialog')).toHaveTextContent('After-lock basis and impact history')
+  })
+  it('rejects retained After lock header callbacks across version departures', () => {
+    const search='?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock';const view=show(search)
+    const retained=calls.afterLockHeader.mock.calls.at(-1)[0].onClick
+    readinessFields={runtimeInstance:{...renderer.runtimeInstance,stateVersion:'version-changed'}}
+    view.rerender(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub/>}/></Routes></MemoryRouter>)
+    act(()=>retained({currentTarget:document.body}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
   it('does not reopen an obsolete explanation when returning to a revision', async () => {
     cachedContextRevision = true
     const user = userEvent.setup()
     render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock']}><Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="after-lock" />} /></Routes></MemoryRouter>)
-    await user.click(screen.getByRole('button', { name: 'Why this is separate →' }))
+    await user.click(screen.getByRole('button', { name: 'Why this is separate' }))
     await user.click(screen.getByRole('button', { name: 'Switch revision' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Return to original revision' }))
@@ -1159,7 +1470,7 @@ describe('Intelligence Hub', () => {
   it('refreshes the selected bounded renderer and lock basis from After lock', async () => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
-    await user.click(screen.getByRole('button', { name: /Refresh/ }))
+    await refreshCurrentView(user)
     expect(calls.refresh).toHaveBeenCalledTimes(2)
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateLockBasisQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2' }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeRendererQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1' }))
@@ -1172,10 +1483,10 @@ describe('Intelligence Hub', () => {
     expect(calls.evidence.mock.calls.at(-1)[1].skip).toBe(true)
   })
 
-  it('shows an empty filtered queue when unfiltered evidence exists but the API returns its missing code', () => {
+  it('shows an empty filtered queue when unfiltered evidence exists but the API returns its missing code', async () => {
     emptyFilteredReview = true
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
-    expect(screen.getByText('No candidates match this review filter in the selected revision.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Evidence needing review' })); expect(screen.getAllByText('No items match this filter in the loaded review subset.').length).toBeGreaterThan(0)
     expect(calls.evidence.mock.calls.at(-1)[0].reviewStatus).toBe('PENDING')
   })
 
@@ -1186,30 +1497,91 @@ describe('Intelligence Hub', () => {
     expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
     const metrics = [...container.querySelectorAll('[aria-label="Intelligence summary"] .intelligence-hub__metric-value')]
     expect(metrics.map((metric) => metric.textContent)).not.toContain('3')
-    expect(screen.getByRole('status')).toHaveTextContent('Evidence status distribution unavailable')
+    expect(within(screen.getByLabelText('Evidence counts')).getByText('Accepted').nextElementSibling).toHaveTextContent('Unavailable')
     expect(screen.queryByRole('img', { name: /Evidence status distribution/ })).not.toBeInTheDocument()
   })
 
-  it('withholds the evidence distribution when status totals exceed the selected revision total', () => {
+  it('withholds Evidence summary counts when status totals exceed the selected revision total', () => {
     conflictingStatusCounts = true
     show()
-    expect(screen.getByRole('status')).toHaveTextContent('Evidence status distribution unavailable')
+    expect(within(screen.getByLabelText('Evidence counts')).getByText('Accepted').nextElementSibling).toHaveTextContent('Unavailable')
+    expect(within(screen.getByLabelText('Evidence counts')).getByText('Awaiting evidence decision').nextElementSibling).toHaveTextContent('Unavailable')
     expect(screen.queryByRole('img', { name: /Evidence status distribution/ })).not.toBeInTheDocument()
   })
 
-  it('withholds the evidence distribution when the selected revision has no evidence', () => {
+  it('shows verified zero Evidence summary counts when the selected revision has no evidence', () => {
     emptyEvidenceTotal = true
     show()
     expect(screen.queryByRole('img', { name: /Evidence status distribution/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Evidence status distribution unavailable')
+    expect(within(screen.getByLabelText('Evidence counts')).getByText('Accepted').nextElementSibling).toHaveTextContent('0')
+    expect(within(screen.getByLabelText('Evidence counts')).getByText('Awaiting evidence decision').nextElementSibling).toHaveTextContent('0')
   })
 
-  it('labels an unclassified residual without inventing a review state', () => {
+  it('does not count unclassified retained evidence as awaiting a decision', () => {
     additionalUnclassifiedEvidence = true
     show()
-    expect(screen.getByRole('img', { name: /Other status 1/ })).toBeInTheDocument()
-    expect(screen.getByText('Other status: 1')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Evidence counts')).getByText('Awaiting evidence decision').nextElementSibling).toHaveTextContent('1')
+    expect(within(screen.getByLabelText('Evidence counts')).getByText('Accepted').nextElementSibling).toHaveTextContent('2')
     expect(screen.queryByText(/Draft/)).not.toBeInTheDocument()
+  })
+  it('matches Evidence summary rows without substituting inventory read time for capture time', () => {
+    inventoryFixture = evidenceInventoryFixture()
+    const { container } = show()
+    const panel = container.querySelector('.intelligence-hub__overview-evidence')
+    expect([...panel.querySelectorAll('dt')].map(el => el.textContent)).toEqual(['Accepted', 'Awaiting evidence decision', 'Inventory captured'])
+    const captured = within(panel).getByText('Inventory captured').nextElementSibling
+    expect(captured).toHaveTextContent('Unavailable')
+    expect(captured).toHaveAttribute('title', 'The inventory capture date is not recorded.')
+    expect(panel.querySelector('.intelligence-hub__eyebrow')).toBeNull()
+    expect(within(panel).queryByRole('img')).not.toBeInTheDocument()
+    expect(within(panel).getAllByRole('button')).toHaveLength(1)
+  })
+  it('matches the Assurance panel missing-projection posture without asserting certification or approval', () => {
+    const { container } = show()
+    const panel = container.querySelector('.intelligence-hub__overview-assurance')
+    expect(within(panel).getByText('Certification not established')).toHaveAttribute('title', 'Certification data has not been supplied for this view.')
+    expect(within(panel).getByText('A published revision does not establish current assurance.')).toBeInTheDocument()
+    expect(panel.querySelector('.intelligence-hub__eyebrow')).toBeNull()
+    expect(within(panel).getByRole('button', { name: 'Inspect assurance report' })).toBeInTheDocument()
+  })
+  it('preserves supplied certification label and summary in the Assurance panel', () => {
+    readinessFields = { truthBinding: { certification: { label: 'Recorded assessment', summary: 'Supplied certification detail.' } } }
+    const { container } = show()
+    const panel = container.querySelector('.intelligence-hub__overview-assurance')
+    expect(within(panel).getByText('Recorded assessment')).toBeInTheDocument()
+    expect(within(panel).getByText('Supplied certification detail.')).toBeInTheDocument()
+    expect(within(panel).queryByText('Certification not established')).not.toBeInTheDocument()
+  })
+  it('retains existing label normalization in the Assurance panel and inspection', async () => {
+    readinessFields = { truthBinding: { certification: { label: 123, summary: 'Recorded label projection.' } } }
+    const { container } = show()
+    expect(within(container.querySelector('.intelligence-hub__overview-assurance')).getByText('123')).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Inspect assurance report' }))
+    const dialog = screen.getByRole('dialog', { name: 'Intelligence assurance report' })
+    expect(within(dialog).getByText('Assurance and certification').nextElementSibling).toHaveTextContent('123')
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('opens the compact Assurance panel inspection with current scope, disabled exports and focus return', async () => {
+    const user = userEvent.setup()
+    show()
+    const opener = screen.getByRole('button', { name: 'Inspect assurance report' })
+    await user.click(opener)
+    const dialog = screen.getByRole('dialog', { name: 'Intelligence assurance report' })
+    expect(within(dialog).getByRole('combobox', { name: 'Record' })).toHaveValue('Intelligence assurance report')
+    expect(within(dialog).getByText('Acme Workspace · R2')).toBeInTheDocument()
+    expect(within(dialog).getByText('2 sources; 3 evidence objects')).toBeInTheDocument()
+    expect(within(dialog).getByText('Not supplied')).toBeInTheDocument()
+    expect(within(dialog).getByText('Review completion').nextElementSibling).toHaveTextContent('Not assessed')
+    expect(within(dialog).getByText('Separate reads are not an atomic approval or a signed assurance report.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'CSV', exact: true })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'PDF', exact: true })).toBeDisabled()
+    await user.click(within(dialog).getByRole('button', { name: 'CSV', exact: true }))
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Overview' }))
+    expect(opener).toHaveFocus()
+    expect(screen.getByRole('tab', { name: 'Overview', exact: true })).toHaveAttribute('aria-selected', 'true')
   })
   it('renders selected readiness receipts without inventing control decisions or outcome readiness', () => {
     lockFixture = lockBasisFixture({ snapshotId: 'recorded-lock-id' })
@@ -1217,41 +1589,45 @@ describe('Intelligence Hub', () => {
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
     expect(screen.getByText('Recorded section truth')).toBeInTheDocument()
     expect(screen.queryByText('WRONG TOP LEVEL REASON')).not.toBeInTheDocument()
-    expect(screen.getByText('5 of 5 required sections ready')).toBeInTheDocument()
-    expect(within(screen.getByRole('tabpanel', { name: 'Readiness & publish' })).getByText('recorded-lock-id')).toBeVisible()
+    expect(screen.getByText(/5 of 5 required sections ready/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Current readiness read basis', { selector: 'summary' }))
+    expect(within(screen.getByRole('region', { name: 'Recorded lock basis' })).getByText('recorded-lock-id')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Publish & lock revision' })).not.toBeInTheDocument()
-    expect(screen.getByText('Publication and locking are performed in Workspace Structure.')).toBeInTheDocument()
+    expect(screen.getByText('Publish/Lock remains in Workspace Structure.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Workspace Structure' })).toHaveAttribute('href', '/app/workspace-structure?runtimeInstanceId=workspace-1&revisionId=revision-2')
-    expect(within(screen.getByRole('region', { name: 'Selected assurance control' })).getAllByText('Unavailable').length).toBeGreaterThan(0)
+    expect(screen.getByRole('region', { name: 'Human decisions' })).toHaveTextContent('Review completionUnavailable')
     expect(screen.queryByText(/Working revision R/)).not.toBeInTheDocument()
   })
-  it('keeps the selected control after report preview closes and preserves navigation context', async () => {
+  it('keeps human completion separate after report preview closes and preserves navigation context', async () => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await user.click(screen.getByRole('button', { name: /Review completion An explicit human receipt/ }))
-    expect(screen.getByRole('heading', { name: 'Review completion', exact: true })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    const human=()=>within(screen.getByRole('region',{name:'Human decisions'}))
+    expect(human().getByText('Review completion')).toBeInTheDocument()
+    expect(human().getByText('Unavailable')).toBeInTheDocument()
+    await openReadinessReport()
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByRole('heading', { name: 'Executive assurance summary' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Export PDF' })).toBeDisabled()
     await user.click(within(dialog).getByRole('button', { name: 'Close', exact: true }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Review completion', exact: true })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Open Review →' }))
+    expect(human().getByText('Review completion')).toBeInTheDocument()
+    expect(human().getByText('Unavailable')).toBeInTheDocument()
+    await user.click(human().getByRole('button', { name: 'Go to completion' }))
     expect(screen.getByRole('tab', { name: 'Review' })).toHaveAttribute('aria-selected', 'true')
+    expect(calls.execute).not.toHaveBeenCalled();expect(calls.update).not.toHaveBeenCalled()
   })
   it('does not present missing or failed readiness evidence totals as zero', async () => {
     retainedStatusError = true
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await user.click(screen.getByRole('button', { name: /Review completion An explicit human receipt/ }))
+    await user.click(screen.getByText('Current readiness read basis', { selector: 'summary' }))
     expect(screen.queryByText('0 accepted')).not.toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Selected assurance control' })).getAllByText('Unavailable').length).toBeGreaterThan(0)
+    expect(screen.getByRole('region', { name: 'Human decisions' })).toHaveTextContent('Review completionUnavailable')
   })
   it('refreshes only bounded readiness reads', async () => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    await refreshCurrentView(user)
     expect(calls.refresh.mock.calls).toHaveLength(10)
     expect(calls.refresh).toHaveBeenCalledWith('useGetReviewCompletionQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2' }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateLockBasisQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2' }))
@@ -1261,42 +1637,43 @@ describe('Intelligence Hub', () => {
     expect(calls.refresh.mock.calls.filter(([name]) => name === 'useGetRuntimeStateEvidenceQuery').every(([, args]) => args.pageSize === 1 && args.runtimeInstanceId === 'revision-2')).toBe(true)
   })
 
-  it('does not fall back to renderer totals when the readiness evidence count is capped', () => {
+  it('does not fall back to renderer totals when the readiness evidence count is capped', async () => {
     invalidSummaryTotal = 'capped'
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    const frozen = within(screen.getByRole('heading', { name: 'Recorded lock snapshot' }).closest('section'))
+    await userEvent.click(screen.getByText('Current readiness read basis', { selector: 'summary' }))
+    const frozen = within(screen.getByRole('region', { name: 'Recorded lock basis' }))
     expect(frozen.getByText(/Frozen source membership and exact evidence versions are unavailable/)).toBeInTheDocument()
     expect(frozen.getByText('No recorded lock basis')).toBeInTheDocument()
     expect(frozen.queryByText(/2 sources/)).not.toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Current revision source basis' })).getByText('Sources connected').nextElementSibling).toHaveTextContent('2')
+    expect(screen.getByRole('region', { name: 'Current revision source basis' })).toHaveTextContent('Sources connected: 2')
   })
   it('resets the selected assurance control when the revision changes', async () => {
     cachedContextRevision = true
     const user = userEvent.setup()
     render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish']}><RevisionSwitchReview view="readiness-publish" /></MemoryRouter>)
-    await user.click(screen.getByRole('button', { name: /Exception disclosure A person confirms/ }))
+    await user.click(within(screen.getByRole('region', { name: 'Human decisions' })).getAllByRole('button', { name: 'Inspect', exact: true })[0])
+    expect(screen.getByRole('dialog')).toHaveTextContent('Exception disclosure')
     await user.click(screen.getByRole('button', { name: 'Switch revision' }))
-    expect(screen.getByRole('heading', { name: 'Review completion', exact: true })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Review completion An explicit human receipt/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Human decisions' })).toHaveTextContent('Review completion')
   })
 
   it('keeps general activity separate from the three approved human controls', async () => {
     readinessFields = { activity: [{ id: 'event-1', summary: 'Recorded runtime event 1' }] }
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    const controls = within(screen.getByRole('region', { name: 'Assurance control register' }))
+    const controls = within(screen.getByRole('region', { name: 'Human decisions' }))
     expect(controls.getAllByRole('button')).toHaveLength(3)
     expect(controls.queryByText('Decision and audit history')).not.toBeInTheDocument()
-    await userEvent.click(controls.getByRole('button', { name: /Publication authorisation/ }))
-    expect(screen.getByRole('region', { name: 'Selected assurance control' })).toHaveTextContent('decision history are unavailable')
+    await userEvent.click(controls.getAllByRole('button', { name: 'Inspect', exact: true })[1])
+    expect(screen.getByRole('dialog')).toHaveTextContent('No authorisation has been recorded here')
     expect(screen.queryByText('Recorded runtime event 1')).not.toBeInTheDocument()
   })
 
   it.each(['zero', 'unavailable'])('does not assert accepted evidence when the report total is %s', async (state) => {
     emptyEvidenceTotal = state === 'zero'
     retainedStatusError = state === 'unavailable'
-    const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await user.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     const dialog = screen.getByRole('dialog', { name: 'Intelligence assurance report' })
     expect(within(dialog).getByText('Accepted evidence').previousElementSibling).toHaveTextContent(state === 'zero' ? '0' : 'Unavailable')
     expect(within(dialog).queryByText(/Accepted evidence is recorded for this revision/)).not.toBeInTheDocument()
@@ -1308,22 +1685,28 @@ describe('Intelligence Hub', () => {
       sourceCountsByType: { UPLOADED_DOCUMENT: 2, WEBSITE: 2 }, processingCompleteness: 'PARTIAL',
       documentsProcessed: null, knownProcessedCount: 1, unknownCount: 1 }
     show(`?runtimeInstanceId=workspace-1&revisionId=revision-2&view=${view}`)
-    expect(screen.getAllByText(/Unavailable · 1 verified, 1 unknown/).length).toBeGreaterThan(0)
-    if (view === 'overview') expect(within(screen.getByRole('tabpanel', { name: 'Overview' })).getByText('Sources connected').nextElementSibling).toHaveTextContent('4')
-    if (view === 'sources') expect(screen.getByText('Whole-revision sources').previousElementSibling).toHaveTextContent('4')
+    if (view === 'overview') {
+      const panel = within(screen.getByRole('tabpanel', { name: 'Overview' }))
+      expect(panel.getByText('Sources recorded').nextElementSibling).toHaveTextContent('4')
+      const provenance = panel.getByText('Processing provenance', { selector: 'dt' }).nextElementSibling
+      expect(provenance).toHaveTextContent('1 unknown document receipt')
+      expect(provenance.title).toContain('Unavailable · 1 verified, 1 unknown')
+    } else expect(screen.getAllByText(/Unavailable · 1 verified, 1 unknown/).length).toBeGreaterThan(0)
+    if (view === 'sources') expect(screen.getByText('Recorded sources', { selector: 'small' }).previousElementSibling).toHaveTextContent('4')
   })
 
-  it.each(['evidence-readiness', 'readiness-publish'])('rejects a stale summary in %s without replacing it with renderer counts', view => {
+  it.each(['evidence-readiness', 'readiness-publish'])('rejects a stale summary in %s without replacing it with renderer counts', async view => {
     sourceSummaryOverrides = { stateVersion: 'older' }
     show(`?runtimeInstanceId=workspace-1&revisionId=revision-2&view=${view}`)
+    if (view === 'readiness-publish') await userEvent.click(screen.getByText('Current readiness read basis', { selector: 'summary' }))
     const scope = view === 'readiness-publish' ? within(screen.getByRole('region', { name: 'Current revision source basis' })) : within(screen.getByRole('region', { name: 'Evidence readiness details' }))
-    expect(scope.getByText('Sources connected').nextElementSibling).toHaveTextContent('Unavailable')
+    expect(scope.getByText(view === 'readiness-publish' ? /Sources connected: Unavailable/ : 'Sources connected')).toHaveTextContent('Sources connected'); if (view !== 'readiness-publish') expect(scope.getByText('Sources connected').nextElementSibling).toHaveTextContent('Unavailable')
   })
 
   it('refreshes the canonical source read on Evidence readiness without executing an action', async () => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=evidence-readiness')
-    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    await refreshCurrentView(user)
     expect(calls.refresh.mock.calls).toHaveLength(6)
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateEvidenceInventoryQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', sessionRevision: expect.any(Number) }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateSourceSummaryQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1' }))
@@ -1335,15 +1718,75 @@ describe('Intelligence Hub', () => {
     sourceSummaryOverrides = state === 'stale' ? { stateVersion: 'old' }
       : state === 'wrong-scope' ? { scope: { customerId: 'other', tenantId: 'tenant-1', runtimeInstanceId: 'revision-2' } } : {}
     show()
-    expect(within(screen.getByRole('tabpanel', { name: 'Overview' })).getByText('Sources connected').nextElementSibling).toHaveTextContent('Unavailable')
-    expect(screen.getByText('Documents processed', { selector: 'dt' }).nextElementSibling).toHaveTextContent(state === 'fetching' ? 'Loading…' : 'Unavailable')
+    expect(within(screen.getByRole('tabpanel', { name: 'Overview' })).getByText('Sources recorded').nextElementSibling).toHaveTextContent('Unavailable')
+    expect(screen.getByText('Processing provenance', { selector: 'dt' }).nextElementSibling).toHaveTextContent(state === 'fetching' ? 'Loading…' : 'Unavailable')
+  })
+  it('matches Acquisition rows and navigates Gather more evidence to Context without acquisition writes', async () => {
+    const user = userEvent.setup()
+    const { container } = show()
+    const panel = container.querySelector('.intelligence-hub__overview-acquisition')
+    expect([...panel.querySelectorAll('dt')].map(el => el.textContent)).toEqual(['Sources recorded', 'Evidence retained', 'Processing provenance'])
+    expect(panel.querySelector('.intelligence-hub__eyebrow')).toBeNull()
+    await user.click(within(panel).getByRole('button', { name: 'Gather more evidence' }))
+    expect(screen.getByRole('tab', { name: 'Context', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('retains unknown and stale Acquisition processing qualifiers from the validated receipt', () => {
+    sourceSummaryOverrides = { documentSourceCount: 3, uniqueSourceCount: 4,
+      sourceCountsByType: { UPLOADED_DOCUMENT: 3, WEBSITE: 1 }, processingCompleteness: 'PARTIAL',
+      documentsProcessed: null, knownProcessedCount: 1, unknownCount: 1, staleCount: 1 }
+    show()
+    const value = screen.getByText('Processing provenance', { selector: 'dt' }).nextElementSibling
+    expect(value).toHaveTextContent('1 unknown document receipt · 1 stale')
+    expect(value.title).toContain('Unavailable · 1 verified, 1 unknown, 1 stale')
   })
 
+  it.each(['Recorded certification',0,null])('preserves the actual Readiness certification projection (%s)', async label => {
+    readinessFields={truthBinding:{certification:{label,summary:'Exact supplied summary'}}}
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    expect(screen.getByText(`Intelligence certification · ${label === null ? 'Not established' : String(label)}`)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button',{name:'Inspect assurance'}))
+    expect(screen.getByRole('dialog')).toHaveTextContent(label === null ? 'No current certification is supplied' : 'Exact supplied summary')
+    expect(calls.execute).not.toHaveBeenCalled();expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('withholds retained Readiness certification during renderer refresh', () => {
+    readinessFields={truthBinding:{certification:{label:'Retained certificate'}}};rendererRefreshing=true
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    const readiness=within(screen.getByRole('tabpanel',{name:'Readiness & publish'}))
+    expect(readiness.queryByText(/Retained certificate/)).not.toBeInTheDocument()
+    expect(readiness.getByRole('button',{name:'Inspect assurance'})).toBeDisabled()
+  })
+  it.each(['foreign','missing'])('withholds actual Readiness certification for %s current renderer scope', state => {
+    readinessFields={truthBinding:{certification:{label:'Foreign certificate'}}}
+    staleOverviewDetails=state==='foreign';pendingRendererContext=state==='missing'
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    expect(screen.queryByText('Intelligence certification · Foreign certificate')).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled();expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('matches the modern Readiness header and separates publication checks from human decisions', async () => {
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    expect(screen.getByRole('link',{name:'＋ Add Evidence'})).toHaveAttribute('href',expect.stringContaining('view=context'))
+    expect(screen.queryByRole('button',{name:'↻ Refresh'})).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region',{name:'Publication checks'})).getAllByText('Not verified')).toHaveLength(4)
+    await userEvent.click(within(screen.getByRole('region',{name:'Human decisions'})).getByRole('button',{name:'Go to completion'}))
+    expect(screen.getByRole('tab',{name:'Review'})).toHaveAttribute('aria-selected','true')
+    expect(calls.execute).not.toHaveBeenCalled();expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('retains the modern Readiness report behind the current-basis disclosure', async () => {
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    await userEvent.click(screen.getByText('Current readiness read basis',{selector:'summary'}))
+    await userEvent.click(screen.getByRole('button',{name:'Preview assurance report'}))
+    expect(screen.getByRole('dialog',{name:'Intelligence assurance report'})).toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled();expect(calls.update).not.toHaveBeenCalled()
+  })
   it('renders the paper assurance report with actual evidence and no synthetic certification or audit totals', async () => {
     readinessFields = { publish: { state: 'PUBLISHED' }, activity: [{ id: 'one', summary: 'Generic runtime activity' }] }
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await user.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await user.click(screen.getByText('Current readiness read basis',{selector:'summary'}))
+    await user.click(screen.getByRole('button', { name: 'Preview assurance report' }))
     const dialog = screen.getByRole('dialog', { name: 'Intelligence assurance report' })
     expect(dialog).toHaveClass('intelligence-hub__report-dialog')
     expect(within(dialog).getByRole('heading', { name: 'Acme Workspace' })).toBeInTheDocument()
@@ -1363,7 +1806,7 @@ describe('Intelligence Hub', () => {
     completionOverrides = assuranceReviewFixture(receipt)
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
     expect(calls.completion.mock.calls.filter(([, options]) => typeof options.skip === 'boolean').at(-1)[1].skip).toBe(false)
-    await userEvent.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     expect(calls.completion.mock.calls.filter(([, options]) => typeof options.skip === 'boolean').at(-1)[1].skip).toBe(false)
     const region = within(screen.getByRole('dialog')).getByRole('region', { name: 'Report Review Completion' })
     expect(region).toHaveTextContent(receipt.actorUserId)
@@ -1383,7 +1826,7 @@ describe('Intelligence Hub', () => {
     completionOverrides = assuranceReviewFixture(); inventoryFixture = evidenceInventoryFixture()
     const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish'
     const { rerender } = show(search)
-    await userEvent.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     expect(within(screen.getByRole('dialog')).getByRole('region', { name: 'Report Review Completion' })).toHaveTextContent(completionOverrides.latestReceipt.receiptId)
     completionFailure = true
     rerender(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
@@ -1394,7 +1837,7 @@ describe('Intelligence Hub', () => {
   it('stops a report refresh after the session changes during first read scheduling', async () => {
     completionOverrides = assuranceReviewFixture()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
-    await userEvent.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     calls.refresh.mockImplementationOnce(() => clearTokens())
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Refresh report', exact: true }))
     expect(calls.refresh).toHaveBeenCalledTimes(1)
@@ -1407,7 +1850,7 @@ describe('Intelligence Hub', () => {
     inventoryFixture = evidenceInventoryFixture()
     const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish'
     const { rerender } = show(search)
-    await userEvent.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     const report = () => within(screen.getByRole('dialog', { name: 'Intelligence assurance report' }))
     expect(report().getByRole('region', { name: 'Report current evidence inventory' })).toHaveTextContent('853 of 853')
     expect(report().getByRole('region', { name: 'Report canonical source basis' })).toHaveTextContent('Unique sources2')
@@ -1432,7 +1875,7 @@ describe('Intelligence Hub', () => {
     readinessFields = { publish: { state: 'PUBLISHED' }, lock: { locked: true, state: 'LOCKED', snapshot: { snapshotId: 'recorded-lock-proof' } } }
     const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish'
     const { rerender } = show(search)
-    await userEvent.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    await openReadinessReport()
     expect(within(screen.getByRole('dialog')).getByRole('region', { name: 'Report lifecycle and recorded snapshot' })).toHaveTextContent('recorded-lock-proof')
     rendererRefreshing = true
     rerender(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
@@ -1445,26 +1888,26 @@ describe('Intelligence Hub', () => {
   it.each(['evidence-readiness', 'readiness-publish'])('shows the scoped current inventory and inspection in %s without a readiness grant', async view => {
     inventoryFixture = evidenceInventoryFixture()
     show(`?runtimeInstanceId=workspace-1&revisionId=revision-2&view=${view}`)
-    const panel = within(screen.getByRole('tabpanel', { name: view === 'evidence-readiness' ? 'Evidence readiness' : 'Readiness & publish' }))
+    const panel = within(screen.getByRole('tabpanel', { name: 'Readiness & publish' }))
     expect(panel.getByText('Complete current inventory')).toBeVisible()
     if (view === 'evidence-readiness') {
       expect(screen.getByText('Records read').nextElementSibling).toHaveTextContent('853')
       await userEvent.click(screen.getByRole('button', { name: 'Advanced evidence inspection' }))
     } else {
-      expect(within(screen.getByRole('region', { name: 'Current evidence inventory' })).getByText('853 / 853')).toBeVisible()
-      await userEvent.click(screen.getByRole('button', { name: 'Inspect inventory receipt →' }))
+      await openPublishEvidence()
+      expect(within(screen.getByRole('dialog')).getAllByText(/853 of 853 expected evidence records/).length).toBeGreaterThan(0)
     }
     expect(screen.getByText('a'.repeat(64))).toBeVisible()
     expect(screen.getByText('source-one · ' + 'b'.repeat(64))).toBeVisible()
     expect(calls.execute).not.toHaveBeenCalled()
   })
-  it.each(['evidence-readiness', 'readiness-publish'])('withholds wrong-version inventory in %s', view => {
+  it.each(['evidence-readiness', 'readiness-publish'])('withholds wrong-version inventory in %s', async view => {
     inventoryFixture = evidenceInventoryFixture({ stateVersion: 'other-version' })
     show(`?runtimeInstanceId=workspace-1&revisionId=revision-2&view=${view}`)
-    const panel = within(screen.getByRole('tabpanel', { name: view === 'evidence-readiness' ? 'Evidence readiness' : 'Readiness & publish' }))
+    const panel = within(screen.getByRole('tabpanel', { name: 'Readiness & publish' }))
     expect(panel.queryByText('Complete current inventory')).not.toBeInTheDocument()
     expect(panel.queryByText('853 / 853')).not.toBeInTheDocument()
-    expect(panel.getByLabelText('Current evidence inventory')).toHaveTextContent('Current inventory receipt unavailable')
+    if (view === 'readiness-publish') { await openPublishEvidence(); expect(screen.getByRole('dialog')).toHaveTextContent('Current inventory receipt unavailable') } else expect(panel.getByLabelText('Current evidence inventory')).toHaveTextContent('Current inventory receipt unavailable')
   })
   it.each(['fetching', 'renderer-refresh', 'error'])('withholds retained inventory while %s', state => {
     inventoryFixture = evidenceInventoryFixture()
@@ -1474,4 +1917,66 @@ describe('Intelligence Hub', () => {
     expect(screen.getByText('Records read').nextElementSibling).toHaveTextContent(state === 'error' ? 'Unavailable' : 'Loading…')
   })
 
+
+  it.each(['Inspect frozen evidence membership: Inspect', 'Inspect assurance report'])('invalidates the dynamic Overview inspector %s on refresh and does not revive it', async name => {
+    const view = show()
+    await userEvent.click(screen.getByRole('button', { name, exact: true }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    rendererRefreshing = true
+    const tree = <MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2']}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>
+    view.rerender(tree)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    rendererRefreshing = false
+    view.rerender(tree)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled()
+  })
+  async function refreshCurrentView(user) {
+    const direct = screen.queryByRole('button', { name: '↻ Refresh', exact: true })
+    if (direct) return user.click(direct)
+    const heading = screen.getByRole('heading', { level: 1 }).textContent
+    if (heading === 'Readiness & publish') {
+      await user.click(screen.getByText('Current readiness read basis', { selector: 'summary' }))
+      return user.click(screen.getByRole('button', { name: 'Refresh readiness reads' }))
+    }
+    await user.click(screen.getByRole('button', { name: 'View basis', exact: true }))
+    if (heading === 'After lock') {
+      await user.click(screen.getByText('Recorded lock read basis', { selector: 'summary' }))
+      return user.click(screen.getByRole('button', { name: 'Refresh lock reads' }))
+    }
+    const disclosure = heading === 'Intelligence Hub' ? 'Recorded read controls' : 'Technical graph basis'
+    await user.click(screen.getByText(disclosure, { selector: 'summary' }))
+    return user.click(screen.getByRole('button', { name: heading === 'Intelligence Hub' ? 'Refresh Overview' : 'Refresh graph reads' }))
+  }
+
+  async function inspectGraphObject(user = userEvent.setup()) {
+    await user.click(screen.getByRole('button', { name: 'Inspect selected', exact: true }))
+    await user.click(screen.getByText('Recorded object inspection', { selector: 'summary' }))
+  }
+
+  async function openPublishEvidence() {
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect evidence readiness' }))
+    await userEvent.click(screen.getByText('Advanced evidence inspection', { selector: 'summary' }))
+  }
+
+  it.each([{ tenantId: 'foreign' }, { stateVersion: 'old' }, { id: 'another-revision' }])('does not synthesize a scoped empty Review page from a foreign summary %j', async control => {
+    emptyFilteredReview = true
+    summaryControlOverrides = control
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    await userEvent.click(screen.getByRole('button', { name: 'Evidence needing review' }))
+    expect(screen.getByRole('region', { name: 'Evidence candidate queue' })).toHaveTextContent('Current evidence items are unavailable.')
+    expect(screen.getByRole('region', { name: 'Evidence candidate queue' })).not.toHaveTextContent('No items match this filter')
+  })
+
+  it('rejects a retained exact-item Return callback after renderer departure', async () => {
+    sourcePageFixture = sourceFixture()
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review&reviewContext=workspace-1%3Arevision-2%3Acustomer-1%3Atenant-1&reviewQuery=unrelated&reviewSourceId=doc&reviewEvidenceObjectId=two'
+    const view = render(<MemoryRouter initialEntries={['/app/intelligence' + search]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    const retained = calls.reviewReturn.mock.calls.at(-1)[0].onClick
+    rendererRefreshing = true
+    view.rerender(<MemoryRouter initialEntries={['/app/intelligence' + search]}><IntelligenceHub /><LocationProof /></MemoryRouter>)
+    act(() => retained())
+    expect(screen.getByTestId('route-proof')).toHaveTextContent('reviewEvidenceObjectId=two')
+    expect(screen.getByRole('searchbox', { name: 'Find a review item' })).not.toHaveFocus()
+  })
 })

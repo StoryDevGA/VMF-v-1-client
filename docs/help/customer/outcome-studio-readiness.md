@@ -5,6 +5,12 @@ Outcome Studio has two different readiness questions:
 - **Foundation/preflight readiness**: the locked runtime, handoff, evidence sufficient for required sections, output contract, and request plan are eligible for governed execution. This can allow Framework Guidance and Working Draft to run.
 - **Full governed readiness**: every stage in the persisted quality chain has passed and its receipt is linked to the same runtime instance, plan, draft, and draft iteration. Only this state can proceed to customer-ready approval.
 
+## Requested composition readiness
+
+A composition plan marked READY means its governed pack bindings resolved. It does not establish evidence sufficiency or enable drafting on its own. A requested Audience, Channel, Style, Language, Visual System or Industry pack must be active, compatible and uniquely mapped. Missing or conflicting requested guidance blocks resolution rather than substituting another pack. Review the requested dimension and its key, then ask a workspace administrator to check the governed pack mapping and activation before resolving again.
+
+For example, “LinkedIn post” requests the LinkedIn Channel pack when available; it cannot create or activate that pack. A resolved Executive Leadership Team Audience pack does not clear evidence clarification. See [Outcome Studio](outcome-studio.md) for supported request clauses.
+
 ## Stage-specific blockers
 
 The stage path is fail-closed:

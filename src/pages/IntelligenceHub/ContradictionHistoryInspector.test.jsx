@@ -24,6 +24,16 @@ beforeEach(() => { state.revision = 0; state.buttons = {}; state.query.mockClear
 const show = props => render(<ContradictionHistoryInspector scope={scope} findingId="finding" {...props} />)
 const open = () => userEvent.click(screen.getByRole('button', { name: 'View recorded decisions' }))
 describe('exact read-only contradiction history inspection', () => {
+  it('uses the compact native close control only for Review and preserves scoped recorded reads', async () => {
+    show({compact:true});await open()
+    const dialog=screen.getByRole('dialog')
+    expect(dialog).toHaveClass('intelligence-hub__review-inspection')
+    expect(screen.queryByRole('button',{name:'Close decisions'})).not.toBeInTheDocument()
+    expect(state.query).toHaveBeenLastCalledWith({...scope,findingId:'finding',page:1,pageSize:10},{refetchOnMountOrArgChange:true})
+    await userEvent.click(screen.getByRole('button',{name:'Close dialog'}))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'View recorded decisions'})).toHaveFocus()
+  })
   it('subscribes only while open, exposes original recorded basis and unmounts on close', async () => {
     show(); expect(state.query).not.toHaveBeenCalled(); await open()
     expect(state.query).toHaveBeenLastCalledWith({ ...scope, findingId: 'finding', page: 1, pageSize: 10 }, { refetchOnMountOrArgChange: true })

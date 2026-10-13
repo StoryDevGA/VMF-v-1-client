@@ -6,14 +6,16 @@ import IntelligenceHub from './IntelligenceHub.jsx'
 import { clearTokens } from '../../utils/tokenStorage.js'
 import { storedFindingFixture, storedFindingRow } from '../../test/storedFindingFixture.js'
 import { createHash, webcrypto } from 'node:crypto'
+import { flushSync } from 'react-dom'
 
-const state = vi.hoisted(() => ({ current: true, wrongTenant: false, locked: true, authorityHash: 'sha256:' + 'a'.repeat(64), error: null, storedError: null, storedRows: null, busy: false, rendererBusy: false, rendererError: null, selectedCandidate: 'first', history: vi.fn(), qualityControl: {}, tenant: 'tenant-1', qualityView: vi.fn(), quality: vi.fn(), findings: vi.fn(), refresh: vi.fn(), execute: vi.fn(), update: vi.fn(), reviewEvidence: vi.fn(), reviewFinding: vi.fn() }))
+const state = vi.hoisted(() => ({ current: true, wrongTenant: false, locked: true, authorityHash: 'sha256:' + 'a'.repeat(64), error: null, storedError: null, storedRows: null, busy: false, rendererBusy: false, rendererError: null, selectedCandidate: 'first', history: vi.fn(), qualityControl: {}, tenant: 'tenant-1', qualityView: vi.fn(), quality: vi.fn(), findings: vi.fn(), refresh: vi.fn(), execute: vi.fn(), update: vi.fn(), reviewEvidence: vi.fn(), reviewFinding: vi.fn(), accept: vi.fn() }))
 vi.mock('./QualityView.jsx', async importOriginal => {
   const actual = await importOriginal()
   return { ...actual, default: props => { state.qualityView(props); return <actual.default {...props} /> } }
 })
 vi.mock('../../hooks/useTenantContext.js', () => ({ useTenantContext: () => ({ customerId: 'customer-1', tenantId: state.tenant }) }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useAcceptRuntimeDiscoveryMutation: () => [state.accept],
   useGetRuntimeStateFindingsQuery: (args, options) => {
     state.findings(args, options)
     const rows = state.storedRows || [storedFindingRow(state.selectedCandidate)]
@@ -60,7 +62,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
     const data = { data: { contractVersion: 'intelligence-review-actions.v1',
       runtimeUpdatedAt: '2026-10-06T10:00:00.000Z', canReview: true,
       control: { id: args[0].runtimeInstanceId, customerId: 'customer-1', tenantId: state.tenant, stateVersion: 'version-2', ...state.qualityControl },
-      candidates: [{ contradictionId: state.selectedCandidate, evidencePairHash: state.authorityHash, reviewStatus: 'UNREVIEWED', domain: 'Market', basis: 'Recorded detection basis', evidenceObjectIds: ['e1', 'e2'],
+      candidates: [{ contradictionId: state.selectedCandidate, evidencePairHash: state.authorityHash, reviewStatus: state.candidateReviewStatus || 'UNREVIEWED', domain: 'Market', basis: 'Recorded detection basis', evidenceObjectIds: ['e1', 'e2'],
         evidence: [{ evidenceObjectId: 'e1', sourceId: 'source-1', extractedFact: 'Current selected fact' }, { evidenceObjectId: 'e2', sourceId: 'source-2', extractedFact: 'Second selected fact' }] }] } }
     return { data, currentData: state.current ? data : undefined, error: state.error, isFetching: state.busy, refetch: state.refresh }
   },
@@ -80,6 +82,60 @@ function Harness() {
 const show = (entry = '/quality?runtimeInstanceId=root&revisionId=revision-2') => render(<MemoryRouter initialEntries={[entry]}><Harness /></MemoryRouter>)
 
 describe('Quality selected-context integration', () => {
+  beforeEach(() => { state.candidateReviewStatus = 'UNREVIEWED' })
+  const decisionReceipt = command => {
+    const body = command.body, actor = '64b000000000000000000001'
+    const requestPayloadHash = createHash('sha256').update(JSON.stringify({ contractVersion: 'discovery-contradiction-review-v1', actorUserId: actor,
+      runtimeInstanceId: 'revision-2', contradictionId: command.contradictionId, expectedUpdatedAt: body.expectedUpdatedAt,
+      expectedEvidencePairHash: body.expectedEvidencePairHash, disposition: body.disposition, rationale: body.rationale, confirm: true })).digest('hex')
+    return { review: { contractVersion: 'discovery-contradiction-review-v1', reviewId: '5b4d1f42-d7e2-4a3f-af5c-000000000004', runtimeInstanceId: 'revision-2', contradictionId: command.contradictionId,
+      reviewedBy: actor, reviewedAt: '2026-10-06T10:01:00.000Z', reviewedStateVersion: 'version-2', requestPayloadHash,
+      requestKey: body.requestKey, requestExpectedUpdatedAt: body.expectedUpdatedAt, evidencePairHash: body.expectedEvidencePairHash, disposition: body.disposition, rationale: body.rationale } }
+  }
+  it('refreshes successfully when its own disposition changes the implicit population to recorded', async () => {
+    state.locked = false
+    const view = show('/quality?runtimeInstanceId=root&revisionId=revision-2&findingId=first&findingContext=root%3Arevision-2%3Acustomer-1%3Atenant-1')
+    expect(screen.getByRole('combobox', { name: 'Finding population' })).toHaveValue('Open decisions')
+    state.reviewFinding.mockImplementation(command => ({ unwrap: async () => {
+      flushSync(() => {
+        state.busy = true
+        view.rerender(<MemoryRouter><Harness /></MemoryRouter>)
+      })
+      return decisionReceipt(command)
+    } }))
+    state.refresh.mockImplementation(async () => {
+      flushSync(() => {
+        state.busy = false
+        state.candidateReviewStatus = 'NOT_CONTRADICTORY'
+        view.rerender(<MemoryRouter><Harness /></MemoryRouter>)
+      })
+      return { data: {} }
+    })
+    const current = state.qualityView.mock.calls.at(-1)[0]
+    await act(async () => { expect(await current.actions.decideFinding(current.storedRead.candidates[0], 'NOT_CONTRADICTORY', 'A recorded human rationale.')).toBe(true) })
+    expect(screen.getByRole('combobox', { name: 'Finding population' })).toHaveValue('Recorded dispositions')
+    expect(state.refresh).toHaveBeenCalledTimes(4)
+    expect(screen.getByRole('status', { name: 'Quality decision status' })).toHaveTextContent('Current reads refreshed')
+  })
+  it.each(['population', 'query', 'page', 'revision', 'session'])('blocks completion of a retained disposition refresh after explicit %s departure', async departure => {
+    state.locked = false
+    state.storedRows = Array.from({ length: 6 }, (_, i) => storedFindingRow(i ? `z-finding-${i}` : 'first'))
+    const view = show('/quality?runtimeInstanceId=root&revisionId=revision-2&findingId=first&findingContext=root%3Arevision-2%3Acustomer-1%3Atenant-1')
+    const user = userEvent.setup()
+    state.reviewFinding.mockImplementation(command => ({ unwrap: async () => decisionReceipt(command) }))
+    state.refresh.mockImplementationOnce(async () => {
+      if (departure === 'session') clearTokens()
+      if (departure === 'revision') await user.click(screen.getByRole('button', { name: 'Other revision' }))
+      if (departure === 'population') await user.selectOptions(screen.getByRole('combobox', { name: 'Finding population' }), 'Detected candidates')
+      if (departure === 'page') await user.click(screen.getByRole('button', { name: 'Next findings' }))
+      if (departure === 'query') { await user.type(screen.getByRole('textbox', { name: 'Search quality findings' }), 'absent'); await user.click(screen.getByRole('button', { name: 'Search findings', exact: true })) }
+      flushSync(() => view.rerender(<MemoryRouter><Harness /></MemoryRouter>))
+      return { data: {} }
+    })
+    const current = state.qualityView.mock.calls.at(-1)[0]
+    await act(async () => { expect(await current.actions.decideFinding(current.storedRead.candidates[0], 'NOT_CONTRADICTORY', 'A recorded human rationale.')).toBe(false) })
+    expect(state.reviewFinding).toHaveBeenCalledTimes(1)
+  })
   it.each(['session', 'revision', 'read'])('blocks a retained exact Graph handoff callback after departed %s', async departure => {
     show()
     const prior = state.qualityView.mock.calls.at(-1)[0]
@@ -92,7 +148,7 @@ describe('Quality selected-context integration', () => {
     }
     act(() => prior.onOpenGraph('first', 'e1'))
     expect(screen.getByLabelText('Route')).not.toHaveTextContent('graphEvidenceObjectId')
-    expect(screen.getByRole('tab', { name: 'Intelligence Quality' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
   })
   it.each([['A', 'e1'], ['B', 'e2']])('binds auto-selected exact finding and evidence %s, clears old Graph state and preserves Quality/Review return', async (label, id) => {
     state.execute.mockClear(); state.update.mockClear(); state.reviewEvidence.mockClear(); state.reviewFinding.mockClear()
@@ -173,21 +229,26 @@ describe('Quality selected-context integration', () => {
     expect(href.pathname).toBe('/app/intelligence');expect(href.searchParams.get('view')).toBe('context')
     for(const [key,value] of Object.entries({runtimeInstanceId:'root',revisionId:'revision-2',customerId:'customer-1',tenantId:'tenant-1',sourceQuery:'preserved-source',findingId:'first',findingContext:'root:revision-2:customer-1:tenant-1',qualityReturnView:'Review'}))expect(href.searchParams.get(key)).toBe(value)
     await userEvent.click(link)
-    expect(screen.getByRole('tab',{name:'Context',exact:true})).toHaveAttribute('aria-selected','true');expect(screen.getByRole('heading',{name:'What should this acquisition understand?'})).toBeVisible()
-    expect(screen.getByRole('button',{name:'Build evidence'})).toBeDisabled();expect(state.execute).not.toHaveBeenCalled();expect(state.update).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab',{name:'Context',exact:true})).toHaveAttribute('aria-selected','true');expect(screen.getByRole('heading',{name:'Evidence gathering brief'})).toBeVisible()
+    expect(screen.getByRole('button',{name:'Acquire new evidence'})).toBeDisabled();expect(state.execute).not.toHaveBeenCalled();expect(state.update).not.toHaveBeenCalled()
   })
 
   it('hands an exact Review finding to Quality and returns with the prior Review search', async () => {
+    state.locked = false
     const user = userEvent.setup()
-    show('/app/intelligence?runtimeInstanceId=root&revisionId=revision-2&view=review&reviewContext=root%3Arevision-2%3Acustomer-1%3Atenant-1&reviewQuery=preserve-me&qualityInspectionContext=root%3Arevision-2%3Acustomer-1%3Atenant-1&qualityPopulation=Recorded+dispositions&qualityQuery=hidden')
-    await user.click(screen.getByRole('button', { name: /first.*Resolve in Quality/ }))
+    show('/app/intelligence?runtimeInstanceId=root&revisionId=revision-2&view=review&reviewContext=root%3Arevision-2%3Acustomer-1%3Atenant-1&reviewQuery=Market&qualityInspectionContext=root%3Arevision-2%3Acustomer-1%3Atenant-1&qualityPopulation=Recorded+dispositions&qualityQuery=hidden')
+    await user.click(screen.getByRole('button', { name: 'Quality awaiting a decision' }))
+    await user.click(screen.getByRole('radio', { name: 'Not an issue', exact: true }))
+    await user.type(screen.getByLabelText('Decision rationale'), 'Synthetic review navigation rationale only.')
+    await user.click(screen.getByRole('button', { name: 'Review Quality decision' }))
+    await user.click(screen.getByRole('button', { name: 'Open governed Quality' }))
     expect(screen.getByLabelText('Route')).toHaveTextContent('/app/intelligence/quality?')
     expect(screen.getByLabelText('Route')).toHaveTextContent('findingId=first')
     expect(screen.getByLabelText('Route')).not.toHaveTextContent('qualityQuery=hidden')
     expect(screen.getByText('“Current selected fact”')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '← Review', exact: true }))
     expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('textbox', { name: 'Search all review evidence' })).toHaveValue('preserve-me')
+    expect(screen.getByRole('searchbox', { name: 'Find a review item' })).toHaveValue('Market')
   })
   it('allows explicit selection to replace an unavailable exact finding and records its link', async () => {
     const user = userEvent.setup()
@@ -197,7 +258,7 @@ describe('Quality selected-context integration', () => {
     expect(screen.getByLabelText('Route')).toHaveTextContent('findingId=first')
     expect(screen.getByText('“Current selected fact”')).toBeInTheDocument()
   })
-  beforeEach(() => { vi.stubGlobal('crypto', webcrypto); state.locked = true; state.authorityHash = 'sha256:' + 'a'.repeat(64); state.reviewFinding.mockReset(); state.current = true; state.wrongTenant = false; state.error = null; state.storedError = null; state.storedRows = null; state.findings.mockClear(); state.busy = false; state.rendererBusy = false; state.rendererError = null; state.selectedCandidate = 'first'; state.history.mockClear(); state.qualityControl = {}; state.tenant = 'tenant-1'; state.quality.mockClear(); state.refresh.mockReset().mockResolvedValue({ data: {} }) })
+  beforeEach(() => { vi.stubGlobal('crypto', webcrypto); state.locked = true; state.authorityHash = 'sha256:' + 'a'.repeat(64); state.reviewFinding.mockReset(); state.accept.mockReset(); state.current = true; state.wrongTenant = false; state.error = null; state.storedError = null; state.storedRows = null; state.findings.mockClear(); state.busy = false; state.rendererBusy = false; state.rendererError = null; state.selectedCandidate = 'first'; state.history.mockClear(); state.qualityControl = {}; state.tenant = 'tenant-1'; state.quality.mockClear(); state.refresh.mockReset().mockResolvedValue({ data: {} }) })
   it.each(['pair', 'membership', 'version'])('disables a stored finding decision with mismatched mutation %s authority', async mismatch => {
     state.locked = false
     if (mismatch === 'pair') state.authorityHash = 'sha256:' + 'b'.repeat(64)
@@ -296,10 +357,33 @@ describe('Quality selected-context integration', () => {
     }
     expect(screen.queryByRole('dialog', { name: 'Recorded contradiction decisions' })).not.toBeInTheDocument()
   })
+  it('hosts the canonical Quality bookmark under Review and preserves capability Back without commands', async () => {
+    state.reviewFinding.mockClear(); state.reviewEvidence.mockClear(); state.accept.mockClear()
+    const user = userEvent.setup()
+    show('/app/intelligence/quality?runtimeInstanceId=root&revisionId=revision-2&findingId=first&findingContext=root%3Arevision-2%3Acustomer-1%3Atenant-1')
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Overview', 'Context', 'Sources', 'Review', 'Readiness & publish', 'After lock', 'Coverage', 'Intelligence Graph'])
+    expect(screen.getByRole('heading', { name: 'Review', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getAllByRole('region', { name: 'Finding results' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Quality findings', exact: true })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Review', exact: true }))
+    expect(screen.getByLabelText('Route')).toHaveTextContent('/app/intelligence?')
+    expect(screen.getByLabelText('Route')).toHaveTextContent('view=review')
+    expect(screen.getByRole('heading', { name: 'Review queue' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Finding results' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Browser Back', exact: true }))
+    expect(screen.getByLabelText('Route')).toHaveTextContent('/app/intelligence/quality?')
+    expect(screen.getByLabelText('Route')).toHaveTextContent('findingId=first')
+    expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getAllByRole('region', { name: 'Finding results' })).toHaveLength(1)
+    expect(state.reviewFinding).not.toHaveBeenCalled()
+    expect(state.reviewEvidence).not.toHaveBeenCalled()
+    expect(state.accept).not.toHaveBeenCalled()
+  })
   it('keys the bounded read by revision and selected customer/tenant', () => {
     show()
     expect(state.quality.mock.calls.at(-1)).toEqual([{ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: expect.any(Number) }, { skip: false }])
-    expect(screen.getByRole('tab', { name: 'Intelligence Quality' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('This revision is locked. Governed resolution is unavailable here.')).toBeInTheDocument()
   })
   it('blocks detail reads and rendering when renderer scope conflicts', () => {

@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useGetReviewCompletionQuery, useCompleteReviewMutation } from '../../store/api/runtimeInstanceApi.js'
 import { Button } from '../../components/Button'
+import { Dialog } from '../../components/Dialog'
+import { FiArrowLeft, FiCheck } from 'react-icons/fi'
 import { Textarea } from '../../components/Textarea'
 import { readCompletion } from './reviewCompletionModel.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
@@ -11,9 +13,12 @@ export default function ReviewCompletionPanel(props) {
   return <ScopedReviewCompletionPanel key={JSON.stringify([props.scope, sessionRevision])} {...props} sessionRevision={sessionRevision} />
 }
 
-function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false, locked = false, onRecorded }) {
+function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false, locked = false, onRecorded, compact = false }) {
   const { currentData, error, isFetching, isLoading, refetch } = useGetReviewCompletionQuery({ ...scope, sessionRevision }, { refetchOnMountOrArgChange: true })
   const [complete] = useCompleteReviewMutation()
+  const [inspection, setInspection] = useState(null)
+  const opener = useRef(null)
+  const restoreFocus = useRef(null)
   const [rationale, setRationale] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [feedback, setFeedback] = useState(null)
@@ -32,6 +37,27 @@ function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false,
   const value = !error && !isFetching && !isLoading ? readCompletion(currentData, scope) : null
   const receipt = value?.latestReceipt
   const eligible = !readOnly && !locked && value?.canComplete === true && value.population.complete === true
+  const inspectionOwner = JSON.stringify([scope, sessionRevision, locked, value?.stateVersion, value?.population.hash])
+  const visibleInspection = compact && inspection?.owner === inspectionOwner && getSessionRevision() === sessionRevision ? inspection : null
+  useLayoutEffect(() => {
+    if (inspection && inspection.owner !== inspectionOwner) setInspection(null)
+  }, [inspection, inspectionOwner])
+  useLayoutEffect(() => {
+    if (visibleInspection || !restoreFocus.current) return
+    const intent = restoreFocus.current
+    restoreFocus.current = null
+    if (intent.owner === inspectionOwner && getSessionRevision() === sessionRevision && intent.opener?.isConnected) intent.opener.focus()
+  }, [visibleInspection, inspectionOwner, sessionRevision])
+  const openInspection = (kind, trigger) => {
+    if (!isCurrent()) return
+    opener.current = trigger
+    setInspection({ kind, owner: inspectionOwner })
+  }
+  const closeInspection = () => {
+    if (!isCurrent()) return
+    restoreFocus.current = { owner: inspectionOwner, opener: opener.current }
+    setInspection(null)
+  }
   const refresh = async () => {
     if (!isCurrent() || busy || inFlight.current) return
     const started = scopeKey
@@ -78,8 +104,7 @@ function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false,
       if (isCurrent() && activeScope.current === started) setBusy(false)
     }
   }
-  return <section className="intelligence-hub__completion" aria-label="Review Completion">
-    <h3>Review Completion</h3>
+  const content = <>
     <p>Complete the revision’s evidence and contradiction decisions. Rejected evidence counts as decided; confirmed contradictions can still block readiness.</p>
     {isLoading || isFetching ? <p role="status">Checking the complete review population…</p>
       : !value ? <p role="alert">{error?.data?.error?.message || 'The complete review population is unavailable.'} Refresh to retry.</p>
@@ -88,7 +113,7 @@ function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false,
           {value.population.confirmedReadinessBlockers > 0 ? <p>{value.population.confirmedReadinessBlockers} confirmed contradiction(s) remain independent readiness blockers.</p> : null}
           <p>{receipt ? <>Recorded review: <strong>{receipt.currency === 'CURRENT' ? 'Current' : 'Stale — reassessment required'}</strong> · {new Date(receipt.completedAt).toLocaleString()}</> : 'No Review Completion receipt is recorded.'}</p>
           {receipt ? <details><summary>Inspect recorded completion</summary><p>{receipt.rationale}</p><p>Reviewer: {receipt.actorUserId}</p><p>Receipt: {receipt.receiptId}</p><p>Audit: {receipt.auditId}</p></details> : null}</>}
-    {!readOnly ? <form onSubmit={submit}>
+    {!readOnly && (!compact || visibleInspection?.kind === 'confirm') ? <form onSubmit={submit}>
       <Textarea label="Review Completion rationale" value={rationale} maxLength={2000} rows={3} fullWidth
         disabled={!eligible || busy} onChange={event => setRationale(event.target.value)} />
       <label className="intelligence-hub__completion-confirm"><input type="checkbox" checked={confirmed} disabled={!eligible || busy}
@@ -98,5 +123,19 @@ function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false,
     {locked ? <p>This locked revision permits inspection only.</p> : null}
     <p ref={feedbackRef} tabIndex={-1} role={feedback?.error ? 'alert' : 'status'}>{feedback?.message}</p>
     <Button variant="outline" size="sm" disabled={busy} onClick={refresh}>Refresh Review Completion</Button>
+  </>
+  if (!compact) return <section className="intelligence-hub__completion" aria-label="Review Completion"><h3>Review Completion</h3>{content}</section>
+  return <section className="intelligence-hub__completion intelligence-hub__completion--compact" aria-label="Review Completion">
+    <h2>Review completion</h2>
+    <strong>{isLoading || isFetching ? 'Checking review basis…' : !value ? 'Unavailable' : receipt?.currency === 'CURRENT' && value.population.complete ? 'Complete' : receipt ? 'Reassessment required' : 'Not complete'}</strong>
+    <p>{value ? `${value.population.pendingEvidence} evidence decisions and ${value.population.pendingFindings} contradiction decisions remain; ${value.population.confirmedReadinessBlockers} confirmed contradiction blockers require separate readiness assessment.` : 'A complete current review population is unavailable.'}</p>
+    <div><Button size="sm" disabled={!eligible || blocked || busy} onClick={event => openInspection('confirm', event.currentTarget)}>Confirm review completion<FiCheck size={14} aria-hidden="true" /></Button>
+      <Button size="sm" variant="outline" onClick={event => openInspection('receipt', event.currentTarget)}>Receipt and completion basis</Button></div>
+    {feedback?.message ? <p role={feedback.error ? 'alert' : 'status'}>{feedback.message}</p> : null}
+    {visibleInspection ? <Dialog open onClose={closeInspection} size="lg" className="intelligence-hub__dialog intelligence-hub__inspection-dialog intelligence-hub__review-inspection" aria-label="Completion basis and receipt">
+      <Dialog.Header><h2>Contextual inspection</h2></Dialog.Header>
+      <Dialog.Body><strong>Completion basis and receipt</strong>{content}</Dialog.Body>
+      <Dialog.Footer><Button size="sm" variant="outline" onClick={closeInspection}><FiArrowLeft size={14} aria-hidden="true" />Return to Review</Button></Dialog.Footer>
+    </Dialog> : null}
   </section>
 }

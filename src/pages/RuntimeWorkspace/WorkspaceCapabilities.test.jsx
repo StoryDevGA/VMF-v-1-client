@@ -97,6 +97,24 @@ describe('WorkspaceCapabilities', () => {
 })
 
 describe('capability count boundaries', () => {
+  it('uses current native inventory counts instead of omitted-array renderer zeros', () => {
+    const [hub] = buildWorkspaceCapabilityCards({ discovery: {
+      sourceRegistrySummary: { count: 0 }, evidenceObjectSummary: { evidenceObjectCount: 0 },
+    }, intelligenceInventory: { sources: { readCount: 8 }, evidence: { readCount: 30 } } })
+    expect(hub.metrics.slice(0, 2).map(metric => metric.value)).toEqual([8, 30])
+  })
+  it('withholds Home counts when its current inventory is unavailable without renderer fallback', () => {
+    const [hub] = buildWorkspaceCapabilityCards({ discovery: {
+      sourceRegistrySummary: { count: 0 }, evidenceObjectSummary: { evidenceObjectCount: 0 },
+    }, intelligenceInventory: null })
+    expect(hub.metrics.slice(0, 2).map(metric => metric.value)).toEqual([null, null])
+  })
+  it('preserves genuine empty native inventory counts', () => {
+    const [hub] = buildWorkspaceCapabilityCards({ intelligenceInventory: {
+      sources: { readCount: 0 }, evidence: { readCount: 0 },
+    } })
+    expect(hub.metrics.slice(0, 2).map(metric => metric.value)).toEqual([0, 0])
+  })
   it.each([true, undefined])('does not treat capped or unqualified totals as exact: %s', (totalCapped) => {
     const [hub] = buildWorkspaceCapabilityCards({
       evidenceDetail: { total: 100, totalCapped, evidenceObjects: Array(50).fill({}), sourceRegistry: [{ sourceId: 'one' }] },

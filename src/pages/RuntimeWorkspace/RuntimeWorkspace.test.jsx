@@ -9,6 +9,7 @@ import { ToasterProvider } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { clearTokens, setTokens } from '../../utils/tokenStorage.js'
 import AdvisorRecommendation from './AdvisorRecommendation.jsx'
+import { evidenceInventoryFixture } from '../../test/evidenceInventoryFixture.js'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useGetRuntimeDiscoveryContradictionsQuery,
@@ -23,6 +24,7 @@ import {
   useGetRuntimeStateGraphProjectionQuery,
   useGetRuntimeStateBootstrapQuery,
   useGetRuntimeStateEvidenceQuery,
+  useGetRuntimeStateEvidenceInventoryQuery,
   useGetRuntimeStateGraphManifestQuery,
   useGetRuntimeStateSectionSummaryQuery,
   useGetRuntimeOutputLabQuery,
@@ -67,6 +69,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeStateGraphProjectionQuery: vi.fn(),
   useGetRuntimeStateBootstrapQuery: vi.fn(),
   useGetRuntimeStateEvidenceQuery: vi.fn(),
+  useGetRuntimeStateEvidenceInventoryQuery: vi.fn(),
   useGetRuntimeStateGraphManifestQuery: vi.fn(),
   useGetRuntimeStateSectionSummaryQuery: vi.fn(),
   useGetRuntimeOutputLabQuery: vi.fn(),
@@ -1570,6 +1573,7 @@ describe('RuntimeWorkspace', () => {
       isFetching: false,
       error: null,
     })
+    useGetRuntimeStateEvidenceInventoryQuery.mockReturnValue({ currentData: null, isLoading: false, isFetching: false, error: null })
     useGetRuntimeStateBootstrapQuery.mockReturnValue({
       data: { data: runtimeStateBootstrapPayload },
       isLoading: false,
@@ -1649,6 +1653,71 @@ describe('RuntimeWorkspace', () => {
       error: null,
       refetch: refetchRenderer,
     })
+  })
+
+  const homeInventoryFixture = (overrides = {}) => evidenceInventoryFixture({
+    scope: { runtimeInstanceId: 'runtime-1', runtimeInstanceKey: 'value-narrative-001',
+      customerId: '507f1f77bcf86cd799439012', tenantId: '507f1f77bcf86cd799439013' },
+    stateVersion: 'runtime-revision:1', evidence: { expectedCount: 30, readCount: 30 },
+    sources: { expectedCount: 8, readCount: 8, records: Array.from({ length: 8 }, (_, index) => ({
+      sourceId: `source-${index}`, recordHash: 'b'.repeat(64),
+    })) }, ...overrides,
+  })
+
+  it('shows scoped native Home counts and leaves Workbench inventory reads disabled', () => {
+    useGetRuntimeStateEvidenceInventoryQuery.mockReturnValue({ currentData: { data: homeInventoryFixture() } })
+    const view = renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    expect(screen.getByLabelText('Sources: 8')).toHaveTextContent('8')
+    expect(screen.getByLabelText('Evidence: 30')).toHaveTextContent('30')
+    expect(useGetRuntimeStateEvidenceInventoryQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012', tenantId: '507f1f77bcf86cd799439013', sessionRevision: expect.any(Number) }),
+      { skip: false, refetchOnMountOrArgChange: true },
+    )
+    view.unmount()
+    renderRuntimeWorkspace()
+    expect(useGetRuntimeStateEvidenceInventoryQuery.mock.lastCall[1].skip).toBe(true)
+  })
+
+  it.each([
+    { receipt: { stateVersion: 'other' } },
+    { receipt: { scope: { ...homeInventoryFixture().scope, tenantId: 'other' } } },
+    { receipt: { completeness: 'PARTIAL' } },
+    { transport: { error: { status: 403 } } },
+    { transport: { isFetching: true } },
+  ])('withholds untrusted Home inventory without renderer fallback: %j', ({ receipt, transport }) => {
+    useGetRuntimeStateEvidenceInventoryQuery.mockReturnValue({
+      currentData: { data: homeInventoryFixture(receipt) }, ...transport,
+    })
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    expect(screen.getByLabelText('Sources: unavailable')).toHaveTextContent('—')
+    expect(screen.getByLabelText('Evidence: unavailable')).toHaveTextContent('—')
+  })
+
+  it('does not read Home inventory against an invalid bootstrap', () => {
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({ data: { data: {} }, isLoading: false, isFetching: false })
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    expect(useGetRuntimeStateEvidenceInventoryQuery.mock.lastCall[1].skip).toBe(true)
+  })
+
+  it('does not read Home inventory against a renderer for another revision', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({ data: { data: {
+      ...rendererPayload, runtimeInstance: { ...rendererPayload.runtimeInstance, id: 'other', runtimeInstanceKey: 'other' },
+    } } })
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    expect(useGetRuntimeStateEvidenceInventoryQuery.mock.lastCall[1].skip).toBe(true)
+    expect(screen.getByLabelText('Sources: unavailable')).toHaveTextContent('—')
+  })
+
+  it('switches Home inventory cache identity with the session and hides its previous receipt', () => {
+    useGetRuntimeStateEvidenceInventoryQuery.mockReturnValue({ currentData: { data: homeInventoryFixture() } })
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    const beforeSession = useGetRuntimeStateEvidenceInventoryQuery.mock.lastCall[0].sessionRevision
+    expect(screen.getByLabelText('Evidence: 30')).toHaveTextContent('30')
+    useGetRuntimeStateEvidenceInventoryQuery.mockReturnValue({ currentData: undefined, isFetching: true })
+    act(() => clearTokens())
+    expect(useGetRuntimeStateEvidenceInventoryQuery.mock.lastCall[0].sessionRevision).not.toBe(beforeSession)
+    expect(screen.getByLabelText('Evidence: unavailable')).toHaveTextContent('—')
   })
 
   it('keeps Truth Quality UI variants aligned with backend certification levels', () => {

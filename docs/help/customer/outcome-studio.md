@@ -2,6 +2,14 @@
 
 Outcome Studio prepares governed business deliverables from the current locked runtime and its accepted evidence. A request plan records the requested output, audience, decision purpose, selected schema, and the governed evidence boundary before generation can begin.
 
+## Audience and optional composition requests
+
+Include the intended audience in your request. “Executive Team” and “Executive Leadership Team” request the canonical Executive Leadership Team Audience pack. It must be active, compatible and uniquely resolved.
+
+You can explicitly request optional composition guidance, for example `Channel: LinkedIn post`, `Style: strategic advisory style`, or `Language: english`. Use `Visual system: <capability key>` and `Industry: <capability key>` for registered visual and industry guidance. Named clauses accept exact capability keys; controlled phrases also include “LinkedIn post”, “strategic advisory style” and “visual truth preservation rules”. Separate clauses with semicolons.
+
+An explicit request blocks if its pack is missing, inactive, incompatible or ambiguous. Multiple different channel, style, language or visual-system requests also block; equivalent keys and aliases count as one request. Optional packs are not added merely because they are available. Required output dependencies and safeguards still apply. The plan and resolution receipt record selected pack identity, version, activation scope and content hash while preserving your wording.
+
 ## Foundation versus fully governed
 
 Foundation or preflight status means that the request is eligible for preparation, or that Framework Guidance and Working Draft have completed. It does not mean that the meaning has been reviewed, the expression shaped, or the result approved. Foundation-only work remains explicitly labelled and cannot be treated as a customer-ready outcome.

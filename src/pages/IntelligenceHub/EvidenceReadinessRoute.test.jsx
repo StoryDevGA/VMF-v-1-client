@@ -4,9 +4,10 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import IntelligenceHub from './IntelligenceHub.jsx'
 
-const state = vi.hoisted(() => ({ conflict: false, locked: false, evidenceCurrent: true, candidateCurrent: true, candidate: vi.fn(), evidence: vi.fn(), refresh: vi.fn() }))
+const state = vi.hoisted(() => ({ conflict: false, locked: false, evidenceCurrent: true, candidateCurrent: true, candidate: vi.fn(), evidence: vi.fn(), refresh: vi.fn(), accept: vi.fn() }))
 vi.mock('../../hooks/useTenantContext.js', () => ({ useTenantContext: () => ({ customerId: 'customer', tenantId: 'tenant' }) }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useAcceptRuntimeDiscoveryMutation: () => [state.accept],
   useGetRuntimeStateFindingsQuery: (_args, options) => ({ isUninitialized: options.skip }),
   useGetRuntimeStateSourceSummaryQuery: () => ({ refetch: state.refresh }),
   useGetRuntimeStateEvidenceInventoryQuery: () => ({ refetch: state.refresh }),
@@ -64,7 +65,10 @@ describe('Evidence readiness selected-context integration', () => {
     await user.click(screen.getByRole('button', { name: '← Review', exact: true }))
     expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByLabelText('Current route')).toHaveTextContent('/app/intelligence?runtimeInstanceId=root&revisionId=rev-2&view=review')
-    await user.click(screen.getByRole('tab', { name: 'Evidence readiness', exact: true }))
+    await user.click(screen.getByRole('tab', { name: 'Readiness & publish', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Inspect evidence readiness', exact: true }))
+    await user.click(screen.getByText('Advanced evidence inspection', { selector: 'summary' }))
+    await user.click(screen.getByRole('button', { name: 'Open evidence readiness' }))
     await user.click(screen.getByRole('button', { name: 'Advanced evidence inspection' }))
     await user.click(screen.getByRole('button', { name: 'Readiness & publish →', exact: true }))
     expect(screen.getByRole('tab', { name: 'Readiness & publish', exact: true })).toHaveAttribute('aria-selected', 'true')
@@ -76,27 +80,30 @@ describe('Evidence readiness selected-context integration', () => {
     expect(screen.getByRole('tab', { name: 'Readiness & publish', exact: true })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('link', { name: '← Back' })).toHaveAttribute('href', '/app/runtime/rev-2')
   })
-  it('places the tab after Review and requests only the current scoped bounded reads', () => {
+  it('hosts the bookmarked capability under publish and requests only the current scoped bounded reads', () => {
     show()
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Overview', 'Context', 'Sources', 'Review', 'Evidence readiness', 'Readiness & publish', 'After lock', 'Coverage', 'Intelligence Graph', 'Intelligence Quality'])
-    expect(screen.getByRole('tab', { name: 'Evidence readiness', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Overview', 'Context', 'Sources', 'Review', 'Readiness & publish', 'After lock', 'Coverage', 'Intelligence Graph'])
+    expect(screen.getByRole('tab', { name: 'Readiness & publish', exact: true })).toHaveAttribute('aria-selected', 'true')
     expect(state.candidate.mock.calls.at(-1)).toEqual([{ runtimeInstanceId: 'rev-2', customerId: 'customer', tenantId: 'tenant', sessionRevision: expect.any(Number) }, { skip: false }])
     const active = state.evidence.mock.calls.filter(([, options]) => !options.skip)
     expect(active).toHaveLength(1)
     expect(active[0][0]).toMatchObject({ runtimeInstanceId: 'rev-2', customerId: 'customer', tenantId: 'tenant', page: 1, pageSize: 1 })
   })
-  it('maps keyboard navigation through Review, Evidence readiness and Readiness & publish', async () => {
+  it('keeps eight primary keyboard destinations and exposes evidence readiness inside publish', async () => {
     const user = userEvent.setup()
     show()
     await user.click(screen.getByRole('tab', { name: 'Review', exact: true }))
     await user.keyboard('{ArrowRight}')
-    expect(screen.getByRole('tab', { name: 'Evidence readiness', exact: true })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('region', { name: 'Evidence readiness details' })).toBeInTheDocument()
-    await user.keyboard('{ArrowRight}')
     expect(screen.getByRole('tab', { name: 'Readiness & publish', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('button', { name: 'Inspect evidence readiness', exact: true }))
+    expect(screen.getByRole('dialog', { name: 'Detailed evidence readiness' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Readiness & publish', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('button', { name: 'Return to Readiness & publish' }))
+    await user.click(screen.getByRole('tab', { name: 'Readiness & publish', exact: true }))
     await user.keyboard('{ArrowLeft}')
-    expect(screen.getByRole('tab', { name: 'Evidence readiness', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('link', { name: '← Back' })).toHaveAttribute('href', '/app/runtime/rev-2')
+    expect(state.refresh).not.toHaveBeenCalled()
   })
   it('fails closed for a conflicting selected tenant', () => {
     state.conflict = true
@@ -112,14 +119,17 @@ describe('Evidence readiness selected-context integration', () => {
     expect(screen.getByText('Evidence object total is unavailable.')).toBeInTheDocument()
     expect(screen.queryByText('1 returned candidates')).not.toBeInTheDocument()
   })
-  it('refreshes exactly six active reads including source summary, inventory and recorded lock basis and stops candidates after leaving', async () => {
+  it('refreshes exactly six active reads including source summary, inventory and recorded lock basis and keeps Source verification reads before stopping on Overview', async () => {
     const user = userEvent.setup()
     show()
     await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
     expect(state.refresh).toHaveBeenCalledTimes(6)
     await user.click(screen.getByRole('button', { name: 'Inspect sources' }))
     expect(screen.getByRole('tab', { name: 'Sources', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(state.candidate.mock.calls.at(-1)[1].skip).toBe(false)
+    await user.click(screen.getByRole('tab', { name: 'Overview', exact: true }))
     expect(state.candidate.mock.calls.at(-1)[1].skip).toBe(true)
+    expect(state.accept).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: '← Back' })).toHaveAttribute('href', '/app/runtime/rev-2')
   })
 })

@@ -28,6 +28,40 @@ const confirm = async () => {
   await user.click(screen.getByRole('checkbox'))
   await user.click(screen.getByRole('button', { name: 'Record Review Completion' }))
 }
+it('shows compact completion truth and inspects its receipt without exposing attestation inputs', async () => {
+  const user=userEvent.setup();render(<ReviewCompletionPanel scope={scope} compact />)
+  expect(screen.getByRole('heading',{name:'Review completion'})).toBeInTheDocument()
+  expect(screen.getByText('Not complete')).toBeInTheDocument()
+  expect(screen.queryByRole('textbox',{name:'Review Completion rationale'})).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button',{name:'Receipt and completion basis'}))
+  expect(screen.getByRole('dialog',{name:'Completion basis and receipt'})).toHaveTextContent('No Review Completion receipt is recorded')
+  expect(screen.queryByRole('textbox',{name:'Review Completion rationale'})).not.toBeInTheDocument()
+  const trigger=screen.getByRole('button',{name:'Receipt and completion basis'})
+  await user.click(screen.getByRole('button',{name:'Return to Review'}))
+  expect(document.activeElement).toBe(trigger)
+})
+it('retains existing rationale, confirmation and command guards inside compact confirmation', async () => {
+  const user=userEvent.setup();render(<ReviewCompletionPanel scope={scope} compact />)
+  await user.click(screen.getByRole('button',{name:'Confirm review completion'}))
+  expect(screen.getByRole('textbox',{name:'Review Completion rationale'})).toBeEnabled()
+  expect(screen.getByRole('button',{name:'Record Review Completion'})).toBeDisabled()
+  expect(state.mutate).not.toHaveBeenCalled()
+})
+it('keeps locked compact review inspection available while its confirmation stays disabled', async () => {
+  const user=userEvent.setup();render(<ReviewCompletionPanel scope={scope} compact locked />)
+  expect(screen.getByRole('button',{name:'Confirm review completion'})).toBeDisabled()
+  await user.click(screen.getByRole('button',{name:'Receipt and completion basis'}))
+  expect(screen.getByRole('dialog')).toHaveTextContent('locked revision permits inspection only')
+})
+it('clears a compact receipt on population departure so returning cannot reopen it', () => {
+  const view=render(<ReviewCompletionPanel scope={scope} compact />)
+  fireEvent.click(screen.getByRole('button',{name:'Receipt and completion basis'}))
+  state.query={currentData:make({population:{completeness:'COMPLETE',hash:'b'.repeat(64),pendingEvidence:0,pendingFindings:0,decisionCount:2,complete:true,confirmedReadinessBlockers:0}})}
+  view.rerender(<ReviewCompletionPanel scope={scope} compact />)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  state.query={currentData:make()};view.rerender(<ReviewCompletionPanel scope={scope} compact />)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
 it('requires explicit rationale and confirmation even with zero outstanding decisions', async () => {
   render(<ReviewCompletionPanel scope={scope} />)
   expect(screen.getByRole('button', { name: 'Record Review Completion' })).toBeDisabled()

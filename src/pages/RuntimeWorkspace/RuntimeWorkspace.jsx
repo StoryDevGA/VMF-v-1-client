@@ -51,6 +51,7 @@ import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import { createAcquisitionRequestTracker } from '../IntelligenceHub/acquisitionRequestTracker.js'
 import { acquisitionRunLabel } from '../IntelligenceHub/acquisitionRunContract.js'
+import { readEvidenceInventory } from '../IntelligenceHub/evidenceInventoryModel.js'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
@@ -61,6 +62,7 @@ import {
   useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeStateBootstrapQuery,
   useGetRuntimeStateEvidenceQuery,
+  useGetRuntimeStateEvidenceInventoryQuery,
   useGetRuntimeStateGraphManifestQuery,
   useGetRuntimeStateGraphProjectionQuery,
   useGetRuntimeStateSectionSummaryQuery,
@@ -6408,6 +6410,19 @@ function RuntimeWorkspace() {
   ].map((value) => String(value ?? '').trim()).filter(Boolean)
   const contextRenderer = routeRuntimeId && rendererRuntimeIds.includes(routeRuntimeId) ? renderer : null
   const contextRuntimeInstance = contextRenderer?.runtimeInstance ?? null
+  const homeInventoryRead = useGetRuntimeStateEvidenceInventoryQuery(
+    { runtimeInstanceId, customerId, tenantId, sessionRevision: getSessionRevision() },
+    { skip: isWorkbench || !runtimeStateScopeReady || !runtimeStateBootstrapReady
+      || !contextRenderer || Boolean(appError), refetchOnMountOrArgChange: true },
+  )
+  const homeInventory = readEvidenceInventory({
+    response: homeInventoryRead.currentData,
+    scope: { runtimeInstanceId, customerId, tenantId },
+    stateVersion: contextRuntimeInstance?.stateVersion,
+    loading: homeInventoryRead.isFetching || homeInventoryRead.isLoading
+      || isFetching || isFetchingRuntimeStateBootstrap || workspaceLoading,
+    error: homeInventoryRead.error || appError,
+  })
   const contextPackageName = String(
     contextRenderer?.package?.packageName ?? contextRuntimeInstance?.packageName ?? '',
   ).trim()
@@ -7888,6 +7903,7 @@ function RuntimeWorkspace() {
       </div>
 
       <WorkspaceCapabilities
+        intelligenceInventory={isWorkbench ? undefined : homeInventory}
         discovery={contextDiscovery}
         discoveryHealth={contextDiscoveryHealth}
         evidenceDetail={isWorkbench ? runtimeStateEvidencePagePayload : null}

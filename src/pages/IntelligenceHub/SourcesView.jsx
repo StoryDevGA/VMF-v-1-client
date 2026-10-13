@@ -1,6 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Input } from '../../components/Input'
+import { Select } from '../../components/Select'
+import { FiArrowUpRight, FiArrowRight, FiArrowLeft, FiChevronLeft, FiChevronRight } from 'react-icons/fi'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Badge } from '../../components/Badge'
@@ -27,12 +29,14 @@ const scopedPayload = (read, scope) => {
 function Search({ query, submit }) {
   const [draftState, setDraftState] = useState({ query, draft: query })
   const searchRef = useRef(null)
+  const searchId = useId()
   if (draftState.query !== query) setDraftState({ query, draft: query })
   const draft = draftState.draft
   return <form className="intelligence-hub__sources-search" onSubmit={event => { event.preventDefault(); submit(draft.trim()) }}>
-    <Input ref={searchRef} size="sm" fullWidth aria-label="Search all sources and evidence" placeholder="Search source, evidence or title…"
+    <label htmlFor={searchId}>Find a source or evidence</label>
+    <Input id={searchId} type="search" ref={searchRef} size="sm" fullWidth aria-label="Find a source or evidence" placeholder="Source name or evidence text" title="Press Enter to search"
       maxLength={240} value={draft} onChange={event => setDraftState({ query, draft: event.target.value })} />
-    <Button size="sm" type="submit">Search</Button>
+    <Button size="sm" type="submit" className="sr-only">Search</Button>
     {query ? <Button size="sm" variant="ghost" onClick={() => { if (submit('') !== false) searchRef.current?.focus() }}>Clear search</Button> : null}
   </form>
 }
@@ -46,10 +50,10 @@ function Pages({ receipt, page, change, name, busy, canNavigate }) {
   const capped = Boolean(receipt?.totalCapped)
   const rows = receipt?.sourceRegistry && !receipt?.evidenceObjects ? receipt.sourceRegistry : receipt?.evidenceObjects || []
   const more = capped ? rows.length === receipt.pageSize : page < receipt?.totalPages
-  return <nav ref={navRef} tabIndex={-1} className="intelligence-hub__filters" aria-label={`${name} pages`}>
-    <Button size="sm" variant="outline" disabled={!receipt || busy || page <= 1} onClick={() => activatePage(page - 1)}>Previous {name.toLowerCase()} page</Button>
+  return <nav ref={navRef} tabIndex={-1} className="intelligence-hub__filters intelligence-hub__sources-pages" aria-label={`${name} pages`}>
+    <Button size="sm" variant="outline" aria-label={`Previous ${name.toLowerCase()} page`} disabled={!receipt || busy || page <= 1} onClick={() => activatePage(page - 1)}><FiChevronLeft aria-hidden="true" /></Button>
     <span>{!receipt ? busy ? 'Loading page…' : 'Page unavailable' : `Page ${page}${capped ? ' · total unavailable (partial read)' : ` of ${receipt.totalPages}`}`}</span>
-    <Button size="sm" variant="outline" disabled={!receipt || busy || !more || page >= 1000} onClick={() => activatePage(page + 1)}>Next {name.toLowerCase()} page</Button>
+    <Button size="sm" variant="outline" aria-label={`Next ${name.toLowerCase()} page`} disabled={!receipt || busy || !more || page >= 1000} onClick={() => activatePage(page + 1)}><FiChevronRight aria-hidden="true" /></Button>
     {page >= 1000 ? <span>Pagination limit reached. Refine the search.</span> : null}
   </nav>
 }
@@ -62,8 +66,8 @@ function ReadMessage({ read, payload, empty, loading }) {
 }
 
 export default function SourcesView({ workspaceId, revisionId, customerId, tenantId, active, canRead,
-  stateVersion, pendingCount, countsLoading, locked, onOpen, onSelectView, sourceSummary, sourceSummaryLoading, onRefreshSummary,
-  reviewAuthority, onSourceReviewed, refreshToken = 0 }) {
+  stateVersion, pendingCount, evidenceCount, countsLoading, locked, onOpen, onSelectView, sourceSummary, sourceSummaryLoading, onRefreshSummary,
+  reviewAuthority, onSourceReviewed, onBasisInspectionReady, onRefreshWorkspace, workspaceRefreshing, refreshToken = 0 }) {
   const [params, setParams] = useSearchParams()
   const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
   const contextKey = `${workspaceId}:${revisionId}:${customerId}:${tenantId}`
@@ -183,50 +187,109 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
     if (!currentFrame() || item && !currentEvidence(item)) return
     onSelectView(view, undefined, item ? { sourceId: item.sourceId, evidenceObjectId: item.evidenceObjectId } : undefined)
   }
-  const provenance = (source, item) => <>
-    <p>Recorded provenance for this exact revision. Inspection does not change evidence.</p>
-    <dl className="intelligence-hub__facts">{Object.entries({ Source: label(source), 'Source ID': source?.sourceId || 'Unavailable',
-      Reference: source?.sourceRef || 'Unavailable', 'Source lineage': source?.lineageRef || 'Unavailable',
-      'State version': source?.stateVersion || 'Unavailable', 'Evidence ID': item.evidenceObjectId,
-      'Evidence lineage': item.lineageRef || 'Unavailable', 'Review state': displayHubToken(item.reviewStatus),
-      'Acceptance state': displayHubToken(item.acceptanceState),
-    }).map(([key, val]) => <div key={key}><dt>{key}</dt><dd>{val}</dd></div>)}</dl>
+  const inspectionNavigation = useRef(null)
+  const inspectionOwnerKey = `${verificationOwnerKey}:${stateVersion}`
+  useLayoutEffect(() => {
+    inspectionNavigation.current = { ownerKey: inspectionOwnerKey, selectView, retry, selected, refreshWorkspace: onRefreshWorkspace, workspaceRefreshing, currentFrame }
+    return () => { inspectionNavigation.current = null }
+  })
+  const provenance = (source, item = {}) => {
+    const evidenceInspection = Boolean(item.evidenceObjectId)
+    const record = evidenceInspection ? 'Original extraction and review' : 'Source details and provenance'
+    return <>
+      <Select label="Record" size="sm" value={record} options={[{value:record,label:record}]} onChange={() => {}} className="intelligence-hub__inspection-record" />
+      {evidenceInspection ? <><h3 className="intelligence-hub__recorded-title">{item.title || 'Evidence object'}</h3><p>{item.extractedFact || item.summary || 'Evidence detail unavailable'}</p></> : null}
+      <dl className="intelligence-hub__inspection-facts">{Object.entries(evidenceInspection ? {
+        Source: label(source), 'Recorded decision': displayHubToken(item.reviewStatus),
+        'Exact evidence identity and location': `${item.evidenceObjectId} · Location not supplied`, Classification: 'Not assessed',
+      } : {
+        Source: label(source), 'Original filename': source?.sourceFileName || source?.fileName || 'Not supplied',
+        'Recorded evidence': count(source?.evidenceObjectCount,source?.evidenceCountCapped),
+        'Current processing receipt': 'Not supplied', 'Original file': 'Not supplied',
+        'Frozen membership': 'Not established by current source records',
+      }).map(([term,value])=><div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
+      <p>{evidenceInspection ? 'The fragment is preserved as recorded, not rewritten as a complete or verified assertion.' : 'Extracted evidence is retained. Unavailable processing provenance is not a failed extraction.'}</p>
+      <details className="intelligence-hub__source-technical"><summary>Technical basis</summary><dl className="intelligence-hub__inspection-facts">{Object.entries({
+        'Source ID':source?.sourceId || 'Unavailable',Reference:source?.sourceRef || 'Unavailable',
+        'Source lineage':source?.lineageRef || 'Unavailable','State version':source?.stateVersion || 'Unavailable',
+        ...(evidenceInspection?{'Evidence ID':item.evidenceObjectId,'Evidence lineage':item.lineageRef || 'Unavailable','Acceptance state':displayHubToken(item.acceptanceState)}:{}),
+      }).map(([term,value])=><div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
+        {!evidenceInspection && onRefreshWorkspace ? <Button size="sm" variant="outline" disabled={workspaceRefreshing} onClick={() => {
+          const current = inspectionNavigation.current
+          if (current?.ownerKey === inspectionOwnerKey && current.selected?.sourceId === source?.sourceId && !current.workspaceRefreshing && current.currentFrame()) current.refreshWorkspace?.()
+        }}>Refresh Sources reads</Button> : null}</details>
+      <Button size="sm" variant="outline" onClick={() => {
+        const current=inspectionNavigation.current
+        if(current?.ownerKey!==inspectionOwnerKey) return
+        if(evidenceInspection) { if(source?.sourceId===item.sourceId) current.selectView('Review',item) }
+        else if(current.selected?.sourceId===source?.sourceId) current.selectView('Sources')
+      }}>{evidenceInspection?'Inspect in Review':'Open this source'}<FiArrowRight size={14} aria-hidden="true" /></Button>
+    </>
+  }
+  const basisOpen = useRef(null)
+  useLayoutEffect(() => {
+    const owner = { ownerKey: inspectionOwnerKey, contextKey, sessionRevision, route: params.toString(), stateVersion, available: !searching && Boolean(selected) && !skip,
+      open: trigger => {
+        if (currentFrame() && !searching && selected) onOpen({ kind: 'summary-inspection', title: 'Source details and provenance', body: provenance(selected) }, trigger)
+      } }
+    basisOpen.current = owner
+    return () => { if (basisOpen.current === owner) basisOpen.current = null }
+  })
+  const basisRegistration = useMemo(() => ({
+    open: trigger => { if (basisOpen.current?.ownerKey === inspectionOwnerKey) basisOpen.current.open(trigger) },
+    current: () => basisOpen.current?.ownerKey === inspectionOwnerKey ? basisOpen.current : null,
+  }), [inspectionOwnerKey])
+  const basisAvailable = !searching && Boolean(selected) && !skip
+  useLayoutEffect(() => {
+    const registration = basisRegistration
+    onBasisInspectionReady?.(registration, basisAvailable)
+    return () => onBasisInspectionReady?.(registration, false, true)
+  }, [onBasisInspectionReady, basisAvailable, basisRegistration])
+  const processingInspection = () => <>
+    <Select label="Record" size="sm" value="Evidence intake and processing history" options={[{value:'Evidence intake and processing history',label:'Evidence intake and processing history'}]} onChange={()=>{}} className="intelligence-hub__inspection-record" />
+    <p>Acquisition is separate from recomputation and source inspection. Processing totals are shown only from current recorded receipts.</p>
+    <dl className="intelligence-hub__inspection-facts">{Object.entries({
+      'Current processing provenance':sourceProcessingLabel(usableScope?sourceSummary:null,sourceSummaryLoading),
+      'Recorded sources':count(usableScope?sourceSummary?.uniqueSourceCount:null),
+      'Current-content verified receipts':count(usableScope?sourceSummary?.knownProcessedCount:null),
+      'Unknown processing receipts':count(usableScope?sourceSummary?.unknownCount:null),
+    }).map(([term,value])=><div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
+    <p>{sourceProcessingExplanation(usableScope?sourceSummary:null)}</p>
+    <Button size="sm" variant="outline" onClick={()=>{const current=inspectionNavigation.current;if(current?.ownerKey===inspectionOwnerKey)current.retry()}}>Refresh processing reads</Button>
   </>
   if (!valid) return <div role="alert"><p>The Sources link contains an invalid query, page or evidence/source pair.</p>
     <Button onClick={() => update({}, true)}>Reset Sources query</Button></div>
   return <div className="intelligence-hub__sources-workspace">
-    <div className="intelligence-hub__sources-toolbar"><div><p className="intelligence-hub__eyebrow">Source provenance</p>
-      <h2>Confirm sources and processing</h2><p>Search all recorded sources and evidence in the selected revision.</p>
-      {locked ? <p>Locked revision · inspection is read-only.</p> : null}</div>
-      <Search key={contextKey} query={query} submit={submit} /></div>
     <div className="intelligence-hub__sources-summary" aria-label="Source summary">
-      <span><strong>{count(registry?.total, registry?.totalCapped)}</strong><small>{query || sourceType ? 'Matching sources' : 'Unique sources'}</small></span>
-      <span><strong>{sourceSummaryLoading ? 'Loading…' : count(usableScope ? sourceSummary?.uniqueSourceCount : null)}</strong><small>Whole-revision sources</small></span>
-      <span><strong>{sourceProcessingLabel(usableScope ? sourceSummary : null, sourceSummaryLoading)}</strong><small>Documents processed</small></span>
-      <span><strong>{countsLoading ? 'Loading…' : count(usableScope ? pendingCount : null)}</strong><small>Evidence awaiting review</small></span>
-      <Button size="sm" variant="ghost" disabled={skip} onClick={retry}>Retry source reads</Button>
+      <span><strong>{sourceSummaryLoading ? 'Loading…' : count(usableScope ? sourceSummary ? sourceSummary.uniqueSourceCount : !query && !sourceType && !registry?.totalCapped ? registry?.total : null : null)}</strong><small>Recorded sources</small></span>
+      <span><strong>{countsLoading ? 'Loading…' : count(usableScope ? evidenceCount : null)}</strong><small>Evidence objects</small></span>
+      <span><strong>{countsLoading ? 'Loading…' : count(usableScope ? pendingCount : null)}</strong><small>Awaiting evidence review</small></span>
     </div>
-    <p>{sourceProcessingExplanation(usableScope ? sourceSummary : null)}</p>
+    <details className="intelligence-hub__sources-warning">
+      <summary>{sourceSummaryLoading ? 'Loading processing provenance…' : (usableScope ? sourceSummary : null)?.unknownCount ? `Processing provenance unknown for ${sourceSummary.unknownCount} document${sourceSummary.unknownCount===1?'':'s'}` : sourceProcessingLabel(usableScope ? sourceSummary : null)}</summary>
+      <p>{sourceProcessingExplanation(usableScope ? sourceSummary : null)}</p>
+      <Button size="sm" variant="outline" disabled={skip} onClick={event=>{if(currentFrame())onOpen({kind:'summary-inspection',title:'Evidence intake and processing history',body:processingInspection()},event.currentTarget)}}>Inspect processing history<FiArrowUpRight size={14} aria-hidden="true" /></Button>
+      <Button size="sm" variant="outline" disabled={skip} onClick={retry}>Retry source reads</Button>
+    </details>
+    {locked ? <p className="intelligence-hub__sources-readonly">Locked revision · inspection is read-only.</p> : null}
+    <div className="intelligence-hub__sources-tools">
+      <Select size="sm" label="Source type" value={sourceType} options={[{ value: '', label: 'All' }, { value: 'UPLOADED_DOCUMENT', label: 'Uploaded document' }, { value: 'WEBSITE', label: 'Website' }]}
+        onChange={event => update({ sourceType: event.target.value, sourcePage: 1 })} />
+      <Search key={contextKey} query={query} submit={submit} />
+    </div>
     <div className="intelligence-hub__sources-browser">
-      <Card variant="outlined" className="intelligence-hub__sources-registry" aria-label="Revision source registry">
-        <Card.Header><h2>Source registry</h2><div className="intelligence-hub__sources-filters" role="group" aria-label="Source type filters">
-          {[['', 'All'], ['WEBSITE', 'Website'], ['UPLOADED_DOCUMENT', 'Uploaded document']].map(([type, text]) =>
-            <Button key={type} size="sm" variant="outline" aria-pressed={sourceType === type}
-              onClick={() => update({ sourceType: type, sourcePage: 1 })}>{text}</Button>)}
-        </div></Card.Header>
+      <Card bordered={false} rounded={false} className="intelligence-hub__sources-registry" aria-label="Revision source registry">
+        <Card.Header><h2>Source registry</h2><span>{registry ? `${sources.length} on this page · ${count(registry.total, registry.totalCapped)} ${query || sourceType ? 'matching' : 'recorded'}` : 'Current registry unavailable'}</span></Card.Header>
         <Card.Body role="region" aria-label="Source registry results" tabIndex={0}>
           {sources.length ? <ul className="intelligence-hub__sources-list">{sources.map(source => <li key={source.sourceId}>
             <Button size="sm" variant="ghost" fullWidth className="intelligence-hub__sources-row" aria-pressed={source.sourceId === selectedId}
-              onClick={() => focus(source.sourceId)}><span><strong>{label(source)}</strong><small>{displayHubToken(source.sourceType)} · {displayHubToken(source.acquisitionStatus)}</small></span>
-              <span className="intelligence-hub__sources-count"><strong>{count(source.evidenceObjectCount, source.evidenceCountCapped)}</strong><small>evidence objects</small></span>
+              onClick={() => focus(source.sourceId)}><span><strong>{label(source)}</strong><small>{source.sourceType==='UPLOADED_DOCUMENT'?'Uploaded document':displayHubToken(source.sourceType)} · {count(source.evidenceObjectCount, source.evidenceCountCapped)} recorded evidence</small></span>
             </Button></li>)}</ul> : <ReadMessage read={registryRead} payload={registry} empty="No matching sources in this revision." loading="Loading sources…" />}
         </Card.Body><Card.Footer><p>{registry?.completeness === 'PARTIAL' ? 'Partial registry count. Refine the search for an exact total.' : 'Unique recorded sources in the selected revision.'}</p>
           <Pages receipt={registry} page={sourcePage} canNavigate={() => currentFrame() && Boolean(registry)} change={page => update({ sourcePage: page, sourceId: selectedId })} name="Source" busy={registryRead.isFetching} /></Card.Footer>
       </Card>
-      <Card variant="outlined" className="intelligence-hub__sources-detail" aria-label="Source evidence">
-        <Card.Header><div><h3>{searching ? `Evidence matching “${query}”` : selected ? label(selected) : 'Selected source'}</h3>
-          <p>{searching ? `${count(evidence?.total, evidence?.totalCapped)} matching evidence objects`
-            : `${count(matchingSourceBasis ? selected.evidenceObjectCount : null, matchingSourceBasis && selected.evidenceCountCapped)} evidence objects from this source`}</p>
+      <Card bordered={false} rounded={false} className="intelligence-hub__sources-detail" aria-label="Source evidence">
+        <Card.Header><div><h2>{searching ? `Evidence matching “${query}”` : selected ? label(selected) : 'Selected source'}</h2>
           {!searching && evidenceId ? <><p>{count(focusedPair ? evidence?.total : null, focusedPair && evidence?.totalCapped)} evidence objects matching this exact focus</p>
             <Button size="sm" variant="ghost" disabled={!focusedPair || skip} onClick={browseAll}>Browse all evidence from this source</Button></> : null}
           {sourceId && query ? <Button size="sm" variant="ghost" onClick={() => {
@@ -234,14 +297,22 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
             selectionIntent.current = 'SEARCH_RESULTS'
             update({ sourceId: '', evidenceObjectId: '' })
           }}>Return to search results</Button> : null}
-        </div></Card.Header>
+        </div>{!searching && selected ? <Button size="sm" variant="outline" onClick={event => { if (currentFrame()) onOpen({ kind: 'summary-inspection', title: 'Source details and provenance', body: provenance(selected) }, event.currentTarget) }}>Source details<FiArrowUpRight size={14} aria-hidden="true" /></Button> : null}</Card.Header>
         <Card.Body><div ref={detailRef} role="region" aria-label={searching ? 'Evidence search results' : 'Selected source detail'} tabIndex={0}>
-          {!searching && selected ? <section aria-label="Recorded source verification">
-            <h3>Source verification</h3>
-            <p>{selected.verificationContext ? selected.verificationContext.sourceFingerprint === selected.materialFingerprint
-              ? `Recorded review · ${displayHubToken(selected.verificationContext.authenticity)} · ${selected.verificationContext.reviewedAt}`
-              : 'The recorded source review is stale. Review the current source before assessment.'
-              : 'No source verification review is recorded.'}</p>
+          <p className="intelligence-hub__sources-classification">Classification and domain are not assessed. Accepted does not mean verified.</p>
+          {!searching && selectedId && !selected ? <ReadMessage read={exactRead} payload={exact} empty="The requested source is unavailable." loading="Loading exact source…" />
+            : objects.length ? objects.map(item => {
+              const source = evidence.sourceRegistry?.find(row => row.sourceId === item.sourceId)
+              const status = item.reviewStatus === 'PENDING' ? 'Needs Review' : displayHubToken(item.reviewStatus)
+              return <article key={item.evidenceObjectId} className="intelligence-hub__sources-evidence" data-state={item.reviewStatus}>
+                <header><strong>{item.title || 'Evidence object'}</strong><Badge size="sm" variant={item.reviewStatus === "ACCEPTED" ? "success" : item.reviewStatus === "PENDING" ? "warning" : item.reviewStatus === "REJECTED" ? "danger" : "neutral"}>{status}</Badge></header>
+                <p>{item.extractedFact || item.summary || 'Evidence detail unavailable'}</p>
+                <footer><Button size="sm" variant="outline" aria-label={`Inspect recorded lineage · ${label(source)}`} onClick={event => { if (currentEvidence(item) && source?.sourceId === item.sourceId) onOpen({ kind: 'summary-inspection', title: 'Original extraction and review', body: provenance(source, item) }, event.currentTarget) }}>Recorded text and Review<FiArrowUpRight size={14} aria-hidden="true" /></Button>
+                  {searching ? <Button size="sm" variant="outline" onClick={() => focus(item.sourceId, item.evidenceObjectId)}>Open exact source and evidence</Button> : null}
+</footer>
+              </article>
+            }) : <ReadMessage read={evidenceRead} payload={evidence} empty="No matching evidence in this scope." loading="Loading evidence…" />}
+            {!searching && selected ? <details className="intelligence-hub__sources-review" aria-label="Recorded source verification"><summary>Source review · {selected.verificationContext ? selected.verificationContext.sourceFingerprint === selected.materialFingerprint ? `Recorded review · ${displayHubToken(selected.verificationContext.authenticity)} · ${selected.verificationContext.reviewedAt}` : 'The recorded source review is stale. Review the current source before assessment.' : 'No source verification review is recorded.'}</summary>
             {reviewAuthority && onSourceReviewed ? <SourceVerificationForm key={`${selected.sourceId}:${stateVersion}:${sessionRevision}`}
               source={selected} scope={scope} authority={reviewAuthority} locked={locked} ownsIntent={ownsVerification} refresh={async receipt => {
                 if (!ownsVerification()) return false
@@ -254,24 +325,12 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
                   || JSON.stringify(row?.verificationContext) !== JSON.stringify(receipt.verificationContext)) return false
                 return onSourceReviewed()
               }} /> : null}
-          </section> : null}
-          {!searching && selectedId && !selected ? <ReadMessage read={exactRead} payload={exact} empty="The requested source is unavailable." loading="Loading exact source…" />
-            : objects.length ? objects.map(item => {
-              const source = evidence.sourceRegistry?.find(row => row.sourceId === item.sourceId)
-              const status = item.reviewStatus === 'PENDING' ? 'Needs Review' : displayHubToken(item.reviewStatus)
-              return <article key={item.evidenceObjectId} className="intelligence-hub__sources-evidence">
-                <header><strong>{item.title || 'Evidence object'}</strong><Badge size="sm" variant="neutral">{status}</Badge></header>
-                <small>Governed evidence classification and domain are unavailable in this read. A title or acceptance decision does not establish either.</small>
-                <p>{item.extractedFact || item.summary || 'Evidence detail unavailable'}</p>
-                <footer><Button size="sm" variant="ghost" onClick={event => { if (currentEvidence(item) && source?.sourceId === item.sourceId) onOpen({ title: 'Source and evidence provenance', body: provenance(source, item) }, event.currentTarget) }}>Inspect recorded lineage · {label(source)}</Button>
-                  {searching ? <Button size="sm" variant="outline" onClick={() => focus(item.sourceId, item.evidenceObjectId)}>Open exact source and evidence</Button> : null}
-                  <Button size="sm" variant="ghost" onClick={() => selectView('Review', item)}>Open in Review →</Button></footer>
-              </article>
-            }) : <ReadMessage read={evidenceRead} payload={evidence} empty="No matching evidence in this scope." loading="Loading evidence…" />}
-        </div></Card.Body><Card.Footer><Pages receipt={evidence} page={displayedEvidencePage} canNavigate={() => currentFrame() && Boolean(evidence)} change={page => update(searching ? { evidencePage: page } : { sourceEvidencePage: page })} name="Evidence" busy={evidenceRead.isFetching} /></Card.Footer>
+            </details> : null}
+        </div></Card.Body><Card.Footer><p>{searching ? `${count(evidence?.total, evidence?.totalCapped)} matching evidence objects`
+            : `${count(matchingSourceBasis ? selected.evidenceObjectCount : null, matchingSourceBasis && selected.evidenceCountCapped)} evidence objects from this source`}</p><Pages receipt={evidence} page={displayedEvidencePage} canNavigate={() => currentFrame() && Boolean(evidence)} change={page => update(searching ? { evidencePage: page } : { sourceEvidencePage: page })} name="Evidence" busy={evidenceRead.isFetching} /></Card.Footer>
       </Card>
     </div>
-    <footer className="intelligence-hub__sources-footer"><Button size="sm" variant="ghost" onClick={() => selectView('Context')}>← Context</Button>
-      <span>Acquisition belongs to Context. Evidence decisions belong to Review.</span><Button size="sm" variant="ghost" onClick={() => selectView('Review')}>Continue to Review →</Button></footer>
+    <footer className="intelligence-hub__sources-footer"><Button size="sm" variant="ghost" onClick={() => selectView('Context')} aria-label="← Context"><FiArrowLeft size={14} aria-hidden="true" />Context</Button>
+      <span>Navigation does not approve evidence or change the revision.</span><Button size="sm" variant="ghost" onClick={() => selectView('Review')} aria-label="Continue to Review →">Review<FiArrowRight size={14} aria-hidden="true" /></Button></footer>
   </div>
 }

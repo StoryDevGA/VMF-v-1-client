@@ -1,87 +1,59 @@
-import { useEffect } from 'react'
-import { Badge } from '../../components/Badge'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Link } from '../../components/Link'
+import { Dialog } from '../../components/Dialog'
+import { Select } from '../../components/Select'
+import { FiArrowLeft, FiArrowRight, FiArrowUpRight, FiSearch, FiPlus } from 'react-icons/fi'
+import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import { displayHubCount, displayHubToken, getHubCount } from './intelligenceHubModel.js'
 import { readCoverageSourceFacts } from './coverageReadModel.js'
 import DiscoveryHealthDetails from './DiscoveryHealthDetails.jsx'
-
-const coverageGroup = (domain) => {
-  if (domain.state === 'STRONG') return 'Strong'
-  if (domain.state === 'ADEQUATE') return 'Adequate'
-  if (['WEAK', 'MISSING'].includes(domain.state)) return 'Gaps'
-  return 'Other'
-}
-const coverageTone = (domain) => ({ Strong: 'success', Adequate: 'info', Gaps: 'warning' })[coverageGroup(domain)] || 'neutral'
-
-export default function CoverageView({ discoveryHealth, discoveryHealthLoading, graphCoverage, isLoading, error, qualityHref, acquisitionHref, onSelectView, onOpenSources, inspection, onInspectionChange, active = true }) {
-  const { filter, selectedDomain, notice } = inspection
-  const summary = !isLoading && !error && graphCoverage?.available === true
-    && graphCoverage.coverage?.coverageModel === 'EVIDENCE_DOMAIN_COVERAGE' ? graphCoverage.coverage : null
-  const domains = Array.isArray(summary?.domains) ? summary.domains.filter(item => typeof item?.domain === 'string') : []
-  const filtered = domains.filter(item => filter === 'All' || coverageGroup(item) === filter)
-  const selected = notice ? null : selectedDomain ? filtered.find(item => item.domain === selectedDomain) || null : filtered[0] || null
-  const sourceFacts = selected ? readCoverageSourceFacts(selected.sourceFacts, selected.connectedEvidenceCount) : null
-  useEffect(() => {
-    if (active && !notice && selected && !selectedDomain) onInspectionChange({ selectedDomain: selected.domain }, { replace: true })
-  }, [active, notice, selected, selectedDomain, onInspectionChange])
-  const percent = getHubCount(summary, 'coveragePercent')
-  const value = count => isLoading ? 'Loading…' : displayHubCount(count)
-  const message = isLoading ? 'Loading selected revision coverage…' : error
-    ? 'Coverage could not be loaded. Refresh to retry.' : !summary
-      ? 'No domain coverage projection is available for this selected revision.' : ''
-  return <section className="intelligence-hub__sources-workspace intelligence-hub__coverage-workspace">
-    <header className="intelligence-hub__coverage-toolbar">
-      <div><p className="intelligence-hub__eyebrow">Intelligence health</p><h2>Understand where intelligence is sufficiently supported</h2><p>Coverage shows domains with connected evidence. Missing domains remain visible even when overall coverage is high.</p></div>
-      <Card variant="outlined" className="intelligence-hub__coverage-readiness">
-        <Card.Body><header><span>Discovery readiness</span></header><DiscoveryHealthDetails model={discoveryHealth} loading={discoveryHealthLoading} />
-          <div><span><small>Workspace use</small><b>Unavailable</b></span><span><small>Confidence</small><b>Unavailable</b></span></div>
-          <Link to={qualityHref} variant="subtle" underline="none" title="Opens Intelligence Quality with the selected context.">Review recommended items →</Link>
-        </Card.Body>
-      </Card>
-      <Link to={acquisitionHref} variant="subtle" underline="none" className="btn btn--primary intelligence-hub__coverage-acquire" title="Open Context for acquisition. Navigation makes no change.">＋ Acquire evidence</Link>
-    </header>
-    <div className="intelligence-hub__sources-summary intelligence-hub__coverage-summary" aria-label="Coverage summary" aria-busy={isLoading}>
-      <span title="Percentage of required domains with connected evidence; not a percentage of evidence objects."><strong>{isLoading ? 'Loading…' : percent === null ? 'Unavailable' : `${percent}%`}</strong><small>Domain/Intelligence Coverage</small></span>
-      <span><strong>{value(getHubCount(summary, 'totalDomainCount'))}</strong><small>Required domains</small></span>
-      <span><strong>{value(getHubCount(summary, 'coveredDomainCount'))}</strong><small>Supported</small></span>
-      <span title="Domains with no connected evidence; the API does not rate materiality."><strong>{value(Array.isArray(summary?.missingDomains) ? summary.missingDomains.length : null)}</strong><small>Missing domains</small></span>
-    </div>
-    <p className="intelligence-hub__coverage-hint">Domain/Intelligence Coverage is the share of the ten DIG domains with connected accepted evidence. It is separate from evidence-object counts and readiness.</p>
-    {notice ? <p role="status">{notice}</p> : null}
-    {message ? <p role="status" aria-label="Coverage read status" className="intelligence-hub__muted">{message}</p> : null}
-    <p className="intelligence-hub__coverage-hint">↳ Select a domain to inspect its evidence, confidence and recommended improvements.</p>
-    <div className="intelligence-hub__coverage-browser">
-      <Card variant="outlined" className="intelligence-hub__coverage-map">
-        <Card.Header><div><h2>Coverage map</h2><strong>{summary ? `${filtered.length} domains shown` : 'Domains unavailable'}</strong></div>
-          <div role="group" className="intelligence-hub__sources-filters" aria-label="Coverage filters">{['All', 'Strong', 'Adequate', 'Gaps'].map(item => <Button key={item} size="sm" variant="ghost" aria-pressed={filter === item} onClick={() => onInspectionChange({ filter: item, selectedDomain: '' })}>{item}</Button>)}</div>
-        </Card.Header>
-        <Card.Body className="intelligence-hub__coverage-domains" role="region" aria-label="Coverage domains" tabIndex={0}>
-          {filtered.length ? filtered.map(item => <Button key={item.domain} size="sm" variant="ghost" className="intelligence-hub__coverage-domain" aria-pressed={selected?.domain === item.domain} onClick={() => onInspectionChange({ selectedDomain: item.domain })}>
-            <span className="intelligence-hub__coverage-domain-heading"><i aria-label="Domain coverage percentage unavailable" title="Per-domain percentage is not projected">—</i><strong>{displayHubToken(item.domain)}</strong><Badge variant={coverageTone(item)} size="sm" pill>{displayHubToken(item.state)}</Badge></span>
-            <span className="intelligence-hub__coverage-divider" aria-hidden="true" />
-            <small>{displayHubCount(getHubCount(item, 'connectedEvidenceCount'))} connected evidence · {readCoverageSourceFacts(item.sourceFacts, item.connectedEvidenceCount)?.sourceCompleteness === 'COMPLETE' ? `${item.sourceFacts.resolvedSourceCount} recorded sources` : 'sources unavailable'}</small>
-          </Button>) : <p className="intelligence-hub__muted">{message || 'No domains match this filter.'}</p>}
-        </Card.Body>
-        <Card.Footer><span className="intelligence-hub__coverage-legend--success">●</span> Strong <span className="intelligence-hub__coverage-legend--info">●</span> Adequate <span className="intelligence-hub__coverage-legend--warning">●</span> Weak / missing</Card.Footer>
-      </Card>
-      <Card variant="outlined" className="intelligence-hub__coverage-detail" role="region" aria-label="Selected coverage domain" tabIndex={0}>
-        <Card.Body>{selected ? <>
-          <header><div><span>{displayHubToken(selected.domain)} domain</span><Badge variant={coverageTone(selected)} size="sm" pill>{displayHubToken(selected.state)}</Badge></div><h3>Per-domain percentage unavailable</h3><p>Graph coverage provides evidence counts and a recorded state for this domain.</p></header>
-          <div className="intelligence-hub__coverage-factors"><span><small>Connected evidence</small><strong>{displayHubCount(getHubCount(selected, 'connectedEvidenceCount'))} objects</strong></span><span><small>Source diversity</small><strong>{sourceFacts?.typeCompleteness === 'COMPLETE' ? `${sourceFacts.sourceTypeCounts.length} recorded source kinds` : 'Unavailable'}</strong></span><span><small>Connected sources</small><strong>{sourceFacts?.sourceCompleteness === 'COMPLETE' ? `${sourceFacts.resolvedSourceCount} recorded identities` : 'Unavailable'}</strong></span></div>
+const coverageGroup = domain => domain.state === 'STRONG' ? 'Strong' : domain.state === 'ADEQUATE' ? 'Adequate' : ['WEAK','MISSING'].includes(domain.state) ? 'Gaps' : 'Other'
+const tone = domain => ({Strong:'success',Adequate:'info',Gaps:'warning'})[coverageGroup(domain)] || 'neutral'
+export default function CoverageView({ discoveryHealth, discoveryHealthLoading, graphCoverage, isLoading, error, qualityHref, acquisitionHref, onSelectView, onOpenSources, inspection, onInspectionChange, active = true, canInspect = true, scope, stateVersion, route, lifecycle, revisionLabel, onBasisInspectionReady, onRefresh, refreshing }) {
+  const {filter,selectedDomain,notice}=inspection
+  const sessionRevision=useSyncExternalStore(subscribeToSession,getSessionRevision,getSessionRevision)
+  const summary=canInspect && !isLoading && !error && graphCoverage?.available === true && graphCoverage.coverage?.coverageModel === 'EVIDENCE_DOMAIN_COVERAGE' ? graphCoverage.coverage : null
+  const domains=Array.isArray(summary?.domains)?summary.domains.filter(item=>typeof item?.domain==='string'):[]
+  const filtered=domains.filter(item=>filter==='All'||coverageGroup(item)===filter)
+  const selected=notice?null:selectedDomain?filtered.find(item=>item.domain===selectedDomain)||null:filtered[0]||null
+  const sourceFacts=selected?readCoverageSourceFacts(selected.sourceFacts,selected.connectedEvidenceCount):null
+  const ownerKey=JSON.stringify([scope,stateVersion,route,active,canInspect,isLoading,error?true:false,graphCoverage,filter,selected?.domain,notice,sessionRevision])
+  const token=Symbol('coverage-frame'),frame=useRef(null),latest=useRef(null),opener=useRef(null),restore=useRef(null)
+  const [dialog,setDialog]=useState(null)
+  useLayoutEffect(()=>{frame.current={ownerKey,token};return()=>{if(frame.current?.token===token)frame.current=null}})
+  const owned=()=>active&&canInspect&&frame.current?.token===token&&frame.current.ownerKey===ownerKey&&getSessionRevision()===sessionRevision
+  const visible=active&&canInspect&&getSessionRevision()===sessionRevision&&dialog?.owner===ownerKey
+  useLayoutEffect(()=>{if(dialog&&(!active||!canInspect||dialog.owner!==ownerKey))setDialog(null)},[dialog,active,canInspect,ownerKey])
+  useLayoutEffect(()=>{if(visible||!restore.current)return;const intent=restore.current;restore.current=null;if(active&&canInspect&&intent.owner===ownerKey&&getSessionRevision()===sessionRevision&&intent.opener?.isConnected)intent.opener.focus()},[visible,active,canInspect,ownerKey,sessionRevision])
+  const open=trigger=>{if(owned()&&selected){opener.current=trigger;setDialog({owner:ownerKey})}}
+  const close=()=>{if(owned()){restore.current={owner:ownerKey,opener:opener.current};setDialog(null)}}
+  useLayoutEffect(()=>{latest.current={ownerKey,open,owned};return()=>{latest.current=null}})
+  const scopeKey=JSON.stringify(scope)
+  const hasSelection=Boolean(selected), receiptKey=JSON.stringify(graphCoverage)
+  useLayoutEffect(()=>{const current=()=>latest.current?.ownerKey===ownerKey?latest.current:null;const registration={current:()=>({available:Boolean(current()?.owned()&&hasSelection),scopeKey,stateVersion,route,sessionRevision,view:'Coverage',receiptKey}),open:trigger=>current()?.open(trigger)};onBasisInspectionReady?.(registration,active&&canInspect&&hasSelection);return()=>onBasisInspectionReady?.(registration,false,true)},[ownerKey,onBasisInspectionReady,active,canInspect,scopeKey,stateVersion,route,sessionRevision,hasSelection,receiptKey])
+  useEffect(()=>{if(active&&canInspect&&!notice&&selected&&!selectedDomain)onInspectionChange({selectedDomain:selected.domain},{replace:true})},[active,canInspect,notice,selected,selectedDomain,onInspectionChange])
+  const change=patch=>{if(owned())onInspectionChange(patch)}
+  const navigate=view=>{if(owned())onSelectView(view)}
+  const sources=()=>{if(owned()&&selected)onOpenSources(selected.domain)}
+  const value=count=>isLoading?'Loading…':displayHubCount(count)
+  const percent=getHubCount(summary,'coveragePercent')
+  const message=isLoading?'Loading selected revision coverage…':error?'Coverage could not be loaded. Refresh to retry.':!summary?'No domain coverage projection is available for this selected revision.':''
+  const facts=selected?<><p>Per-domain percentage unavailable. Graph coverage provides evidence counts and a recorded state for this domain.</p><div><span>Source diversity</span><strong>{sourceFacts?.typeCompleteness==='COMPLETE'?`${sourceFacts.sourceTypeCounts.length} recorded source kinds`:'Unavailable'}</strong></div><div><span>Connected sources</span><strong>{sourceFacts?.sourceCompleteness==='COMPLETE'?`${sourceFacts.resolvedSourceCount} recorded identities`:'Unavailable'}</strong></div>
           <section aria-label="Recorded source basis">
             <p>{sourceFacts ? 'Recorded graph source identities and kinds describe this domain’s connected accepted evidence. They do not establish independent corroboration or source authority.' : 'Connected-source identities and recorded source kinds were not supplied by a valid current graph receipt.'}</p>
             {sourceFacts?.sourceCompleteness === 'PARTIAL' ? <p>{sourceFacts.resolvedSourceCount} resolved source identities are a lower bound; {sourceFacts.unresolvedEvidenceCount} connected evidence objects have unresolved provenance.</p> : null}
             {sourceFacts?.typeCompleteness === 'COMPLETE' ? <><p>{sourceFacts.unknownSourceTypeCount} resolved source identities have an unknown kind.</p>{sourceFacts.sourceTypeCounts.length ? <ul>{sourceFacts.sourceTypeCounts.map(row => <li key={row.sourceType}>{displayHubToken(row.sourceType)}: {row.count} sources</li>)}</ul> : null}</> : sourceFacts ? <p>The recorded source-kind distribution exceeds the bounded projection; it is unavailable.</p> : null}
           </section>
-          <section className="intelligence-hub__coverage-confidence"><header><span>Explainable confidence</span><strong>Unavailable</strong></header><div><p className="intelligence-hub__coverage-increase"><i aria-hidden="true">↑</i><span><small>Increased by</small>Recorded confidence factors unavailable</span></p><p className="intelligence-hub__coverage-reduction"><i aria-hidden="true">↓</i><span><small>Reduced by</small>Recorded confidence qualifications unavailable</span></p></div></section>
-          <section className="intelligence-hub__coverage-impact"><h4>Why this matters</h4><p>Domain impact is not projected for this revision.</p></section>
-          <section className="intelligence-hub__coverage-next"><h4>Recommended improvement</h4><p>A domain-specific recommendation is not projected.</p><div><Button size="sm" square variant="outline" onClick={() => onOpenSources(selected.domain)}>Search sources and evidence for this domain →</Button><Link to={acquisitionHref} variant="subtle" underline="none" className="intelligence-hub__coverage-destination" title="Navigation only; evidence acquisition is not performed here.">Open acquisition in Context →</Link>{coverageGroup(selected) === 'Gaps' ? <Link to={qualityHref} variant="subtle" underline="none" className="intelligence-hub__coverage-destination intelligence-hub__coverage-destination--quality" title="Opens Intelligence Quality; no specific quality finding is projected.">Open Intelligence Quality →</Link> : null}</div></section>
-          <footer><span>{displayHubCount(getHubCount(selected, 'acceptedEvidenceCount'))} accepted · {displayHubCount(getHubCount(selected, 'pendingEvidenceCount'))} pending · {displayHubCount(getHubCount(selected, 'rejectedEvidenceCount'))} rejected</span><p>Coverage is diagnostic. Quality findings and governed resolutions remain in Intelligence Quality.</p></footer>
-        </> : <p className="intelligence-hub__muted">{message || notice || (selectedDomain ? 'The requested domain is unavailable in the current filter or coverage read. Choose a displayed domain or change the filter.' : 'Select a domain from a matching filter to inspect its detail.')}</p>}</Card.Body>
-      </Card>
-    </div>
-    <footer className="intelligence-hub__sources-footer"><Button variant="ghost" size="sm" onClick={() => onSelectView('Review')}>← Review</Button><span>Coverage is diagnostic; readiness and publication are inspected next.</span><Button variant="ghost" size="sm" onClick={() => onSelectView('Readiness & publish')}>Continue to Readiness &amp; publish →</Button></footer>
+<p>Explainable confidence, factors and qualifications: Unavailable. Domain impact and a domain-specific recommendation are not projected.</p><p>{displayHubCount(getHubCount(selected,'acceptedEvidenceCount'))} accepted · {displayHubCount(getHubCount(selected,'pendingEvidenceCount'))} pending · {displayHubCount(getHubCount(selected,'rejectedEvidenceCount'))} rejected</p></>:null
+  return <section className="intelligence-hub__coverage-modern">
+    <div className="intelligence-hub__coverage-modern-summary" aria-label="Coverage summary"><span><strong>{isLoading?'Loading…':percent===null?'Unavailable':`${percent}%`}</strong>Domain coverage</span><span><strong>{summary?`${value(getHubCount(summary,'coveredDomainCount'))} of ${value(getHubCount(summary,'totalDomainCount'))}`:'Unavailable'}</strong>Domains supported</span><span><strong>{value(Array.isArray(summary?.missingDomains)?summary.missingDomains.length:null)}</strong>Missing domains</span></div>
+    <p>Connected accepted evidence across ten domains. Not a confidence or publication-readiness score.</p>{notice?<p role="status">{notice}</p>:null}{message?<p role="status" aria-label="Coverage read status">{message}</p>:null}
+    <div className="intelligence-hub__coverage-modern-columns"><Card bordered={false} rounded={false}><header><h2>Coverage map</h2><small>{summary?`${filtered.length} domains shown`:'Domains unavailable'}</small></header><div className="intelligence-hub__coverage-modern-filters" role="group" aria-label="Coverage filters">{['All','Strong','Adequate','Gaps'].map(item=><Button size="sm" variant="outline" key={item} aria-pressed={filter===item} disabled={!active||!canInspect} onClick={()=>change({filter:item,selectedDomain:''})}>{item}</Button>)}</div><div className="intelligence-hub__coverage-modern-grid" role="region" aria-label="Coverage domains">{filtered.length?filtered.map(item=><Button key={item.domain} size="sm" variant="outline" className="intelligence-hub__coverage-modern-tile" aria-pressed={selected?.domain===item.domain} onClick={()=>change({selectedDomain:item.domain})}><strong>{displayHubToken(item.domain)}</strong><span className={`intelligence-hub__coverage-tone--${tone(item)}`}>{displayHubToken(item.state)}</span><small>{displayHubCount(getHubCount(item,'connectedEvidenceCount'))} connected evidence</small></Button>):<p>{message||'No domains match this filter.'}</p>}</div></Card>
+    <Card bordered={false} rounded={false} role="region" aria-label="Selected coverage domain">{selected?<><header><h2>{displayHubToken(selected.domain)}</h2><span className={`intelligence-hub__coverage-tone--${tone(selected)}`}>{displayHubToken(selected.state)}</span></header><strong className="intelligence-hub__coverage-modern-number">{displayHubCount(getHubCount(selected,'connectedEvidenceCount'))}</strong><p>Connected accepted evidence</p><Button size="sm" variant="outline" onClick={event=>open(event.currentTarget)}>Inspect evidence and source basis<FiArrowUpRight size={14} aria-hidden="true"/></Button><h3>Why this matters</h3><p>{selected.domain==='Company'?'Company evidence establishes who the business is and the context in which it operates.':`${displayHubToken(selected.domain)} evidence supplies context for understanding this domain.`}</p><h3>Suggested evidence to gather</h3><p>{selected.domain==='Company'?'Company profile, operating model or strategy documents.':'Documents or source material that explain this domain. General guidance, not a recorded recommendation.'}</p><div className="intelligence-hub__coverage-modern-actions"><Button size="sm" variant="outline" onClick={sources}><FiSearch size={14} aria-hidden="true"/>Search domain sources</Button><Link to={acquisitionHref} variant="subtle" underline="none" className="btn btn--primary" onClick={event=>{if(!owned())event.preventDefault()}}><FiPlus size={14} aria-hidden="true"/>Gather evidence</Link></div><p>{lifecycle==='LOCKED'?`${revisionLabel||'The selected revision'} remains frozen. `:''}Source diversity and explainable confidence are not independently assessed. Domain guidance is general.</p><details className="intelligence-hub__coverage-modern-advanced"><summary>Recorded domain diagnostics</summary>{facts}<Link to={qualityHref} variant="subtle">Open Intelligence Quality →</Link></details></>:<p>{message||notice||(selectedDomain?'The requested domain is unavailable in the current filter or coverage read. Choose a displayed domain or change the filter.':'Select a domain from a matching filter to inspect its detail.')}</p>}</Card></div>
+    <footer className="intelligence-hub__after-lock-footer"><Button size="sm" variant="outline" onClick={()=>navigate('After lock')}><FiArrowLeft size={14} aria-hidden="true"/>After lock</Button><small>Navigation does not approve evidence or change the revision.</small><Button size="sm" variant="outline" onClick={()=>navigate('Intelligence Graph')}>Intelligence Graph<FiArrowRight size={14} aria-hidden="true"/></Button></footer>
+    <details className="intelligence-hub__coverage-modern-advanced"><summary>Coverage read basis</summary><DiscoveryHealthDetails model={discoveryHealth} loading={discoveryHealthLoading}/><Button size="sm" variant="outline" disabled={!active||!canInspect||refreshing} onClick={()=>{if(owned()&&!refreshing)onRefresh?.()}}>Refresh coverage reads</Button></details>
+    {visible&&selected?<Dialog open size="lg" className="intelligence-hub__dialog intelligence-hub__inspection-dialog intelligence-hub__coverage-inspection" aria-label={`${displayHubToken(selected.domain)}: evidence and source basis`} onClose={close} onCancel={event=>{event.preventDefault();if(event.target===event.currentTarget)close()}}><Dialog.Header><h2>{displayHubToken(selected.domain)}: evidence and source basis</h2></Dialog.Header><Dialog.Body><Select label="Record" className="intelligence-hub__inspection-record" size="sm" value="domain" options={[{value:'domain',label:`${displayHubToken(selected.domain)}: evidence and source basis`}]} onChange={()=>{}}/><dl className="intelligence-hub__inspection-facts">{[['Recorded domain state',displayHubToken(selected.state)],['Connected accepted evidence',displayHubCount(getHubCount(selected,'connectedEvidenceCount'))],['Unique connected sources and diversity',sourceFacts?.sourceCompleteness==='COMPLETE'?`${sourceFacts.resolvedSourceCount} recorded identities`:'Not supplied'],['Confidence factors and qualifications','Not supplied']].map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl><p>Strong is a count-based diagnostic, not independent verification. Evidence counts are not unique-source counts.</p><Button size="sm" variant="outline" onClick={sources}>Search domain sources<FiArrowRight size={14} aria-hidden="true"/></Button></Dialog.Body><Dialog.Footer><Button size="sm" variant="outline" onClick={close}><FiArrowLeft size={14} aria-hidden="true"/>Back to Coverage</Button></Dialog.Footer></Dialog>:null}
   </section>
 }

@@ -2,10 +2,12 @@ import { useRef } from 'react'
 import { Button } from '../../components/Button'
 import { graphSourceFocus } from './intelligenceGraphModel.js'
 
-export default function GraphNeighbourhoodView({ read, loading, afterEdgeKey, onRetry, onPage, onInspect, onOpenSource, properties }) {
+export default function GraphNeighbourhoodView({ read, loading, afterEdgeKey, onRetry, onPage, onInspect, onOpenSource, resolveSourceDestination, properties }) {
   const region = useRef(null)
   const focusThen = action => { region.current?.focus(); action() }
   const { graph, page, selected, model } = read || {}
+  const sourceFocus = graphSourceFocus(selected)
+  const sourceDestination = sourceFocus && resolveSourceDestination?.(sourceFocus)
   const nodes = new Map(model?.nodes.map(node => [node.key, node]) || [])
   return <section ref={region} tabIndex={-1} aria-label="Selected object neighbourhood" aria-busy={loading} className="intelligence-graph__neighbourhood">
     <h4>Selected object neighbourhood</h4>
@@ -24,7 +26,7 @@ export default function GraphNeighbourhoodView({ read, loading, afterEdgeKey, on
           <Button size="sm" variant="outline" onClick={() => focusThen(() => onInspect(target.key))}><strong>{target.label}</strong><code>{target.key}</code></Button>
         </> : <p>Recorded connection; details unavailable.</p>}</div>
       })}</div>
-      {graphSourceFocus(selected) ? <Button size="sm" variant="outline" onClick={() => onOpenSource(graphSourceFocus(selected))}>Open selected object’s exact source{selected.layer === 'evidence' ? ' and evidence' : ''} →</Button> : null}
+      {sourceFocus ? <Button size="sm" variant="outline" disabled={loading || Boolean(resolveSourceDestination && (!sourceDestination || sourceDestination.kind === 'unavailable'))} onClick={() => onOpenSource(sourceFocus)}>{sourceDestination?.label || (sourceFocus.sectionLocal ? 'Section source unavailable' : `Open selected object’s exact source${selected.layer === 'evidence' ? ' and evidence' : ''} →`)}</Button> : null}
     </>}
     <div className="intelligence-graph__member-actions">
       {afterEdgeKey ? <Button size="sm" variant="outline" disabled={loading} onClick={() => focusThen(() => onPage(''))}>First relationship page</Button> : null}

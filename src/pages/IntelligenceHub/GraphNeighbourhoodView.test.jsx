@@ -6,6 +6,19 @@ import { buildGraphViewModel, readGraphInspection, writeGraphInspection, graphSo
 import { graphNeighbourhoodFixture } from '../../test/graphNeighbourhoodFixture.js'
 const makeRead = options => { const graph = graphNeighbourhoodFixture(options).graph, model = buildGraphViewModel(graph); return { graph, page: graph.neighbourhood, model, selected: model.nodes[0] } }
 describe('bounded selected connections', () => {
+  it.each(['review', 'context'])('names the owning section %s destination without claiming isolated source detail', async view => {
+    const onOpenSource = vi.fn(), label = view === 'review' ? 'Open section evidence review →' : 'Open supporting files →'
+    render(<GraphNeighbourhoodView read={makeRead()} onOpenSource={onOpenSource} onRetry={vi.fn()} resolveSourceDestination={() => ({ kind: 'section', label })} />)
+    await userEvent.click(screen.getByRole('button', { name: label }))
+    expect(onOpenSource).toHaveBeenCalledWith({ sourceId: 'recorded-source' })
+    expect(screen.queryByRole('button', { name: /exact source/ })).not.toBeInTheDocument()
+  })
+  it('disables unavailable local ownership rather than offering a global source command', async () => {
+    const onOpenSource = vi.fn()
+    render(<GraphNeighbourhoodView read={makeRead()} onOpenSource={onOpenSource} onRetry={vi.fn()} resolveSourceDestination={() => ({ kind: 'unavailable', label: 'Section source unavailable' })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Section source unavailable' }))
+    expect(onOpenSource).not.toHaveBeenCalled()
+  })
   it('navigates an exact external identity and focuses the stable inspection region', async () => {
     const onInspect = vi.fn(), onOpenSource = vi.fn()
     render(<GraphNeighbourhoodView read={makeRead()} onInspect={onInspect} onOpenSource={onOpenSource} onRetry={vi.fn()} />)

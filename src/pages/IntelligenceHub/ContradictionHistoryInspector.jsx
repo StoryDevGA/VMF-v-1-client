@@ -6,7 +6,7 @@ import { getSessionRevision } from '../../utils/tokenStorage.js'
 import { displayHubToken } from './intelligenceHubModel.js'
 import { readContradictionHistory } from './contradictionHistoryModel.js'
 
-function HistoryContent({ scope, findingId, onClose }) {
+function HistoryContent({ scope, findingId, onClose, compact = false }) {
   const [page, setPage] = useState(1)
   const read = useGetRuntimeStateContradictionHistoryQuery({ ...scope, findingId, page, pageSize: 10 }, { refetchOnMountOrArgChange: true })
   const busy = Boolean(read.isLoading || read.isFetching)
@@ -22,7 +22,7 @@ function HistoryContent({ scope, findingId, onClose }) {
   const refresh = () => { if (owned() && !read.isUninitialized) { content.current?.focus(); read.refetch() } }
   const changePage = next => { if (owned() && model?.available && Math.abs(next - page) === 1 && next >= 1 && next <= model.totalPages) { content.current?.focus(); setPage(next) } }
   return <>
-    <Dialog.Header><h2>Recorded contradiction decisions</h2><Button size="sm" variant="outline" onClick={onClose}>Close decisions</Button></Dialog.Header>
+    <Dialog.Header><h2>Recorded contradiction decisions</h2>{!compact ? <Button size="sm" variant="outline" onClick={onClose}>Close decisions</Button> : null}</Dialog.Header>
     <Dialog.Body className="intelligence-quality__history-body"><div className="intelligence-quality__history-content" ref={content} role="region" aria-label="Recorded decision history" tabIndex={0}>
       <p>{findingId}</p><p>Historical records in reverse recorded order. Inspect the current finding to establish its present disposition. Audit references and recalculation history are unavailable here.</p>
       {busy ? <p role="status">Loading recorded decisions…</p> : !model ? <p role="alert">Recorded decisions unavailable. Refresh to verify the exact scope and current read.</p>
@@ -40,7 +40,7 @@ function HistoryContent({ scope, findingId, onClose }) {
   </>
 }
 
-export default function ContradictionHistoryInspector({ scope, findingId, disabled }) {
+export default function ContradictionHistoryInspector({ scope, findingId, disabled, compact = false }) {
   const [open, setOpen] = useState(false)
   const frame = useRef(null)
   const opener = useRef(null)
@@ -56,7 +56,7 @@ export default function ContradictionHistoryInspector({ scope, findingId, disabl
   }, [open, owner, disabled, scope])
   const close = () => { if (owned()) { restoreFocus.current = true; setOpen(false) } }
   return <><Button size="sm" variant="ghost" className="intelligence-quality__text-action" disabled={disabled || !scope} onClick={event => { if (owned()) { opener.current = event.currentTarget; setOpen(true) } }}>View recorded decisions</Button>
-    {open && !disabled && scope ? <Dialog open onClose={close} size="lg" className="intelligence-quality__dialog" showCloseButton={false} aria-label="Recorded contradiction decisions">
-      <HistoryContent scope={scope} findingId={findingId} onClose={close} />
+    {open && !disabled && scope ? <Dialog open onClose={close} size="lg" className={compact ? 'intelligence-hub__dialog intelligence-hub__inspection-dialog intelligence-hub__review-inspection intelligence-hub__review-history' : 'intelligence-quality__dialog'} showCloseButton={compact} aria-label="Recorded contradiction decisions">
+      <HistoryContent scope={scope} findingId={findingId} onClose={close} compact={compact} />
     </Dialog> : null}</>
 }

@@ -52,6 +52,7 @@ export const buildWorkspaceCapabilityCards = ({
   discovery,
   discoveryHealth,
   evidenceDetail = null,
+  intelligenceInventory,
   sections = [],
   sectionsAvailable = false,
   loading = false,
@@ -64,13 +65,17 @@ export const buildWorkspaceCapabilityCards = ({
     workspaceRuntimeInstanceId,
     selectedRevisionId,
   )
-  const sourceCount = readProjectedCount(
+  const sourceCount = intelligenceInventory !== undefined
+    ? readCount(intelligenceInventory?.sources?.readCount)
+    : readProjectedCount(
     discovery?.sourceRegistrySummary?.count,
     evidenceDetail?.sourceRegistrySummary?.count,
     discovery?.lineageSummary?.sourceCount,
     readiness.sourceCount,
   )
-  const evidenceSummaryCount = readProjectedCount(
+  const evidenceSummaryCount = intelligenceInventory !== undefined
+    ? readCount(intelligenceInventory?.evidence?.readCount)
+    : readProjectedCount(
     discovery?.evidenceObjectSummary?.evidenceObjectCount,
     evidenceDetail?.evidenceObjectSummary?.evidenceObjectCount,
     evidenceDetail?.evidence?.reviewSummary?.evidenceObjectCount,
