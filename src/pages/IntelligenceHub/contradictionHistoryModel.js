@@ -37,6 +37,8 @@ export function readContradictionHistory({ response, scope, findingId, page, loa
     || history.totalPages !== Math.max(1, Math.ceil(history.total / 10))
     || history.records.length !== Math.min(10, Math.max(0, history.total - (page - 1) * 10))
     || new Set(history.records.map(row => row?.reviewId)).size !== history.records.length
-    || history.records.some(row => !isRecordedContradictionReview(row, control.id, findingId))) return null
-  return { available: true, total: history.total, totalPages: history.totalPages, records: history.records, readAt: value.readAt }
+    || history.records.some(row => row?.runtimeInstanceId !== control.id && !/^[a-f0-9]{24}$/.test(row?.runtimeInstanceId || '')
+      || !isRecordedContradictionReview(row, row.runtimeInstanceId, findingId))) return null
+  return { available: true, total: history.total, totalPages: history.totalPages, records: history.records,
+    currentRuntimeId: control.id, readAt: value.readAt }
 }

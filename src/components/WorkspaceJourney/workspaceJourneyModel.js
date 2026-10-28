@@ -9,6 +9,31 @@ const asRecord = (value) => (
 
 const formatCount = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`
 
+export const getWorkspaceJourneyCompletion = ({ response, runtime, scope, loading, error, discovery }) => {
+  const unavailable = { status: 'Unavailable', detail: '', state: 'unknown' }
+  if (loading) return { ...unavailable, status: 'Checking review' }
+  if (error || !runtime) return unavailable
+  if (!response) return getWorkspaceJourneyReviewSummary(discovery)
+  const record = response.data ?? response
+  const identity = record.scope ?? {}
+  const ids = [identity.runtimeInstanceId, identity.runtimeInstanceKey].filter(Boolean)
+  if (record.available === false || !ids.includes(scope.runtimeInstanceId)
+    || identity.customerId !== scope.customerId || identity.tenantId !== scope.tenantId
+    || !runtime.stateVersion || record.stateVersion !== runtime.stateVersion
+    || !runtime.updatedAt || record.runtimeUpdatedAt !== runtime.updatedAt) return unavailable
+  const population = record.population
+  const receipt = record.latestReceipt
+  if (record.contractVersion === 'intelligence-review-completion.v1'
+    && population?.completeness === 'COMPLETE' && population.complete === true
+    && population.evidenceCount > 0 && population.pendingEvidence === 0
+    && population.pendingFindings === 0 && population.confirmedReadinessBlockers === 0
+    && receipt?.receiptId && receipt.currency === 'CURRENT'
+    && population.hash && receipt.populationHash === population.hash) {
+    return { status: 'Review complete', detail: 'Current disposition receipt verified. Draft readiness is checked separately.', state: 'complete' }
+  }
+  return { status: 'Review needed', detail: 'A current completion receipt is required.', state: 'attention' }
+}
+
 export const getWorkspaceJourneyReviewSummary = (discovery = null) => {
   const discoveryRecord = asRecord(discovery)
   if (Object.keys(discoveryRecord).length === 0) {

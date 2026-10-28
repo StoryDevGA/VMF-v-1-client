@@ -24,6 +24,25 @@ beforeEach(() => {
   reads.detail = { currentData: { data: structuredClone(run) } }
 })
 describe('recorded acquisition Runs', () => {
+  it('renders recovered unknown extraction without claiming zero extracted evidence', () => {
+    reads.detail.currentData.data.reason = 'STOPPED_WORKER_RECOVERY'
+    reads.detail.currentData.data.outcomes[0].reason = 'ORIGINAL_EXTRACTION_OUTCOME_UNCONFIRMED'
+    mount({}, `/app/intelligence?acquisitionRunId=${runId}`)
+    expect(screen.getByText(/Original extraction outcome unconfirmed. No evidence was saved/)).toBeVisible()
+    expect(screen.queryByText(/0 evidence objects/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Prepare explicit retry of this Run' })).toBeEnabled()
+  })
+  it.each(['missing reason', 'mixed', 'count', 'saved'])('rejects malformed recovery %s', kind => {
+    const value = reads.detail.currentData.data
+    value.reason = 'STOPPED_WORKER_RECOVERY'; value.outcomes[0].reason = 'ORIGINAL_EXTRACTION_OUTCOME_UNCONFIRMED'
+    if (kind === 'missing reason') delete value.reason
+    if (kind === 'mixed') delete value.outcomes[0].reason
+    if (kind === 'count') value.outcomes[0].evidenceObjectCount = 1
+    if (kind === 'saved') { value.canonicalSaved = true; value.outputStateVersion = 'rsv2:fake'; value.audit.saveId = 'fake' }
+    mount({}, `/app/intelligence?acquisitionRunId=${runId}`)
+    expect(screen.getByText('Exact Run receipt unavailable in this revision. Refresh or inspect another recorded Run.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Prepare explicit retry of this Run' })).not.toBeInTheDocument()
+  })
   it('refreshes the unavailable exact selected receipt while preserving scope and selected Run', async () => {
     reads.detail = { error: { status: 503 } }
     mount({}, `/app/intelligence?view=context&acquisitionRunId=${runId}`)

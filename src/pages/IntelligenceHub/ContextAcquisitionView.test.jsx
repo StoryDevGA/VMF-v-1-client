@@ -22,11 +22,111 @@ const receiptFor = (requestKey, overrides = {}) => ({ contractVersion: 'acquisit
   basisStateVersion: 'rsv2:basis', outputStateVersion: 'rsv2:recorded', outcomes: [{ kind: 'BRIEF', inputIndex: 0, status: 'SUCCEEDED', evidenceObjectCount: 0 }],
   audit: { admissionId: 'audit-a', startId: 'audit-b', terminalId: 'audit-c',
     ...(overrides.canonicalSaved !== false ? { saveId: 'audit-save' } : {}) }, ...overrides })
+
+describe('document-only Context acquisition', () => {
+  it('submits a prepared DOCX without a website fetch and clears staged files after saving', async () => {
+    const user = userEvent.setup(), props = base()
+    render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await user.click(screen.getByText('Connected websites', { exact: true }))
+    await user.clear(screen.getByLabelText('Website URL 1'))
+    const acquire = screen.getByRole('button', { name: 'Acquire new evidence' })
+    expect(acquire).toBeDisabled()
+    await user.upload(screen.getByLabelText(/Select documents/), new File(['synthetic'], 'controlled.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }))
+    await screen.findByText(/controlled.docx.*Staged locally/)
+    expect(acquire).toBeEnabled()
+    await user.click(acquire)
+    await waitFor(() => expect(calls.update).toHaveBeenCalledTimes(1))
+    const request = calls.update.mock.calls[0][0]
+    expect(request.body.inputs.companyWebsite).toBe(inputValues.companyWebsite)
+    expect(request.body.inputs).not.toHaveProperty('websiteSources')
+    expect(request.body.acquisitionProfile).toBe('STANDARD')
+    expect(request.body.expectedUpdatedAt).toBe(stamp)
+    expect(request.body.documentSources).toHaveLength(1)
+    expect(request.body.documentSources[0].fileName).toBe('controlled.docx')
+    await waitFor(() => expect(screen.getByText(/0 of 5 files staged/)).toBeVisible())
+    expect(calls.execute).not.toHaveBeenCalled()
+  })
+  it('restores the website requirement after removing the final prepared file', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+    await user.click(screen.getByText('Connected websites', { exact: true }))
+    await user.clear(screen.getByLabelText('Website URL 1'))
+    await user.upload(screen.getByLabelText(/Select documents/), new File(['synthetic'], 'controlled.docx'))
+    await screen.findByText(/controlled.docx.*Staged locally/)
+    await user.click(screen.getByRole('button', { name: 'Remove staged document 1: controlled.docx' }))
+    expect(screen.getByRole('button', { name: 'Acquire new evidence' })).toBeDisabled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it.each(['locked', 'authority', 'stale', 'missing company'])('keeps prepared DOCX acquisition blocked for %s', async kind => {
+    const user = userEvent.setup(), props = base()
+    if (kind === 'missing company') props.discovery.inputValues = { ...inputValues, companyName: '' }
+    const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await user.click(screen.getByText('Connected websites', { exact: true }))
+    await user.clear(screen.getByLabelText('Website URL 1'))
+    await user.upload(screen.getByLabelText(/Select documents/), new File(['synthetic'], 'controlled.docx'))
+    await screen.findByText(/controlled.docx.*Staged locally/)
+    if (kind === 'locked') props.locked = true
+    if (kind === 'authority') props.authority = { ...props.authority, canAcquire: false }
+    if (kind === 'stale') props.renderer = { ...props.renderer, runtimeInstance: { updatedAt: '2026-10-04T11:00:00.000Z' } }
+    view.rerender(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    expect(screen.getByRole('button', { name: 'Acquire new evidence' })).toBeDisabled()
+    expect(calls.update).not.toHaveBeenCalled()
+    expect(calls.execute).not.toHaveBeenCalled()
+  })
+})
 beforeEach(() => { vi.restoreAllMocks(); calls.execute.mockReset(); calls.update.mockReset();
   const respond = args => ({ unwrap: () => Promise.resolve({ acquisitionRun: receiptFor(args.body.requestKey) }) })
   calls.execute.mockImplementation(respond); calls.update.mockImplementation(respond)
 })
 describe('Context governed acquisition', () => {
+  it.each(['eligible', 'locked', 'loading', 'read-only', 'missing brief'])('keeps Research disabled and explains availability without acquisition for %s', async kind => {
+    const user = userEvent.setup(), props = base()
+    if (kind === 'locked') props.locked = true
+    if (kind === 'loading') props.loading = true
+    if (kind === 'read-only') props.authority = { canAcquire: false }
+    if (kind === 'missing brief') props.discovery = {}
+    render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    const checkbox = screen.getByRole('checkbox', { name: 'Research public information' })
+    expect(checkbox).toBeDisabled()
+    expect(checkbox).not.toBeChecked()
+    expect(checkbox).toHaveAccessibleDescription('Unavailable. Live public research and controlled replay remain on hold.')
+    await user.click(checkbox)
+    await user.click(screen.getByRole('button', { name: 'Research availability' }))
+    const dialog = screen.getByRole('dialog', { name: 'Research availability' })
+    expect(within(dialog).getByText(/Research settings cannot be saved/)).toBeVisible()
+    expect(within(dialog).getByText(/licensing, retention, regional and operating limits/)).toBeVisible()
+    expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Run history test boundary')).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: /start|save|apply/i })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Context' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Research availability' })).toHaveFocus()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('returns Research availability focus on native Escape and closes on departure, scope and session replacement', async () => {
+    const user = userEvent.setup(), props = base()
+    const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    const open = () => user.click(screen.getByRole('button', { name: 'Research availability' }))
+    await open()
+    fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: true, cancelable: true }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Research availability' })).toHaveFocus()
+    await open()
+    view.rerender(<MemoryRouter><ContextAcquisitionView {...props} active={false} /></MemoryRouter>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    view.rerender(<MemoryRouter><ContextAcquisitionView {...props} active /></MemoryRouter>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await open()
+    view.rerender(<MemoryRouter><ContextAcquisitionView {...props} contextKey="scope-2" /></MemoryRouter>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await open()
+    act(() => clearTokens())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
   it('keeps the default brief compact and preserves edits through disclosure without submitting acquisition', async () => {
     const user = userEvent.setup()
     const { container } = render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)

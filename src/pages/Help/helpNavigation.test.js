@@ -25,6 +25,15 @@ describe('fixed scoped Help navigation', () => {
     expect(getHelpReturnHref('?runtimeInstanceId=root&revisionId=r3&helpReturnRoute=' + encodeURIComponent(route) + '&helpReturnView=context')).toBeNull()
   })
   it.each(['', '?helpReturnRoute=hub&helpReturnView=context', '?runtimeInstanceId=root&revisionId=r3&helpReturnRoute=hub&helpReturnView=unknown', '?runtimeInstanceId=root&revisionId=r3&helpReturnRoute=quality&helpReturnView=context'])('withholds unverified return shape %s', search => expect(getHelpReturnHref(search)).toBeNull())
+  it.each(['outcome-studio', 'outcome-studio-readiness'])('selects existing %s without losing scope or inventing a return route', slug => {
+    const url = new URL(getHelpArticleHref('?runtimeInstanceId=root&revisionId=r3&customerId=c&tenantId=t', slug), 'http://localhost')
+    expect(url.searchParams.get('article')).toBe(slug)
+    expect(url.searchParams.get('runtimeInstanceId')).toBe('root')
+    expect(url.searchParams.get('revisionId')).toBe('r3')
+    expect(url.searchParams.get('customerId')).toBe('c')
+    expect(url.searchParams.get('tenantId')).toBe('t')
+    expect(getHelpReturnHref(url.search)).toBeNull()
+  })
   it('preserves workflow params while recovering from unknown article', () => {
     expect(getHelpArticleHref('?article=unknown&revisionId=r3&sourceId=s1&context=original','../secret')).toBe('/help?revisionId=r3&sourceId=s1&context=original#context-help')
   })

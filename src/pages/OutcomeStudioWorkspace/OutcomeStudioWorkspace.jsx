@@ -44,7 +44,6 @@ import {
   useLazyGetRuntimeOutcomeDraftPreviewQuery,
   usePublishRuntimeOutcomeAssetMutation,
   useRenderRuntimeOutcomeAssetMutation,
-  useReviseRuntimeOutcomeAssetMutation,
   useSubmitRuntimeOutcomeMessageMutation,
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
 } from '../../store/api/runtimeInstanceApi.js'
@@ -55,6 +54,9 @@ import {
   getOutcomeStudioReturnTarget,
 } from '../../utils/runtimeWorkspace.js'
 import './OutcomeStudioWorkspace.css'
+import DuplicateOutcomeDialog from './DuplicateOutcomeDialog.jsx'
+import ControlledOutcomePanel from './ControlledOutcomePanel.jsx'
+import { controlledOutcomeRuntimeId } from './controlledOutcomeModel.js'
 
 const EMPTY_ARRAY = Object.freeze([])
 const DOWNLOAD_CLEANUP_DELAY_MS = 1000
@@ -143,6 +145,16 @@ const isValidPlanningResponse = (result, action) => {
   )
   if (!String(result?.continuation || '').trim() || !String(result?.requestId || '').trim() || !validExecution) return false
   if (['CONFIRM', 'RETRIEVE'].includes(action) && status !== 'SAVED') return false
+
+  if (status === 'BLOCKED') {
+    return ['ANSWER', 'RE_RESOLVE'].includes(action) && executionStatus === 'BLOCKED'
+      && result.execution.canExecute === false && (result.plan === undefined || result.plan === null)
+      && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(result.requestId)
+      && typeof result.continuation === 'string' && result.continuation.length <= 32768
+      && Array.isArray(result.blockers) && result.blockers.length > 0 && result.blockers.length <= 20
+      && new Set(result.blockers).size === result.blockers.length
+      && result.blockers.every((code) => typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,95}$/.test(code))
+  }
 
   if (status === 'CLARIFICATION_REQUIRED') {
     return executionStatus === 'BLOCKED' && Boolean(String(result.question || '').trim())
@@ -359,7 +371,22 @@ const evidenceReadinessReview = (evidence) => String(evidence.clarification?.fir
   ? 'The governed evidence snapshot could not be read completely. Section sufficiency has not been assessed. Ask a workspace administrator to review evidence readiness before re-resolving this request.'
   : 'The governed evidence and output bindings could not be verified for generation. Ask a workspace administrator to review readiness before re-resolving this request.'
 
+const blockedPlanningReason = (code) => {
+  if (code === 'NO_ELIGIBLE_OUTPUT_CONTRACT') return 'No active compatible output contract is available. Ask a workspace administrator to review the configuration before checking this request again.'
+  const layer = /^REQUESTED_(AUDIENCE|CHANNEL|STYLE|LANGUAGE|VISUAL_SYSTEM|INDUSTRY)_(UNAVAILABLE|AMBIGUOUS)$/.exec(code)
+  if (layer) {
+    const labels = { AUDIENCE: 'audience', CHANNEL: 'channel', STYLE: 'style', LANGUAGE: 'language', VISUAL_SYSTEM: 'visual', INDUSTRY: 'industry' }
+    return `The requested ${labels[layer[1]]} guidance is ${layer[2] === 'UNAVAILABLE' ? 'unavailable' : 'ambiguous'}. Review this selection with a workspace administrator before checking this request again.`
+  }
+  return 'Planning is unavailable until the governed output contract and evidence bindings can be resolved. Review readiness before checking this request again.'
+}
+const blockedPlanningQuestions = new Set(['What outcome should this output achieve?', 'What decision should this output support?',
+  'Who will use this output?', 'Who is the audience? Separate multiple audiences with a semicolon.',
+  'What output format do you want?', 'What is the delivery channel? Reply skip if unspecified.',
+  'What additional requirements apply? Separate them with a semicolon, or reply skip.', 'Which output type do you want? Use its name.'])
+
 const preciseGenerationBlocker = ({ clarificationPassed = true, informationCurrent, planning, readiness, studio }) => {
+  if (token(planning?.status) === 'BLOCKED') return blockedPlanningReason(planning.blockers?.[0])
   const evidence = planning?.plan?.evidenceToMeaning || planning?.evidenceToMeaning
   if (evidence?.clarification?.required) return assessedSectionDeficit(evidence)
     ? 'Required sections need supporting evidence before a draft can be generated. Review the evidence readiness below, then re-resolve this request.'
@@ -806,9 +833,14 @@ export function EvidenceReadiness({ evidence, currentSnapshot }) {
   </section>
 }
 
-function OutcomeStudioWorkspace() {
+function CustomerOutcomeStudioWorkspace() {
   const { runtimeInstanceId = '' } = useParams()
   const location = useLocation()
+  const sessionSelections = new URLSearchParams(location.search).getAll('sessionId')
+  const explicitSessionSelected = sessionSelections.length > 0
+  const explicitSessionId = sessionSelections.length === 1 && /^[A-Za-z0-9_-]{1,160}$/.test(sessionSelections[0])
+    ? sessionSelections[0] : ''
+  const sessionSelectionKey = JSON.stringify(sessionSelections)
   const navigate = useNavigate()
   const { addToast } = useToaster()
   const { customerId, tenantId } = useTenantContext()
@@ -820,9 +852,10 @@ function OutcomeStudioWorkspace() {
   const [activeTab, setActiveTab] = useState(0)
   const [prompt, setPrompt] = useState('')
   const [planning, setPlanning] = useState(null)
+  const [planningOriginalRequest, setPlanningOriginalRequest] = useState('')
   const [planningBusy, setPlanningBusy] = useState(false)
   const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
-  const planningScopeKey = `${runtimeInstanceId}:${customerId}:${tenantId}:${sessionRevision}`
+  const planningScopeKey = `${runtimeInstanceId}:${customerId}:${tenantId}:${sessionRevision}:${sessionSelectionKey}`
   const planningSequence = useRef(0)
   const planningBusyRef = useRef(false)
   const planningRegionRef = useRef(null)
@@ -833,7 +866,8 @@ function OutcomeStudioWorkspace() {
   useEffect(() => {
     planningSequence.current += 1
     planningBusyRef.current = false
-    setPlanning(null); setPlanningBusy(false); setPrompt(''); setComposerError('')
+    setPlanning(null); setPlanningOriginalRequest(''); setPlanningBusy(false); setPrompt(''); setComposerError(''); setPendingDuplicate(null)
+    setPendingDiscard(null); setSelectedAssetId(''); setUncertainPrompt('')
     return () => { planningSequence.current += 1 }
   }, [planningScopeKey])
 
@@ -844,6 +878,7 @@ function OutcomeStudioWorkspace() {
   const [uncertainPrompt, setUncertainPrompt] = useState('')
   const [requestSubmitting, setRequestSubmitting] = useState(false)
   const [pendingDiscard, setPendingDiscard] = useState(null)
+  const [pendingDuplicate, setPendingDuplicate] = useState(null)
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [selectedDraftId, setSelectedDraftId] = useState('')
   const [selectedDraftPreview, setSelectedDraftPreview] = useState(null)
@@ -871,19 +906,24 @@ function OutcomeStudioWorkspace() {
     [dedicatedReadiness, studio?.readiness],
   )
   const activeSession = activeSessionFrom(studio)
-  const activeSessionId = sessionIdOf(activeSession)
+  const queriedSessionId = explicitSessionSelected ? explicitSessionId : sessionIdOf(activeSession)
   const sessionQuery = useGetRuntimeOutcomeSessionQuery(
-    { ...runtimeScope, sessionId: activeSessionId },
-    { skip: !runtimeScopeReady || !activeSessionId },
+    { ...runtimeScope, sessionId: queriedSessionId },
+    { skip: !runtimeScopeReady || !queriedSessionId },
   )
-  const session = payload(sessionQuery.data) || activeSession
+  const exactSelectedSession = payload(sessionQuery.currentData)
+  const selectedSessionVerified = Boolean(explicitSessionId && !sessionQuery.isLoading && !sessionQuery.isFetching
+    && !sessionQuery.error && sessionIdOf(exactSelectedSession) === explicitSessionId)
+  const sessionSelectionBlocked = explicitSessionSelected && !selectedSessionVerified
+  const session = explicitSessionSelected ? (selectedSessionVerified ? exactSelectedSession : null)
+    : payload(sessionQuery.data) || activeSession
+  const activeSessionId = explicitSessionSelected ? (selectedSessionVerified ? explicitSessionId : '') : queriedSessionId
 
   const [generateResponse] = useGenerateRuntimeOutcomeResponseMutation()
   const [submitMessage, submitState] = useSubmitRuntimeOutcomeMessageMutation()
   const [loadSessionForReconciliation] = useLazyGetRuntimeOutcomeSessionQuery()
   const [updateTruth, updateTruthState] = useUpdateRuntimeOutcomeSessionFromLatestTruthMutation()
   const [approveDraft] = useApproveRuntimeOutcomeDraftMutation()
-  const [reviseAsset] = useReviseRuntimeOutcomeAssetMutation()
   const [discardDraft, discardState] = useDiscardRuntimeOutcomeDraftMutation()
   const [publishAsset] = usePublishRuntimeOutcomeAssetMutation()
   const [renderAsset] = useRenderRuntimeOutcomeAssetMutation()
@@ -918,7 +958,7 @@ function OutcomeStudioWorkspace() {
   )
   const assets = Array.isArray(session?.assets)
     ? session.assets
-    : Array.isArray(studio?.assets) ? studio.assets : EMPTY_ARRAY
+    : !explicitSessionSelected && Array.isArray(studio?.assets) ? studio.assets : EMPTY_ARRAY
   const selectedAsset = assets.find((asset) => assetIdOf(asset) === selectedAssetId) || null
   const selectedAssetDetail = payload(assetDetailState.data)
   const selectedPreview = payload(assetPreviewState.data)
@@ -936,7 +976,7 @@ function OutcomeStudioWorkspace() {
       }
     : null
   const information = studio?.information || studio?.truthBinding?.truthSignature || {}
-  const isSessionInformationCurrent = !activeSessionId || isInformationCurrent(session)
+  const isSessionInformationCurrent = !sessionSelectionBlocked && (!activeSessionId || isInformationCurrent(session))
   const draftRows = useMemo(
     () => buildDraftRows(drafts, { sessionInformationCurrent: isSessionInformationCurrent }),
     [drafts, isSessionInformationCurrent],
@@ -948,6 +988,7 @@ function OutcomeStudioWorkspace() {
   const unavailableDraftCount = draftRows.length - readyDraftCount
   const conversationEnabled = studio?.conversation?.enabled === true && isSessionInformationCurrent
   const revisionMode = Boolean(selectedDraftRow && !planning)
+  const planningBlocked = token(planning?.status) === 'BLOCKED'
   const clarificationPassed = Boolean(exactClarificationReceipt({
     planning,
     session,
@@ -960,6 +1001,7 @@ function OutcomeStudioWorkspace() {
     && dedicatedReadiness?.canReason === true
     && dedicatedReadiness?.safetyGates?.responseGenerationAvailable === true
     && safetyChecksPassed(dedicatedReadiness)
+    && !planningBlocked
     && !(token(planning?.status) === 'SAVED' && token(planning?.execution?.status) === 'BLOCKED')
   )
   const generationBlockedReason = responseGenerationAvailable
@@ -1019,7 +1061,7 @@ function OutcomeStudioWorkspace() {
     setBusyKeys((current) => new Set(
       [...current].filter((key) => !key.startsWith('preview:')),
     ))
-  }, [activeSessionId])
+  }, [activeSessionId, planningScopeKey])
 
   useEffect(() => {
     if (
@@ -1081,7 +1123,8 @@ function OutcomeStudioWorkspace() {
 
 
   const handlePlanStep = async (action = 'ANSWER', savedPlanBinding = null) => {
-    if (planningBusyRef.current || !runtimeScopeReady) return
+    if (planningBusyRef.current || !runtimeScopeReady || sessionSelectionBlocked) return
+    if (planningBlocked && (action !== 'ANSWER' || !planningOriginalRequest)) return
     const sequence = ++planningSequence.current
     const scopeKey = planningScopeKey
     const revision = sessionRevision
@@ -1101,7 +1144,7 @@ function OutcomeStudioWorkspace() {
         if (!binding?.requestId || !binding?.planId) throw new Error('Saved request binding is unavailable')
         response = await retrievePlan({ ...runtimeScope, requestId: binding.requestId, planId: binding.planId }, false).unwrap()
       } else {
-        response = await planRequest({ ...runtimeScope, body: { prompt: normalizeRequestText(prompt), action,
+        response = await planRequest({ ...runtimeScope, body: { prompt: planningBlocked ? planningOriginalRequest : normalizeRequestText(prompt), action,
           ...(planning?.continuation ? { continuation: planning.continuation } : {}) } }).unwrap()
       }
       if (!stillCurrent()) return
@@ -1117,7 +1160,11 @@ function OutcomeStudioWorkspace() {
         if (!stillCurrent()) return
       }
       setPlanning(result)
-      if (consumesPrompt) setPrompt('')
+      if (token(result.status) === 'BLOCKED') {
+        const original = typeof result.intent?.originalRequest === 'string' && result.intent.originalRequest.trim()
+          ? result.intent.originalRequest : planningBlocked ? planningOriginalRequest : normalizeRequestText(prompt)
+        setPlanningOriginalRequest(original); setPrompt(original)
+      } else if (consumesPrompt) { setPlanningOriginalRequest(''); setPrompt('') }
     } catch (error) {
       if (stillCurrent()) setComposerError(failureMessage(error) || 'Planning is unavailable. Retry this exact step; no new request will be created.')
     } finally {
@@ -1261,7 +1308,7 @@ function OutcomeStudioWorkspace() {
   }
 
   const handleUpdateTruth = async () => {
-    if (!activeSessionId) return
+    if (!activeSessionId || sessionSelectionBlocked) return
     try {
       await updateTruth({ ...runtimeScope, sessionId: activeSessionId, body: {} }).unwrap()
       await refreshAfterMutation('Outcome Studio information updated.')
@@ -1291,7 +1338,7 @@ function OutcomeStudioWorkspace() {
 
   const handleDiscard = async () => {
     const draftId = draftIdOf(pendingDiscard)
-    if (!draftId || !pendingDiscard?.updatedAt) return
+    if (!activeSessionId || sessionSelectionBlocked || !draftId || !pendingDiscard?.updatedAt) return
     try {
       await discardDraft({
         ...runtimeScope,
@@ -1320,42 +1367,6 @@ function OutcomeStudioWorkspace() {
       loadAsset({ ...runtimeScope, outcomeAssetId }),
       loadPreview({ ...runtimeScope, outcomeAssetId }),
     ])
-  }
-
-  const handleReviseAsset = async (asset) => {
-    const outcomeAssetId = assetIdOf(asset)
-    if (
-      !activeSessionId
-      || !outcomeAssetId
-      || token(asset?.status) === 'PUBLISHED'
-    ) return false
-
-    const operationKey = `revise:${outcomeAssetId}`
-    setBusy(operationKey)
-    try {
-      const response = await reviseAsset({
-        ...runtimeScope,
-        sessionId: activeSessionId,
-        outcomeAssetId,
-        body: {},
-      }).unwrap()
-      const revised = payload(response)
-      const refreshed = await refreshAfterMutation(
-        'A new unapproved Working Draft was created from the approved baseline.',
-        { title: 'Revision ready' },
-      )
-      if (refreshed) {
-        setActiveTab(1)
-        const revisedDraftId = draftIdOf(revised?.draft)
-        if (revisedDraftId) setSelectedDraftId(revisedDraftId)
-      }
-      return refreshed
-    } catch (error) {
-      notify('Revision failed', failureMessage(error), 'error')
-      return false
-    } finally {
-      setBusy(operationKey, false)
-    }
   }
 
   const handlePreviewDraft = async (draftRow) => {
@@ -1807,6 +1818,11 @@ function OutcomeStudioWorkspace() {
                 <div><h2>Conversation</h2><p>Describe the business outcome and refine it over multiple requests.</p></div>
                 {activeSessionId ? <Status variant="success" size="sm" showIcon>Session active</Status> : <Status variant="neutral" size="sm">No active session</Status>}
               </div>
+              {sessionSelectionBlocked ? <div role="status" className="outcome-studio-workspace__notice">
+                {explicitSessionId && (sessionQuery.isLoading || sessionQuery.isFetching)
+                  ? 'Loading the selected session.'
+                  : 'The selected session is unavailable. Refresh the page to check this session.'}
+              </div> : null}
               {!isSessionInformationCurrent && activeSessionId ? (
                 <div className="outcome-studio-workspace__notice">
                   <Status variant="warning" size="sm" showIcon>Information out of date</Status>
@@ -1815,16 +1831,20 @@ function OutcomeStudioWorkspace() {
               ) : null}
               <div className="outcome-studio-workspace__composer">
                 <div ref={planningRegionRef} role="status" aria-live="polite" aria-atomic="true" tabIndex={-1}>
-                {planning ? <section aria-label="Request plan" className="outcome-studio-workspace__notice">
+                {planning ? <section aria-label={planningBlocked ? 'Blocked request planning' : 'Request plan'} className="outcome-studio-workspace__notice">
                   <div><Status variant={planning.status === 'SAVED' && token(planning.execution?.status) === 'READY' ? 'success' : 'warning'} size="sm">{planning.status === 'SAVED' ? 'Plan saved' : formatRuntimeTokenLabel(planning.status)}</Status>
-                    {planning.question ? <p>{planning.question}</p> : null}
-                    {planning.message ? <p>{planning.message}</p> : null}
+                    {planningBlocked ? <><h3>Request planning is blocked</h3><ul>{planning.blockers.map((code) => <li key={code}>{blockedPlanningReason(code)}</li>)}</ul>
+                      <p>This planning step has not saved a new plan or started draft generation. Resolve the reported planning boundary, then check the same request again. To change its instructions, start a revised request.</p>
+                      {!planning.intent?.originalRequest ? <p>Original request: {planningOriginalRequest}</p> : null}</> : null}
+                    {planning.question && (!planningBlocked || blockedPlanningQuestions.has(planning.question)) ? <p>{planning.question}</p> : null}
+                    {!planningBlocked && planning.message ? <p>{planning.message}</p> : null}
                     {planning.intent && typeof planning.intent === 'object' ? <dl>{planningIntentSummary(planning.intent).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatPlanningIntentValue(value)}</dd></div>)}</dl> : null}
                     {planning.plan ? <p>Plan version {planning.plan.planVersion}. Clarification receipt recorded.</p> : null}
                     {(planning.plan?.evidenceToMeaning || planning.evidenceToMeaning) ? <EvidenceReadiness evidence={planning.plan?.evidenceToMeaning || planning.evidenceToMeaning} currentSnapshot={planning.plan?.currentSnapshotReadiness} /> : null}
                     {planning.status === 'SAVED' && token(planning.execution?.status) === 'BLOCKED' ? <p>{preciseGenerationBlocker({ clarificationPassed, informationCurrent: isSessionInformationCurrent, planning, readiness: dedicatedReadiness, studio })}</p> : null}
                   </div>
-                  <ButtonGroup><Button variant="outline" disabled={planningBusy} onClick={() => { planningSequence.current += 1; setPlanning(null); setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button>
+                  <ButtonGroup><Button variant="outline" disabled={planningBusy || sessionSelectionBlocked} onClick={() => { planningSequence.current += 1; setPlanning(null); setSelectedDraftId(''); setPrompt(planningBlocked ? planningOriginalRequest : ''); setPlanningOriginalRequest(''); setComposerError(''); setUncertainPrompt('') }}>{planningBlocked ? 'Start a revised request' : 'New request'}</Button>
+                    {planningBlocked ? <Button variant="outline" loading={planningBusy} disabled={planningBusy || sessionSelectionBlocked || !planningOriginalRequest} onClick={() => handlePlanStep('ANSWER')}>Check planning again</Button> : null}
                     {planning.plan ? <Button variant="outline" disabled={planningBusy} onClick={() => handlePlanStep('RETRIEVE')}>Retrieve saved plan</Button> : null}
                   </ButtonGroup>
                 </section> : null}
@@ -1835,9 +1855,9 @@ function OutcomeStudioWorkspace() {
                   value={prompt}
                   rows={5}
                   maxLength={studio?.conversation?.requestMaxLength || 2000}
-                  disabled={planningBusy || requestSubmitting || (revisionMode && !conversationEnabled)}
+                  disabled={planningBlocked || sessionSelectionBlocked || planningBusy || requestSubmitting || (revisionMode && !conversationEnabled)}
                   error={composerError}
-                  helperText={revisionMode ? 'Describe the revision to the current working draft.' : planning?.status === 'CONFIRMATION_REQUIRED' ? 'Describe an amendment and apply it, or confirm the prefilled request plan. No output is generated.' : planning?.status === 'SAVED' ? 'To change this request, state the re-resolution reason below. Start a new request for an independent plan.' : 'Describe the output you want. We will ask only for required missing facts before you confirm a plan. No output is generated.'}
+                  helperText={planningBlocked ? 'The original request is preserved. Start a revised request to edit its instructions.' : revisionMode ? 'Describe the revision to the current working draft.' : planning?.status === 'CONFIRMATION_REQUIRED' ? 'Describe an amendment and apply it, or confirm the prefilled request plan. No output is generated.' : planning?.status === 'SAVED' ? 'To change this request, state the re-resolution reason below. Start a new request for an independent plan.' : 'Describe the output you want. We will ask only for required missing facts before you confirm a plan. No output is generated.'}
                   onChange={(event) => {
                     setPrompt(event.target.value)
                     setComposerError('')
@@ -1848,10 +1868,10 @@ function OutcomeStudioWorkspace() {
                 <ButtonGroup align="end" stackOnMobile fullWidthOnMobile>
                   {revisionMode ? <Button variant="outline" disabled={requestSubmitting} onClick={() => { setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button> : null}
                   {!revisionMode && planning?.status === 'CONFIRMATION_REQUIRED' ? <Button variant="outline" disabled={planningBusy || !prompt.trim()} onClick={() => handlePlanStep('RE_RESOLVE')}>Apply amendment</Button> : null}
-                  <Button
+                  {!planningBlocked ? <Button
                     loading={planningBusy || requestSubmitting || submitState.isLoading}
                     disabled={
-                      !runtimeScopeReady || (revisionMode
+                      sessionSelectionBlocked || !runtimeScopeReady || (revisionMode
                         ? !prompt.trim() || !conversationEnabled || normalizeRequestText(uncertainPrompt) === normalizeRequestText(prompt)
                         : planning?.status === 'CONFIRMATION_REQUIRED' ? Boolean(prompt.trim()) : !prompt.trim())
                     }
@@ -1859,7 +1879,7 @@ function OutcomeStudioWorkspace() {
                     onClick={revisionMode ? handleSubmit : () => handlePlanStep(planning?.status === 'CONFIRMATION_REQUIRED' ? 'CONFIRM' : planning?.status === 'SAVED' ? 'RE_RESOLVE' : 'ANSWER')}
                   >
                     {revisionMode ? 'Submit revision' : planning?.status === 'CONFIRMATION_REQUIRED' ? 'Confirm and save plan' : planning?.status === 'SAVED' ? 'Re-resolve request' : planning ? 'Continue planning' : 'Plan request'}
-                  </Button>
+                  </Button> : null}
                 </ButtonGroup>
               </div>
               {!planning && session?.requestPlan?.requestId && session?.requestPlan?.planId ? <Button
@@ -2007,7 +2027,7 @@ function OutcomeStudioWorkspace() {
                 const publishReason = distributionReason || (token(asset.status) === 'PUBLISHED' ? 'This output has already been published.' : '')
                 const reasonId = `outcome-output-reason-${assetId}`
                 const previewReasonId = `outcome-output-preview-reason-${assetId}`
-                return <li key={assetId}><div><h3>{asset.title || asset.outputTypeLabel || 'Approved output'}</h3><p>Version {asset.currentVersionNumber || 1} | Generated {formatDateTime(asset.generatedAt || asset.createdAt, 'Time unavailable')}</p><Status variant={statusVariant(asset.status)} size="sm">{formatRuntimeTokenLabel(asset.status || 'APPROVED')}</Status>{previewReason ? <p id={previewReasonId}>{previewReason}</p> : null}{publishReason && publishReason !== previewReason ? <p id={reasonId}>{publishReason}</p> : null}</div><ButtonGroup align="end"><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} disabled={Boolean(previewReason)} aria-describedby={previewReason ? previewReasonId : undefined} onClick={() => handleViewAsset(asset)}>Preview</Button>{token(asset.status) !== 'PUBLISHED' ? <Button variant="outline" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} loading={isBusy(`revise:${assetId}`)} disabled={!activeSessionId} onClick={() => handleReviseAsset(asset)}>Revise as working draft</Button> : null}<Button variant="outline" size="sm" leftIcon={<MdPublish aria-hidden="true" />} loading={isBusy(`publish:${assetId}`)} disabled={Boolean(publishReason)} aria-describedby={publishReason ? (publishReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handlePublish(asset)}>Publish</Button>{formats.map((descriptor) => { const format = typeof descriptor === 'string' ? descriptor : descriptor.format; const formatDescriptor = typeof descriptor === 'string' ? { format: descriptor } : descriptor; return <Button key={format} variant="outline" size="sm" leftIcon={<MdDownload aria-hidden="true" />} loading={isBusy(`export:${assetId}:${token(format)}`)} disabled={Boolean(distributionReason)} aria-describedby={distributionReason ? (distributionReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handleExport(asset, formatDescriptor)}>{formatDescriptor.label || formatRuntimeTokenLabel(format)}</Button> })}</ButtonGroup></li>
+                return <li key={assetId}><div><h3>{asset.title || asset.outputTypeLabel || 'Approved output'}</h3><p>Version {asset.currentVersionNumber || 1} | Generated {formatDateTime(asset.generatedAt || asset.createdAt, 'Time unavailable')}</p><Status variant={statusVariant(asset.status)} size="sm">{formatRuntimeTokenLabel(asset.status || 'APPROVED')}</Status>{previewReason ? <p id={previewReasonId}>{previewReason}</p> : null}{publishReason && publishReason !== previewReason ? <p id={reasonId}>{publishReason}</p> : null}</div><ButtonGroup align="end"><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} disabled={Boolean(previewReason)} aria-describedby={previewReason ? previewReasonId : undefined} onClick={() => handleViewAsset(asset)}>Preview</Button><Button className="outcome-studio-workspace__successor-action" variant="outline" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} disabled={!runtimeScopeReady || !assetId || !asset.currentVersionId} onClick={() => setPendingDuplicate(asset)}>Duplicate as Working Draft — Preserve this version</Button><Button variant="outline" size="sm" leftIcon={<MdPublish aria-hidden="true" />} loading={isBusy(`publish:${assetId}`)} disabled={Boolean(publishReason)} aria-describedby={publishReason ? (publishReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handlePublish(asset)}>Publish</Button>{formats.map((descriptor) => { const format = typeof descriptor === 'string' ? descriptor : descriptor.format; const formatDescriptor = typeof descriptor === 'string' ? { format: descriptor } : descriptor; return <Button key={format} variant="outline" size="sm" leftIcon={<MdDownload aria-hidden="true" />} loading={isBusy(`export:${assetId}:${token(format)}`)} disabled={Boolean(distributionReason)} aria-describedby={distributionReason ? (distributionReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handleExport(asset, formatDescriptor)}>{formatDescriptor.label || formatRuntimeTokenLabel(format)}</Button> })}</ButtonGroup></li>
               })}</ul> : <Status variant="neutral" size="sm">No approved outputs</Status>}
               {selectedAsset ? (
                 <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio generated body preview">
@@ -2033,6 +2053,7 @@ function OutcomeStudioWorkspace() {
         </TabView>
       </div>
 
+      {pendingDuplicate ? <DuplicateOutcomeDialog key={planningScopeKey} asset={pendingDuplicate} scope={runtimeScope} onClose={() => setPendingDuplicate(null)} onSaved={() => refreshAfterMutation('The governed successor Working Draft is saved. Review it before separate approval.', { title: 'Working Draft saved' })} /> : null}
       <Dialog open={Boolean(pendingDiscard)} onClose={() => !discardState.isLoading && setPendingDiscard(null)} closeOnBackdropClick={!discardState.isLoading} closeOnEscape={!discardState.isLoading} size="sm" aria-labelledby="discard-outcome-draft-title">
         <Dialog.Header><h2 id="discard-outcome-draft-title">Discard working draft?</h2></Dialog.Header>
         <Dialog.Body><p>The draft will leave active work but remain retained in governed history. This cannot be undone here.</p>{!pendingDiscard?.updatedAt ? <Status variant="error" size="sm" showIcon>The draft must be refreshed before it can be discarded.</Status> : null}</Dialog.Body>
@@ -2040,6 +2061,20 @@ function OutcomeStudioWorkspace() {
       </Dialog>
     </section>
   )
+}
+
+function OutcomeStudioWorkspace() {
+  const { runtimeInstanceId = '' } = useParams()
+  const { customerId, tenantId } = useTenantContext()
+  const navigate = useNavigate()
+  if (!controlledOutcomeRuntimeId(runtimeInstanceId)) return <CustomerOutcomeStudioWorkspace />
+  return <section className="outcome-studio-workspace">
+    <header className="outcome-studio-workspace__header"><div><h1>Outcome Studio · controlled test</h1>
+      <p>Native synthetic receipts, isolated from customer output approval and publication.</p></div>
+      <Button variant="outline" onClick={() => navigate(getOutcomeStudioReturnTarget(runtimeInstanceId))}>Execution Workspace</Button>
+    </header>
+    <ControlledOutcomePanel runtimeInstanceId={runtimeInstanceId} customerId={customerId} tenantId={tenantId} />
+  </section>
 }
 
 OutcomeStudioWorkspace.idOf = idOf

@@ -230,8 +230,12 @@ const formatDiscoveryRequiredContextList = (values = []) => {
   return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
 }
 
-const buildDiscoveryContextReadiness = (draftInputs = {}) => {
-  const rows = DISCOVERY_REQUIRED_CONTEXT_FIELDS.map((field) => ({
+const buildDiscoveryContextReadiness = (draftInputs = {}, { acquisitionProfile, documentCount } = {}) => {
+  const hasStandardDocuments = acquisitionProfile === 'STANDARD'
+    && Number.isSafeInteger(documentCount) && documentCount > 0 && documentCount <= DISCOVERY_DOCUMENT_MAX_COUNT
+  const rows = DISCOVERY_REQUIRED_CONTEXT_FIELDS
+    .filter((field) => field.key !== 'websiteSources' || !hasStandardDocuments)
+    .map((field) => ({
     key: field.key,
     label: field.label,
     complete: field.isComplete(draftInputs),

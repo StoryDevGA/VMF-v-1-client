@@ -14,6 +14,7 @@ import {
   useGenerateRuntimeOutcomeResponseMutation,
   useGetRuntimeOutcomeAssetRenderOutputsQuery,
   useGetRuntimeOutcomeStudioQuery,
+  useGetRuntimeSyntheticOutcomeRunQuery,
   useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
   useLazyExportRuntimeOutcomeAssetQuery,
@@ -29,6 +30,8 @@ import {
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
 } from '../../store/api/runtimeInstanceApi.js'
 import OutcomeStudioWorkspace from './OutcomeStudioWorkspace.jsx'
+
+vi.mock('./DuplicateOutcomeDialog.jsx', () => ({ default: ({ asset, scope, onClose }) => <div role="dialog" aria-label="Preserve selected version"><p>{asset.currentVersionId}</p><p>{scope.runtimeInstanceId}</p><button onClick={onClose}>Close duplicate</button></div> }))
 
 const testScope = vi.hoisted(() => ({ customerId: 'customer-001', tenantId: 'tenant-001' }))
 const authState = vi.hoisted(() => ({ revision: 0 }))
@@ -50,6 +53,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGenerateRuntimeOutcomeResponseMutation: vi.fn(),
   useGetRuntimeOutcomeAssetRenderOutputsQuery: vi.fn(),
   useGetRuntimeOutcomeStudioQuery: vi.fn(),
+  useGetRuntimeSyntheticOutcomeRunQuery: vi.fn(),
   useGetRuntimeOutcomeStudioReadinessQuery: vi.fn(),
   useGetRuntimeOutcomeSessionQuery: vi.fn(),
   useLazyExportRuntimeOutcomeAssetQuery: vi.fn(),
@@ -277,7 +281,8 @@ const session = {
 
 const RuntimeSwitch = () => {
   const navigate = useNavigate()
-  return <button onClick={() => navigate('/app/runtime/value-narrative-002/outcome-studio')}>Switch test runtime</button>
+  return <><button onClick={() => navigate('/app/runtime/value-narrative-002/outcome-studio')}>Switch test runtime</button>
+    <button onClick={() => navigate('/app/runtime/value-narrative-001/outcome-studio?sessionId=session-second')}>Switch test session</button></>
 }
 
 const makePage = (initialEntry = {
@@ -309,6 +314,14 @@ const makeMessage = (number) => ({
 })
 
 describe('OutcomeStudioWorkspace', () => {
+  it('isolates the controlled native route from customer conversation, approval and publication controls', () => {
+    renderPage('/app/runtime/6ad715c91f39fea112115875/outcome-studio')
+    expect(screen.getByRole('heading', { name: 'Outcome Studio · controlled test' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Controlled synthetic Outcome Studio run' })).toBeInTheDocument()
+    expect(useGetRuntimeOutcomeStudioQuery).not.toHaveBeenCalled()
+    expect(useGetRuntimeOutcomeStudioReadinessQuery).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /approve|publish|generate/i })).not.toBeInTheDocument()
+  })
   it('preserves present falsy identifiers while skipping only nullish fields', () => {
     expect(OutcomeStudioWorkspace.idOf({ messageId: 0, id: 'message-1' }, ['messageId', 'id'])).toBe('0')
     expect(OutcomeStudioWorkspace.idOf({ messageId: '', id: 'message-1' }, ['messageId', 'id'])).toBe('')
@@ -316,6 +329,7 @@ describe('OutcomeStudioWorkspace', () => {
   })
 
   beforeEach(() => {
+    useGetRuntimeSyntheticOutcomeRunQuery.mockReturnValue({ currentData: null, isFetching: false, isLoading: false, error: null })
     vi.clearAllMocks()
     Object.assign(testScope, { customerId: 'customer-001', tenantId: 'tenant-001' })
     authState.revision = 0
@@ -2339,21 +2353,26 @@ describe('OutcomeStudioWorkspace', () => {
     expect(approveDraft).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', sessionId: 'session-1', draftId: 'draft-1', body: {} })
 
     const outputs = screen.getByRole('region', { name: /approved outputs/i })
-    await user.click(within(outputs).getByRole('button', { name: 'Revise as working draft' }))
-    expect(reviseAsset).toHaveBeenCalledWith({
-      runtimeInstanceId: 'value-narrative-001',
-      customerId: 'customer-001',
-      tenantId: 'tenant-001',
-      sessionId: 'session-1',
-      outcomeAssetId: 'asset-1',
-      body: {},
-    })
+    await user.click(within(outputs).getByRole('button', { name: 'Duplicate as Working Draft — Preserve this version' }))
+    expect(screen.getByRole('dialog', { name: 'Preserve selected version' })).toHaveTextContent('version-1')
+    expect(reviseAsset).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Close duplicate' }))
     await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
     await user.click(within(outputs).getByRole('button', { name: 'Publish' }))
     expect(publishAsset).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', outcomeAssetId: 'asset-1', body: {} })
 
     fireEvent.click(screen.getByRole('button', { name: 'Execution Workspace' }))
     expect(screen.getByText('Execution Workspace Return')).toBeInTheDocument()
+  })
+
+  it('offers the governed duplicate action for a published version without calling legacy revision', async () => {
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: { ...studio, assets: [{ ...studio.assets[0], status: 'PUBLISHED' }] } }, refetch: refetchStudio })
+    const user = userEvent.setup(); renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
+    const action = screen.getByRole('button', { name: 'Duplicate as Working Draft — Preserve this version' })
+    expect(action).toBeEnabled(); await user.click(action)
+    expect(screen.getByRole('dialog', { name: 'Preserve selected version' })).toHaveTextContent('version-1')
+    expect(reviseAsset).not.toHaveBeenCalled()
   })
 
   it.each(['OUT_OF_DATE', 'OBSOLETE', 'UNKNOWN'])(
@@ -2729,5 +2748,227 @@ describe('OutcomeStudioWorkspace', () => {
     expect(renderAsset).toHaveBeenCalledWith(expect.objectContaining({ outcomeAssetId: 'asset-1', format: 'PDF' }))
     expect(exportAsset).not.toHaveBeenCalled()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('opens the exact nonlatest successor session and binds approval to that verified ID', async () => {
+    const selected = { ...session, sessionId: 'session-successor', assets: [], messages: [{ ...session.messages[0],
+      content: 'The exact successor request.' }], drafts: [{ ...session.drafts[0], title: 'Exact successor working draft' }] }
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({ data: { data: session }, currentData: { data: selected },
+      isLoading: false, isFetching: false, error: null, refetch: refetchSession })
+    const user = userEvent.setup()
+    renderPage('/app/runtime/value-narrative-001/outcome-studio?sessionId=session-successor')
+    expect(useGetRuntimeOutcomeSessionQuery).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeInstanceId: 'value-narrative-001', customerId: testScope.customerId, tenantId: testScope.tenantId,
+      sessionId: 'session-successor' }), { skip: false })
+    expect(screen.getByText('The exact successor request.')).toBeInTheDocument()
+    expect(screen.queryByText('Prepare the board narrative.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    expect(screen.getByText('Exact successor working draft')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Approve draft' }))
+    expect(approveDraft).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-successor', draftId: 'draft-1' }))
+    await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
+    expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Duplicate as Working Draft/ })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['pending', { isLoading: true, isFetching: true, currentData: { data: session } }],
+    ['rejected', { error: { status: 404, data: { error: { message: 'Session not found.' } } } }],
+    ['mismatched', { currentData: { data: session } }],
+    ['missing', { currentData: { data: null } }],
+    ['retained-only', {}],
+  ])('explicit selected session %s never falls back to latest session/assets or enables mutations', async (_name, state) => {
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({ data: { data: session }, isLoading: false, isFetching: false,
+      error: null, refetch: refetchSession, ...state })
+    const user = userEvent.setup()
+    renderPage('/app/runtime/value-narrative-001/outcome-studio?sessionId=session-successor')
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Plan request' })).toBeDisabled()
+    expect(screen.queryByText('Prepare the board narrative.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Generate draft' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    expect(screen.queryByRole('button', { name: 'Approve draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard draft' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
+    expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Duplicate as Working Draft/ })).not.toBeInTheDocument()
+    expect(approveDraft).not.toHaveBeenCalled(); expect(discardDraft).not.toHaveBeenCalled()
+    expect(generateResponse).not.toHaveBeenCalled(); expect(createSession).not.toHaveBeenCalled()
+  })
+
+  it.each(['sessionId=', 'sessionId=bad%2Fpath', 'sessionId=session-successor&sessionId=session-1'])('invalid explicit selection %s stays unavailable and skips lookup', (search) => {
+    renderPage(`/app/runtime/value-narrative-001/outcome-studio?${search}`)
+    expect(useGetRuntimeOutcomeSessionQuery).toHaveBeenCalledWith(expect.objectContaining({ sessionId: '' }), { skip: true })
+    expect(screen.getByText('The selected session is unavailable. Refresh the page to check this session.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Plan request' })).toBeDisabled()
+    expect(screen.queryByText('Prepare the board narrative.')).not.toBeInTheDocument()
+  })
+
+  it('session query navigation fences an in-flight draft preview and ignores late prior session data', async () => {
+    let resolvePreview
+    loadDraftPreview.mockReturnValue({ unwrap: () => new Promise((resolve) => { resolvePreview = resolve }) })
+    const selected = { ...session, sessionId: 'session-successor', assets: [] }
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({ data: { data: selected }, currentData: { data: selected },
+      isLoading: false, error: null, refetch: refetchSession })
+    const user = userEvent.setup()
+    renderPage('/app/runtime/value-narrative-001/outcome-studio?sessionId=session-successor')
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('button', { name: 'Switch test session' }))
+    expect(useGetRuntimeOutcomeSessionQuery).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: 'session-second' }), { skip: false })
+    await act(async () => resolvePreview({ data: { draftId: 'draft-1', draftIterationId: 'iteration-2',
+      previewAvailable: true, markdown: 'Late prior session preview.', sections: [] } }))
+    expect(screen.queryByText('Late prior session preview.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve draft' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toBeDisabled()
+    expect(screen.queryByText('Prepare the board narrative.')).not.toBeInTheDocument()
+  })
+
+  it('without an explicit selection retains the existing latest-session workflow', () => {
+    renderPage()
+    expect(useGetRuntimeOutcomeSessionQuery).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1' }), { skip: false })
+    expect(screen.getByText('Prepare the board narrative.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).not.toBeDisabled()
+  })
+
+  const blockedPlan = (overrides = {}) => planResult({ status: 'BLOCKED', question: '',
+    blockers: ['REQUESTED_AUDIENCE_UNAVAILABLE'], intent: confirmationIntent(), ...overrides })
+  const submitBlockedPlan = async (value = blockedPlan()) => {
+    planRequest.mockReturnValue(resolvedMutation({ data: value }))
+    renderPage()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Plan request' }))
+  }
+  it('accepts genuine nonexecutable BLOCKED planning without generic failure or session progression', async () => {
+    await submitBlockedPlan()
+    const panel = screen.getByRole('region', { name: 'Blocked request planning' })
+    expect(panel).toHaveTextContent('The requested audience guidance is unavailable.')
+    expect(panel).toHaveTextContent(exactParlonPrompt)
+    expect(screen.queryByText('Invalid planning response')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm and save plan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Re-resolve request' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue planning' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Generate draft' })).toBeDisabled()
+    expect(confirmPlan).not.toHaveBeenCalled(); assertNoExecution()
+    expect(planRequest).toHaveBeenCalledTimes(1)
+  })
+  it.each([
+    ['REQUESTED_AUDIENCE_AMBIGUOUS', 'audience guidance is ambiguous'],
+    ['REQUESTED_STYLE_UNAVAILABLE', 'style guidance is unavailable'],
+    ['REQUESTED_STYLE_AMBIGUOUS', 'style guidance is ambiguous'],
+    ['REQUESTED_VISUAL_SYSTEM_UNAVAILABLE', 'visual guidance is unavailable'],
+    ['REQUESTED_VISUAL_SYSTEM_AMBIGUOUS', 'visual guidance is ambiguous'],
+    ['REQUESTED_CHANNEL_UNAVAILABLE', 'channel guidance is unavailable'],
+    ['REQUESTED_LANGUAGE_AMBIGUOUS', 'language guidance is ambiguous'],
+    ['REQUESTED_INDUSTRY_UNAVAILABLE', 'industry guidance is unavailable'],
+    ['NO_ELIGIBLE_OUTPUT_CONTRACT', 'No active compatible output contract is available'],
+    ['KNOWLEDGE_COMPOSITION_BLOCKED', 'governed output contract and evidence bindings'],
+    ['FUTURE_VALID_BLOCKER_ID', 'governed output contract and evidence bindings'],
+  ])('safely maps blocker %s without displaying raw diagnostics', async (code, label) => {
+    await submitBlockedPlan(blockedPlan({ blockers: [code], message: 'private provider secret', question: 'Send private provider keys.',
+      compositionResolution: { private: 'hidden raw resolver' } }))
+    const panel = screen.getByRole('region', { name: 'Blocked request planning' })
+    expect(panel).toHaveTextContent(label)
+    expect(panel).not.toHaveTextContent(code)
+    expect(panel).not.toHaveTextContent('private provider')
+    expect(panel).not.toHaveTextContent('hidden raw resolver')
+    assertNoExecution()
+  })
+  it('shows only an actual fixed safe planning question and preserves submitted text when intent is unresolved', async () => {
+    await submitBlockedPlan(blockedPlan({ intent: {}, blockers: ['NO_ELIGIBLE_OUTPUT_CONTRACT'],
+      question: 'Which output type do you want? Use its name.' }))
+    expect(screen.getByRole('region', { name: 'Blocked request planning' })).toHaveTextContent('Which output type do you want? Use its name.')
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue(exactParlonPrompt)
+    assertNoExecution()
+  })
+  it.each([
+    { execution: { status: 'BLOCKED', canExecute: true } }, { execution: { status: 'READY', canExecute: false } },
+    { requestId: '' }, { requestId: 'not-an-id' }, { continuation: '' }, { continuation: { raw: 'not-sealed' } },
+    { continuation: 'x'.repeat(32769) }, { blockers: [] }, { blockers: 'REQUESTED_AUDIENCE_UNAVAILABLE' },
+    { blockers: ['unsafe private text'] }, { blockers: [{}] }, { blockers: ['X'.repeat(97)] },
+    { blockers: ['REQUESTED_AUDIENCE_UNAVAILABLE', 'REQUESTED_AUDIENCE_UNAVAILABLE'] },
+    { plan: { planId: 'forged-saved-plan', clarificationReceipt: clarificationReceipt() } },
+  ])('rejects malformed or executable BLOCKED payload %j', async (overrides) => {
+    await submitBlockedPlan(blockedPlan(overrides))
+    expect(screen.getByText('Invalid planning response')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Blocked request planning' })).not.toBeInTheDocument()
+    expect(confirmPlan).not.toHaveBeenCalled(); assertNoExecution()
+  })
+  it('explicit planning recheck preserves sealed continuation and frozen request with no automatic retry', async () => {
+    await submitBlockedPlan()
+    expect(planRequest).toHaveBeenCalledTimes(1)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check planning again' }))
+    expect(planRequest).toHaveBeenCalledTimes(2)
+    expect(planRequest.mock.calls[1][0].body).toEqual({ prompt: exactParlonPrompt, action: 'ANSWER', continuation: 'receipt-1' })
+    expect(screen.getByRole('region', { name: 'Blocked request planning' })).toBeInTheDocument()
+    expect(confirmPlan).not.toHaveBeenCalled(); assertNoExecution()
+  })
+  it('starting a revised request explicitly prefills the original and removes continuation only for the new flow', async () => {
+    await submitBlockedPlan()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Start a revised request' }))
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toBeEnabled()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue(exactParlonPrompt)
+    expect(planRequest).toHaveBeenCalledTimes(1)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: 'A deliberately revised request.' } })
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult() }))
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(planRequest.mock.calls[1][0].body).toEqual({ prompt: 'A deliberately revised request.', action: 'ANSWER' })
+    expect(confirmPlan).not.toHaveBeenCalled(); assertNoExecution()
+  })
+  it('normal BLOCKED cannot replace an expected confirmation or saved-plan retrieval', async () => {
+    const user = userEvent.setup()
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', question: '', intent: confirmationIntent() }) }))
+    confirmPlan.mockReturnValue(resolvedMutation({ data: blockedPlan() }))
+    renderPage()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm and save plan' }))
+    expect(screen.getByText('Invalid planning response')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Blocked request planning' })).not.toBeInTheDocument()
+    assertNoExecution()
+  })
+  it('normal BLOCKED cannot replace an expected saved-plan retrieval', async () => {
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({ data: { data: { ...session,
+      requestPlan: { requestId: planningRequestId, planId: 'saved-plan' } } },
+      isLoading: false, error: null, refetch: refetchSession })
+    retrievePlan.mockReturnValue(resolvedMutation({ data: blockedPlan() }))
+    renderPage()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retrieve saved plan' }))
+    expect(screen.getByText('Invalid planning response')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Blocked request planning' })).not.toBeInTheDocument()
+    assertNoExecution()
+  })
+  it('accepts BLOCKED from a valid prior confirmation amendment without re-resolving the blocked phase', async () => {
+    planRequest.mockReturnValueOnce(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED',
+      question: '', continuation: 'confirm-receipt', intent: confirmationIntent() }) }))
+      .mockReturnValueOnce(resolvedMutation({ data: blockedPlan({ continuation: 'blocked-amendment-receipt' }) }))
+    renderPage()
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: 'Use strategic-advisory-style.' } })
+    await user.click(screen.getByRole('button', { name: 'Apply amendment' }))
+    expect(screen.getByRole('region', { name: 'Blocked request planning' })).toBeInTheDocument()
+    expect(planRequest.mock.calls[1][0].body.action).toBe('RE_RESOLVE')
+    planRequest.mockReturnValue(resolvedMutation({ data: blockedPlan({ continuation: 'blocked-amendment-receipt' }) }))
+    await user.click(screen.getByRole('button', { name: 'Check planning again' }))
+    expect(planRequest.mock.calls[2][0].body).toEqual({ prompt: exactParlonPrompt, action: 'ANSWER', continuation: 'blocked-amendment-receipt' })
+    expect(confirmPlan).not.toHaveBeenCalled(); assertNoExecution()
+  })
+  it('query-session navigation discards a late blocked planning result', async () => {
+    let resolve
+    planRequest.mockReturnValue({ unwrap: () => new Promise((done) => { resolve = done }) })
+    renderPage()
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    await user.click(screen.getByRole('button', { name: 'Switch test session' }))
+    await act(async () => resolve({ data: blockedPlan() }))
+    expect(screen.queryByRole('region', { name: 'Blocked request planning' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toBeDisabled()
+    assertNoExecution()
   })
 })

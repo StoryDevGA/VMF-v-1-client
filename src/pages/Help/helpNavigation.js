@@ -13,6 +13,16 @@ export const HUB_HELP_ARTICLES = Object.freeze([
   { slug: 'intelligence-hub-graph', title: 'Intelligence Graph', view: 'Intelligence Graph' },
 ])
 
+export const OUTCOME_HELP_ARTICLES = Object.freeze([
+  { slug: 'outcome-studio', title: 'Outcome Studio' },
+  { slug: 'outcome-studio-readiness', title: 'Outcome Studio readiness' },
+])
+
+export const HELP_ARTICLE_DEFINITIONS = Object.freeze([
+  ...HUB_HELP_ARTICLES,
+  ...OUTCOME_HELP_ARTICLES,
+])
+
 export const getHubHelpHref = ({ view, search, quality = false }) => {
   const params = new URLSearchParams(search)
   params.set('article', HUB_HELP_ARTICLES.find(article => article.view === view)?.slug || 'intelligence-hub')
@@ -23,7 +33,7 @@ export const getHubHelpHref = ({ view, search, quality = false }) => {
 
 export const getHelpArticleHref = (search, slug) => {
   const params = new URLSearchParams(search)
-  if (HUB_HELP_ARTICLES.some(article => article.slug === slug)) params.set('article', slug)
+  if (HELP_ARTICLE_DEFINITIONS.some(article => article.slug === slug)) params.set('article', slug)
   else params.delete('article')
   return '/help' + (params.size ? '?' + params.toString() : '') + '#context-help'
 }

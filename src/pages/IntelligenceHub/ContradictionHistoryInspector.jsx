@@ -30,7 +30,7 @@ function HistoryContent({ scope, findingId, onClose, compact = false }) {
           : <><p>{model.total} recorded decisions · Page {page} of {model.totalPages} · Complete retained history for this finding. Read at {model.readAt}.</p>
             {model.records.length ? model.records.map(row => <article key={row.reviewId} className="intelligence-quality__review intelligence-quality__history-record">
               <h3>{displayHubToken(row.disposition)}</h3><p>{row.rationale}</p><p>Reviewer {row.reviewedBy} · {row.reviewedAt}</p>
-              <details><summary>Inspect recorded decision basis</summary><p>Decision {row.reviewId}</p><p>Original state version {row.reviewedStateVersion}</p><p>Evidence pair {row.evidencePairHash}</p><p>Review epoch {row.reviewEpoch || 'Legacy empty epoch'}</p>
+              <details><summary>Inspect recorded decision basis</summary><p>Decision {row.reviewId}</p><p>Original runtime {row.runtimeInstanceId}{row.runtimeInstanceId !== model.currentRuntimeId ? ' · Inherited historical record; not current review authority' : ''}</p><p>Original state version {row.reviewedStateVersion}</p><p>Evidence pair {row.evidencePairHash}</p><p>Review epoch {row.reviewEpoch || 'Legacy empty epoch'}</p>
                 {row.requestKey ? <><p>Request {row.requestKey}</p><p>Original request time basis {row.requestExpectedUpdatedAt}</p><p>Request fingerprint {row.requestPayloadHash}</p></> : <p>Retry identity was not recorded for this decision.</p>}</details>
             </article>) : <p>No recorded decisions on this history page.</p>}</>}
     </div></Dialog.Body>

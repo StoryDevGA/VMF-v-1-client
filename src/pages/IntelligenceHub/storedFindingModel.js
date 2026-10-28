@@ -43,7 +43,9 @@ export function readStoredFindings({ response, scope, selection, loading, error 
       || row.evidence.some(e => !text(e?.evidenceObjectId) || !text(e.sourceId) || !text(e.extractedFact, 8000)
         || !text(e.sourceType, 100, true) || !text(e.lineageRef, 1000, true) || !text(e.validationStatus, 80, true)
         || !['PENDING', 'ACCEPTED'].includes(e.reviewStatus))
-      || row.latestReview !== null && !isRecordedContradictionReview(row.latestReview, c.id, row.findingId)
+      || row.latestReview !== null && !isRecordedContradictionReview(row.latestReview,
+        row.reviewStatus === 'STALE' && /^[a-f0-9]{24}$/.test(row.latestReview?.runtimeInstanceId || '')
+          ? row.latestReview.runtimeInstanceId : c.id, row.findingId)
       || row.reviewStatus === 'UNREVIEWED' && row.latestReview !== null
       || ['NOT_CONTRADICTORY', 'CONFIRMED', 'REOPENED'].includes(row.reviewStatus)
         && (row.latestReview?.disposition !== row.reviewStatus || row.latestReview.evidencePairHash !== row.evidencePairHash)

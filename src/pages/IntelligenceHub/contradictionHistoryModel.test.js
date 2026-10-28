@@ -16,6 +16,16 @@ export const historyResponse = change => ({ data: { contractVersion: 'intelligen
     records: [historyRecord()], ...change } } })
 const read = (response = historyResponse(), patch = {}) => readContradictionHistory({ response, scope: historyScope, findingId: 'finding', page: 1, ...patch })
 describe('bounded exact recorded-decision history', () => {
+  it('retains the original native owner of API-verified inherited historical records', () => {
+    const ancestorId = '64b000000000000000000099'
+    expect(read(historyResponse({ records: [historyRecord({ runtimeInstanceId: ancestorId })] })))
+      .toMatchObject({ available: true, currentRuntimeId: 'revision-id', records: [{ runtimeInstanceId: ancestorId }] })
+    for (const id of ['unverified-name', '', null, 'A'.repeat(24)]) {
+      expect(read(historyResponse({ records: [historyRecord({ runtimeInstanceId: id })] }))).toBeNull()
+    }
+    expect(read(historyResponse({ records: [historyRecord({ runtimeInstanceId: ancestorId })] }),
+      { scope: { ...historyScope, customerId: 'departed-account' } })).toBeNull()
+  })
   it('permits historical original version distinct from current control and complete empty', () => {
     expect(read()).toMatchObject({ available: true, total: 1, records: [{ reviewedStateVersion: 'rsv2:original-historical' }] })
     expect(read(historyResponse({ records: [], total: 0 }))).toMatchObject({ available: true, total: 0 })

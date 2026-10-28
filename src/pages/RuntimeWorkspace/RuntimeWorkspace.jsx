@@ -1,5 +1,5 @@
 import { DISCOVERY_DOCUMENT_ACCEPT, DISCOVERY_DOCUMENT_MAX_COUNT, DISCOVERY_WEBSITE_SOURCE_MAX_COUNT, buildEmptyDiscoveryDraftInputs, isSupportedDiscoveryDocument, getDiscoveryDocumentMaxBytes, readFileAsDataUrl, buildDiscoveryDocumentSource, formatDocumentSize, DOCUMENT_EXTRACTION_STORAGE_NOTE, DOCUMENT_EXTRACTION_HELPER_TEXT, formatSectionSupportingFileError, formatIntelligenceHubEvidenceError, buildDiscoveryContextReadiness, normalizeWebsiteSourceDrafts, buildDiscoveryInputsPayload } from '../../utils/discoveryAcquisition.js'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
@@ -45,8 +45,10 @@ import { Textarea } from '../../components/Textarea'
 import { Tooltip } from '../../components/Tooltip'
 import { useToaster } from '../../components/Toaster'
 import { WorkspaceJourney } from '../../components/WorkspaceJourney/WorkspaceJourney.jsx'
-import { getWorkspaceJourneyReviewSummary } from '../../components/WorkspaceJourney/workspaceJourneyModel.js'
+import { getWorkspaceJourneyCompletion } from '../../components/WorkspaceJourney/workspaceJourneyModel.js'
 import { WorkspaceCapabilities } from './WorkspaceCapabilities.jsx'
+import ControlledOutcomePanel from '../OutcomeStudioWorkspace/ControlledOutcomePanel.jsx'
+import { controlledOutcomeRuntimeId, readControlledOutcome } from '../OutcomeStudioWorkspace/controlledOutcomeModel.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import { createAcquisitionRequestTracker } from '../IntelligenceHub/acquisitionRequestTracker.js'
@@ -63,6 +65,8 @@ import {
   useGetRuntimeStateBootstrapQuery,
   useGetRuntimeStateEvidenceQuery,
   useGetRuntimeStateEvidenceInventoryQuery,
+  useGetReviewCompletionQuery,
+  useGetRuntimeSyntheticOutcomeRunQuery,
   useGetRuntimeStateGraphManifestQuery,
   useGetRuntimeStateGraphProjectionQuery,
   useGetRuntimeStateSectionSummaryQuery,
@@ -708,6 +712,14 @@ const hasRuntimeStateSummaryAcceptedTruth = (section) => {
 
 const toProgressCount = (value) => {
   return Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
+const getReadySectionCounts = (readiness) => {
+  const ready = toProgressCount(readiness?.sectionTruth?.readySectionCount)
+  const required = toProgressCount(readiness?.sectionTruth?.requiredSectionCount)
+  return ready !== null && required !== null && required > 0 && ready <= required
+    ? { ready, required }
+    : { ready: null, required: null }
 }
 
 const stringifyValue = (value) => {
@@ -1999,6 +2011,63 @@ function RuntimeValueControl({
   )
 }
 
+const isSectionHistoryReference = (value) => Boolean(value
+  && typeof value === 'object' && !Array.isArray(value)
+  && Object.keys(value).length === 7
+  && value.version === 'runtime-section-history.v1'
+  && /^rsv2:[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.stateVersion)
+  && /^sha256:[a-f0-9]{64}$/.test(value.sourceHash)
+  && Number.isSafeInteger(value.index) && value.index >= -1 && value.index < 10000
+  && /^[a-f0-9]{64}$/.test(value.hash)
+  && typeof value.hasGenerated === 'boolean' && typeof value.hasAccepted === 'boolean')
+
+function ReferencedSectionComparison({ context, reference, revisionIndex }) {
+  const { currentData, isLoading, isFetching, error } = useGetRuntimeStateSectionSummaryQuery({
+    runtimeInstanceId: context?.runtimeInstanceId,
+    customerId: context?.customerId,
+    tenantId: context?.tenantId,
+    sectionKey: context?.sectionKey,
+    historyRevision: revisionIndex,
+    sessionRevision: context?.sessionRevision,
+    stateVersion: context?.control?.stateVersion,
+  }, { skip: !context || revisionIndex > 99 })
+  const payload = currentData?.data?.data ?? currentData?.data ?? currentData
+  const control = payload?.control
+  const sameControl = context && [control?.id, control?.runtimeInstanceKey].includes(context.runtimeInstanceId)
+    && control?.customerId === context.customerId && control?.tenantId === context.tenantId
+    && ['id', 'runtimeInstanceKey', 'customerId', 'tenantId', 'packageId', 'packageKey', 'packageVersion', 'stateVersion']
+    .every(key => typeof control?.[key] === 'string' && control[key] === context.control?.[key])
+  const sameReference = isSectionHistoryReference(payload?.history?.reference)
+    && Object.keys(reference).every(key => payload.history.reference[key] === reference[key])
+  const revision = sameControl && sameReference
+    && payload?.section?.sectionKey === context.sectionKey
+    && payload.section.stateVersion === context.control.stateVersion
+    && payload.history.revisionIndex === revisionIndex
+    && payload.history.revision && typeof payload.history.revision === 'object'
+    && !Array.isArray(payload.history.revision)
+    && Object.hasOwn(payload.history.revision, 'generated') === reference.hasGenerated
+    && Object.hasOwn(payload.history.revision, 'accepted') === reference.hasAccepted
+    ? payload.history.revision : null
+  const unavailable = error || (!isLoading && !isFetching && !revision)
+  const rows = [
+    { title: 'Previous Generated', value: revision?.generated, stringify: stringifyGeneratedContent },
+    { title: 'Previous Accepted Truth', value: revision?.accepted, stringify: stringifyAcceptedContent },
+  ]
+  return rows.map(row => {
+    const text = isLoading || isFetching
+      ? 'Loading previous revision…'
+      : unavailable
+        ? 'Previous revision is unavailable. Close and reopen Compare to retry.'
+        : row.stringify(row.value) || 'This revision has no recorded content for this comparison.'
+    return (
+      <section className="runtime-workspace__section-panel runtime-workspace__compare-panel runtime-workspace__compare-panel--history" key={row.title} aria-label={row.title}>
+        <h3>{row.title}</h3>
+        <SectionDetailGroupList groups={buildCompareValueGroups(text, row.title)} ariaLabel={`${row.title} comparison details`} />
+      </section>
+    )
+  })
+}
+
 function RuntimeSection({
   acceptingRuntimePath = '',
   disabled = false,
@@ -2021,6 +2090,7 @@ function RuntimeSection({
   onUploadSectionEvidence,
   reviewingSectionEvidenceObjectId = '',
   section,
+  historyReadContext = null,
   showRuntimePath = false,
   clearingSectionEvidencePath = '',
   uploadingSectionEvidencePath = '',
@@ -2096,10 +2166,16 @@ function RuntimeSection({
   const latestGeneratedRevision = getLatestRevisionValue(revisions, 'generated')
   const latestAcceptedRevision = getLatestRevisionValue(acceptedRevisions, 'accepted')
     || getLatestRevisionValue(revisions, 'accepted')
+  const referencedRevisionIndex = revisions.findLastIndex(revision => hasRuntimeValue(revision?.generated)
+    || hasRuntimeValue(revision?.accepted)
+    || (isSectionHistoryReference(revision?.historyReference)
+      && (revision.historyReference.hasGenerated || revision.historyReference.hasAccepted)))
+  const historyReference = referencedRevisionIndex >= 0 && isSectionHistoryReference(revisions[referencedRevisionIndex].historyReference)
+    ? revisions[referencedRevisionIndex].historyReference : null
   const previousGeneratedContent = stringifyGeneratedContent(latestGeneratedRevision?.generated)
   const previousAcceptedContent = stringifyAcceptedContent(latestAcceptedRevision?.accepted)
   const hasGenerationBaseline = hasRuntimeValue(latestGeneratedRevision?.generated)
-  const canCompare = Boolean(generatedContent || acceptedContent || previousGeneratedContent || previousAcceptedContent)
+  const canCompare = Boolean(generatedContent || acceptedContent || previousGeneratedContent || previousAcceptedContent || historyReference)
   const generateAction = generationActions[SECTION_ACTION_KEYS.GENERATE_SECTION] || null
   const regenerateAction = generationActions[SECTION_ACTION_KEYS.REGENERATE_SECTION] || null
   const generateLabel = getRuntimeActionLabel(generateAction, 'Generate')
@@ -2957,7 +3033,7 @@ function RuntimeSection({
       aria-label="Section truth comparison"
       tabIndex={0}
     >
-      {compareGroups.map((compareGroup) => (
+      {compareGroups.filter(group => !historyReference || !group.id.startsWith('previous-')).map((compareGroup) => (
         <section
           className={`runtime-workspace__section-panel runtime-workspace__compare-panel${
             compareGroup.id.startsWith('previous-') ? ' runtime-workspace__compare-panel--history' : ''
@@ -2972,6 +3048,7 @@ function RuntimeSection({
           />
         </section>
       ))}
+      {historyReference ? <ReferencedSectionComparison key={JSON.stringify(historyReadContext)} context={historyReadContext} reference={historyReference} revisionIndex={referencedRevisionIndex} /> : null}
     </div>
   ) : null
 
@@ -3266,28 +3343,10 @@ function RuntimeProgressSummary({
   sections = EMPTY_ARRAY,
   workspaceName = '',
   revisionNumber = null,
+  reviewItemCount = null,
 }) {
   const [assuranceOpen, setAssuranceOpen] = useState(false)
-  const requiredSections = sections.filter((section) => section?.required)
-  const sectionTruth = readiness?.sectionTruth || {}
-  const serverReadyCount = toProgressCount(sectionTruth.readySectionCount)
-  const serverRequiredCount = toProgressCount(sectionTruth.requiredSectionCount)
-  const hasSectionTruthCounts = sectionsAvailable
-    && requiredSections.length > 0
-    && requiredSections.every((section) => section?.runtimeStateSummary)
-  const hasServerSectionTruthCounts = serverReadyCount !== null
-    && serverRequiredCount !== null
-    && serverReadyCount <= serverRequiredCount
-  const requiredCompleteCount = hasSectionTruthCounts
-    ? requiredSections.filter(hasRuntimeStateSummaryAcceptedTruth).length
-    : hasServerSectionTruthCounts
-      ? serverReadyCount
-      : null
-  const requiredTotal = hasSectionTruthCounts
-    ? requiredSections.length
-    : hasServerSectionTruthCounts
-      ? serverRequiredCount
-      : null
+  const { ready: requiredCompleteCount, required: requiredTotal } = getReadySectionCounts(readiness)
   const hasRequiredTruth = requiredCompleteCount !== null
     && requiredTotal !== null
     && requiredTotal > 0
@@ -3303,7 +3362,7 @@ function RuntimeProgressSummary({
   const requiredPercentLabel = hasRequiredTruth ? `${requiredPercent}%` : 'Unavailable'
   const completionLabel = hasRequiredTruth
     ? `${requiredCompleteCount} of ${requiredTotal} required sections have accepted truth ready`
-    : 'Accepted section truth progress is unavailable'
+    : 'Section readiness progress is unavailable'
 
   return (
     <div className="runtime-workspace__progress-summary" aria-label="Execution progress summary">
@@ -3332,12 +3391,12 @@ function RuntimeProgressSummary({
         />
       ) : (
         <div className="runtime-workspace__progress-unavailable">
-          <span>Accepted truth progress unavailable</span>
+          <span>Section readiness progress unavailable</span>
         </div>
       )}
       <ul className="runtime-workspace__metric-list" aria-label="Execution workspace metrics">
         <li>
-          <span>Accepted</span>
+          <span>Ready</span>
           <strong className="runtime-workspace__metric-value runtime-workspace__metric-value--success">
             {hasRequiredTruth ? `${requiredCompleteCount}/${requiredTotal}` : 'Unavailable'}
           </strong>
@@ -3350,7 +3409,7 @@ function RuntimeProgressSummary({
         </li>
         <li className="runtime-workspace__metric--warning">
           <span>Review items</span>
-          <strong className="runtime-workspace__metric-value">Unavailable</strong>
+          <strong className="runtime-workspace__metric-value">{Number.isSafeInteger(reviewItemCount) && reviewItemCount >= 0 ? reviewItemCount : 'Unavailable'}</strong>
         </li>
       </ul>
       <Dialog
@@ -3368,7 +3427,7 @@ function RuntimeProgressSummary({
             {workspaceName ? ` for ${workspaceName}` : ''}
             {Number.isSafeInteger(revisionNumber) ? ` · R${revisionNumber}` : ''}.
           </p>
-          <p>Accepted truth progress describes workspace sections; it does not establish an assurance level.</p>
+          <p>Section readiness progress describes workspace sections; it does not establish an assurance level.</p>
         </Dialog.Body>
         <Dialog.Footer>
           <Button type="button" variant="outline" size="sm" onClick={() => setAssuranceOpen(false)}>
@@ -3637,6 +3696,22 @@ const getRuntimeStateSectionDetailPayload = (response, { sectionKey, stateVersio
     return null
   }
   return section
+}
+
+const hasRuntimeStateSectionVersionDrift = (response, { bootstrap, runtimeInstanceId, customerId, tenantId, sectionKey }) => {
+  const payload = response?.data?.data ?? response?.data ?? response ?? null
+  const control = payload?.control
+  const sectionVersion = payload?.section?.stateVersion
+  if (!control || typeof control !== 'object' || Array.isArray(control)
+    || typeof sectionVersion !== 'string' || !sectionVersion.trim()
+    || sectionVersion === bootstrap?.stateVersion || control.stateVersion !== sectionVersion
+    || !getRuntimeStateSectionDetailPayload(response, { sectionKey, stateVersion: sectionVersion })
+    || (payload.section.sourceStateVersion !== undefined && payload.section.sourceStateVersion !== sectionVersion)) return false
+  const sameIdentity = ['id', 'runtimeInstanceKey', 'customerId', 'tenantId', 'packageId', 'packageKey', 'packageVersion', 'runtimeType', 'frameworkKey']
+    .every(key => typeof control[key] === 'string' && control[key].trim()
+      && control[key] === bootstrap?.control?.[key])
+  return sameIdentity && [control.id, control.runtimeInstanceKey].includes(runtimeInstanceId)
+    && control.customerId === customerId && control.tenantId === tenantId
 }
 
 const TRUTH_CERTIFICATION_VARIANTS = Object.freeze({
@@ -6092,6 +6167,7 @@ function RuntimeWorkspace() {
     isLoading: isLoadingRuntimeStateBootstrap,
     isFetching: isFetchingRuntimeStateBootstrap,
     error: runtimeStateBootstrapQueryError,
+    refetch: refetchRuntimeStateBootstrap,
   } = useGetRuntimeStateBootstrapQuery(
     { runtimeInstanceId, customerId, tenantId },
     { skip: !runtimeInstanceId || !runtimeStateScopeReady },
@@ -6125,6 +6201,7 @@ function RuntimeWorkspace() {
     isLoading: isLoadingRuntimeStateSection,
     isFetching: isFetchingRuntimeStateSection,
     error: runtimeStateSectionQueryError,
+    refetch: refetchRuntimeStateSection,
   } = useGetRuntimeStateSectionSummaryQuery(
     {
       runtimeInstanceId,
@@ -6165,6 +6242,57 @@ function RuntimeWorkspace() {
     { runtimeInstanceId, customerId, tenantId },
     { skip: !runtimeInstanceId || !runtimeStateScopeReady || !runtimeStateBootstrapReady },
   )
+  const workspaceReadKey = JSON.stringify([getSessionRevision(), customerId, tenantId, runtimeInstanceId, selectedRuntimeStateSectionKey])
+  const workspaceReadFrameRef = useRef({ key: workspaceReadKey })
+  if (workspaceReadFrameRef.current.key !== workspaceReadKey) workspaceReadFrameRef.current = { key: workspaceReadKey }
+  const workspaceReadFrame = workspaceReadFrameRef.current
+  const workspaceReadAttemptsRef = useRef(new Set())
+  const workspaceReadFlightRef = useRef(null)
+  const [workspaceReadRecovery, setWorkspaceReadRecovery] = useState(null)
+  const currentReadRecovery = workspaceReadRecovery?.frame === workspaceReadFrame ? workspaceReadRecovery : null
+  useEffect(() => {
+    if (workspaceReadFlightRef.current?.frame !== workspaceReadFrame) workspaceReadFlightRef.current = null
+    setWorkspaceReadRecovery(previous => previous?.frame === workspaceReadFrame ? previous : null)
+  }, [workspaceReadFrame])
+  const refreshWorkspaceReads = useCallback(async () => {
+    if (workspaceReadFlightRef.current?.frame === workspaceReadFrame) return
+    const ticket = { key: workspaceReadKey, frame: workspaceReadFrame, session: getSessionRevision() }
+    workspaceReadFlightRef.current = ticket
+    const owns = () => acquisitionMountedRef.current && workspaceReadFrameRef.current === ticket.frame
+      && getSessionRevision() === ticket.session && workspaceReadFlightRef.current === ticket
+    setWorkspaceReadRecovery({ key: ticket.key, frame: ticket.frame, pending: true, error: null })
+    const readers = [refetchRuntimeStateBootstrap]
+    if (runtimeStateBootstrapReady) {
+      readers.push(refetch)
+      if (isWorkbench && selectedRuntimeStateSectionKey) readers.push(refetchRuntimeStateSection)
+    }
+    const results = await Promise.allSettled(readers.map(reader => Promise.resolve().then(() => {
+      if (typeof reader !== 'function') throw new Error('The workspace read is unavailable. Refresh again when it is available.')
+      return reader()
+    })))
+    if (!owns()) return
+    const failed = results.find(result => result.status === 'rejected' || result.value?.error || result.value?.data === undefined)
+    const failure = failed
+      ? failed.status === 'rejected' ? failed.reason : failed.value?.error || { message: 'The workspace reads could not be refreshed.' }
+      : null
+    setWorkspaceReadRecovery({ key: ticket.key, frame: ticket.frame, pending: false, error: failure ? normalizeError(failure) : null })
+    workspaceReadFlightRef.current = null
+  }, [workspaceReadKey, workspaceReadFrame, runtimeStateBootstrapReady, isWorkbench, selectedRuntimeStateSectionKey,
+    refetchRuntimeStateBootstrap, refetch, refetchRuntimeStateSection])
+  useEffect(() => {
+    if (!isWorkbench || !runtimeStateScopeReady || !selectedRuntimeStateSectionKey || !runtimeStateBootstrap
+      || isLoadingRuntimeStateBootstrap || isFetchingRuntimeStateBootstrap || isLoadingRuntimeStateSection
+      || isFetchingRuntimeStateSection || isLoading || isFetching || runtimeStateBootstrapQueryError
+      || runtimeStateSectionQueryError || error || workspaceReadAttemptsRef.current.has(workspaceReadKey)
+      || !hasRuntimeStateSectionVersionDrift(runtimeStateSectionResponse, { bootstrap: runtimeStateBootstrap,
+        runtimeInstanceId, customerId, tenantId, sectionKey: selectedRuntimeStateSectionKey })) return
+    workspaceReadAttemptsRef.current.add(workspaceReadKey)
+    void refreshWorkspaceReads()
+  }, [isWorkbench, runtimeStateScopeReady, selectedRuntimeStateSectionKey, runtimeStateBootstrap,
+    isLoadingRuntimeStateBootstrap, isFetchingRuntimeStateBootstrap, isLoadingRuntimeStateSection,
+    isFetchingRuntimeStateSection, isLoading, isFetching, runtimeStateBootstrapQueryError,
+    runtimeStateSectionQueryError, error, workspaceReadKey, runtimeStateSectionResponse,
+    runtimeInstanceId, customerId, tenantId, refreshWorkspaceReads])
   // Output Lab data remains available to the internal compatibility surface.
   // Outcome Studio uses its own /outcome-studio API chain and must not depend
   // on this query, its assets, or its readiness result.
@@ -6297,6 +6425,9 @@ function RuntimeWorkspace() {
     !SECTION_ACTION_KEY_SET.has(getRuntimeActionKey(action))
     && !DISCOVERY_ACTION_KEY_SET.has(getRuntimeActionKey(action)),
   )
+  const homeLifecycleActions = sidePanelActions.filter(action => [
+    'RUN_VALIDATION', 'MARK_READY', 'SUBMIT_FOR_REVIEW', 'APPROVE', 'PUBLISH', 'LOCK_RECORD',
+  ].includes(getRuntimeActionKey(action)))
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
   const signalItems = signals.filter((signal) => getSignalSummary(signal))
   const visibleSignalItems = showAllSignals
@@ -6369,11 +6500,11 @@ function RuntimeWorkspace() {
     ? configWarningGroups
     : configWarningGroups.slice(0, WARNING_PREVIEW_LIMIT)
   const showRuntimePaths = String(renderer?.diagnostics?.runtimePathVisibility ?? '').trim().toUpperCase() === 'VISIBLE'
-  const appError = runtimeStateBootstrapError
+  const appError = currentReadRecovery?.error || runtimeStateBootstrapError
     || (!runtimeStateRefreshInFlight ? runtimeStateSectionError : null)
     || (!runtimeStateRefreshInFlight ? runtimeStateComposition.error : null)
     || (error ? normalizeError(error) : null)
-  const appErrorContext = runtimeStateBootstrapError
+  const appErrorContext = currentReadRecovery?.error ? 'runtime-workspace-read-refresh' : runtimeStateBootstrapError
     ? 'runtime-workspace-bootstrap'
     : runtimeStateSectionError
       ? 'runtime-workspace-section-detail'
@@ -6381,13 +6512,16 @@ function RuntimeWorkspace() {
         ? 'runtime-workspace-state-composition'
         : 'runtime-workspace-renderer'
   const workspaceLoading = !runtimeStateScopeReady
+    || currentReadRecovery?.pending
     || isLoadingRuntimeStateBootstrap
     || (runtimeStateBootstrapReady && isLoading)
     || isLoadingRuntimeStateSection
   const pendingRuntimeActionConfig = pendingRuntimeAction?.actionKey
     ? findRuntimeActionByKey(actions, pendingRuntimeAction.actionKey)
     : null
-  const pendingRuntimeActionEnabled = Boolean(pendingRuntimeActionConfig?.enabled)
+  const pendingRuntimeActionEnabled = Boolean(pendingRuntimeActionConfig?.enabled
+    && pendingRuntimeAction?.scopeKey === acquisitionScopeKey
+    && pendingRuntimeAction?.expectedUpdatedAt === runtimeInstance?.updatedAt)
 
   useEffect(() => {
     if (!pendingRuntimeAction?.actionKey) return
@@ -6410,6 +6544,22 @@ function RuntimeWorkspace() {
   ].map((value) => String(value ?? '').trim()).filter(Boolean)
   const contextRenderer = routeRuntimeId && rendererRuntimeIds.includes(routeRuntimeId) ? renderer : null
   const contextRuntimeInstance = contextRenderer?.runtimeInstance ?? null
+  const controlledNativeId = controlledOutcomeRuntimeId(contextRuntimeInstance?.runtimeInstanceKey || routeRuntimeId)
+  const controlledRunRead = useGetRuntimeSyntheticOutcomeRunQuery(
+    { runtimeInstanceId: controlledNativeId, customerId, tenantId, sessionRevision: getSessionRevision() },
+    { skip: isWorkbench || !controlledNativeId || !runtimeStateScopeReady || !contextRenderer || Boolean(appError), refetchOnMountOrArgChange: true },
+  )
+  const controlledRun = controlledNativeId ? readControlledOutcome({
+    response: controlledRunRead.currentData, runtimeInstanceId: controlledNativeId, customerId, tenantId,
+    stateVersion: contextRuntimeInstance?.stateVersion,
+    loading: controlledRunRead.isFetching || controlledRunRead.isLoading || isFetching,
+    error: controlledRunRead.error || appError,
+  }) : undefined
+  const homeCompletionRead = useGetReviewCompletionQuery(
+    { runtimeInstanceId, customerId, tenantId, sessionRevision: getSessionRevision() },
+    { skip: isWorkbench || !runtimeStateScopeReady || !runtimeStateBootstrapReady
+      || !contextRenderer || Boolean(appError), refetchOnMountOrArgChange: true },
+  )
   const homeInventoryRead = useGetRuntimeStateEvidenceInventoryQuery(
     { runtimeInstanceId, customerId, tenantId, sessionRevision: getSessionRevision() },
     { skip: isWorkbench || !runtimeStateScopeReady || !runtimeStateBootstrapReady
@@ -6440,17 +6590,8 @@ function RuntimeWorkspace() {
     && !runtimeStateComposition.error
     && contextSections.length > 0
   const contextReadiness = contextRenderer?.readiness ?? null
-  const contextSectionTruth = contextReadiness?.sectionTruth ?? null
   const contextRequiredSections = contextSections.filter((section) => section?.required)
-  const hasContextSectionSummaries = contextSectionsAvailable
-    && contextRequiredSections.length > 0
-    && contextRequiredSections.every((section) => section?.runtimeStateSummary)
-  const contextReadyCount = hasContextSectionSummaries
-    ? contextRequiredSections.filter(hasRuntimeStateSummaryAcceptedTruth).length
-    : toProgressCount(contextSectionTruth?.readySectionCount)
-  const contextRequiredCount = hasContextSectionSummaries
-    ? contextRequiredSections.length
-    : toProgressCount(contextSectionTruth?.requiredSectionCount)
+  const { ready: contextReadyCount, required: contextRequiredCount } = getReadySectionCounts(contextReadiness)
   const hasContextSectionCounts = contextReadyCount !== null
     && contextRequiredCount !== null
     && contextRequiredCount > 0
@@ -6495,7 +6636,7 @@ function RuntimeWorkspace() {
     hasContextSectionCounts
       ? {
           key: 'sections',
-          label: `${contextReadyCount} Sections Accepted`,
+          label: `${contextReadyCount} Sections Ready`,
           variant: contextReadyCount === contextRequiredCount ? 'success' : 'neutral',
         }
       : null,
@@ -6568,7 +6709,14 @@ function RuntimeWorkspace() {
     requiredSectionCount: contextRequiredCount,
     requiredSections: contextRequiredSections,
   })
-  const journeyReview = getWorkspaceJourneyReviewSummary(contextDiscovery)
+  const journeyReview = getWorkspaceJourneyCompletion({
+    response: homeCompletionRead.currentData, runtime: contextRuntimeInstance,
+    scope: { runtimeInstanceId, customerId, tenantId }, discovery: contextDiscovery,
+    loading: homeCompletionRead.isFetching || homeCompletionRead.isLoading
+      || isFetching || isFetchingRuntimeStateBootstrap || workspaceLoading,
+    error: homeCompletionRead.error || appError,
+  })
+  const journeyLocked = Boolean(contextRenderer?.lock?.locked)
   const journeyAcquireStatus = contextDiscovery?.evidenceReady === true || contextDiscovery?.accepted === true
     ? 'Complete'
     : typeof contextDiscovery?.evidenceReady === 'boolean' || typeof contextDiscovery?.accepted === 'boolean'
@@ -6596,7 +6744,7 @@ function RuntimeWorkspace() {
       key: 'understand',
       label: 'Understand',
       status: contextReadyCount !== null && contextRequiredCount !== null
-        ? contextReadyCount + ' of ' + contextRequiredCount + ' accepted'
+        ? contextReadyCount + ' of ' + contextRequiredCount + ' ready'
         : 'Unavailable',
       state: contextReadyCount === null || contextRequiredCount === null
         ? 'unknown'
@@ -6609,16 +6757,18 @@ function RuntimeWorkspace() {
     {
       key: 'create',
       label: 'Create',
-      status: 'Unavailable',
-      state: 'unknown',
+      status: controlledRun ? controlledRun.status : journeyLocked ? 'Check draft readiness' : 'Unavailable',
+      detail: controlledRun ? 'Controlled synthetic run only; open its native stage receipts.' : journeyLocked ? 'Workspace locked; draft and ARL readiness are checked in Outcome Studio.' : '',
+      state: controlledRun ? controlledRun.variant === 'success' ? 'complete' : controlledRun.variant === 'error' ? 'attention' : 'available' : journeyLocked ? 'available' : 'unknown',
       description: 'Produce customer outcomes using the governed workspace context.',
       to: getExecutionWorkspaceDestinationHref('outcome-studio', workspaceRuntimeInstanceId, selectedRevisionId),
     },
     {
       key: 'publish',
       label: 'Publish',
-      status: 'Unavailable',
-      state: 'unknown',
+      status: controlledRun ? 'Customer outputs prohibited' : journeyLocked ? 'Check final assets' : 'Unavailable',
+      detail: controlledRun ? 'Synthetic test receipts cannot be promoted or published as customer outputs.' : journeyLocked ? 'Runtime lock is complete. Final asset review and publication are separate.' : '',
+      state: journeyLocked ? 'available' : 'unknown',
       description: 'Approve and publish controlled customer-ready assets.',
       to: getExecutionWorkspaceDestinationHref('outcome-studio', workspaceRuntimeInstanceId, selectedRevisionId),
     },
@@ -7324,7 +7474,8 @@ function RuntimeWorkspace() {
 
   const executeGovernedRuntimeAction = async (action, actionBody = {}) => {
     const actionKey = getRuntimeActionKey(action)
-    if (!actionKey || !action?.enabled) return
+    if (!actionKey || !action?.enabled || executingActionKey
+      || (!isWorkbench && (runtimeStateRefreshInFlight || !runtimeStateScopeReady))) return
 
     if ([DISCOVERY_ACTION_KEYS.SAVE_DISCOVERY_INPUTS, DISCOVERY_ACTION_KEYS.BUILD_EVIDENCE_PACK, DISCOVERY_ACTION_KEYS.REFRESH_EVIDENCE_PACK].includes(actionKey)) {
       if (acquisitionTrackerRef.current?.pending) setDiscoveryFeedback({ variant: 'error', message: 'Check the original acquisition request before submitting changed inputs.' })
@@ -7377,7 +7528,8 @@ function RuntimeWorkspace() {
 
   const handleExecuteAction = async (action, actionBody = {}) => {
     const actionKey = getRuntimeActionKey(action)
-    if (!actionKey || !action?.enabled) return
+    if (!actionKey || !action?.enabled || executingActionKey
+      || (!isWorkbench && (runtimeStateRefreshInFlight || !runtimeStateScopeReady))) return
 
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
@@ -7390,7 +7542,7 @@ function RuntimeWorkspace() {
     }
 
     if (action?.requiresConfirmation) {
-      setPendingRuntimeAction({ actionKey, actionBody })
+      setPendingRuntimeAction({ actionKey, actionBody, expectedUpdatedAt, scopeKey: acquisitionScopeKey })
       return
     }
 
@@ -7405,7 +7557,8 @@ function RuntimeWorkspace() {
   const handleConfirmRuntimeAction = async () => {
     if (!pendingRuntimeAction?.actionKey) return
     const action = findRuntimeActionByKey(actions, pendingRuntimeAction.actionKey)
-    if (!action?.enabled) {
+    if (!action?.enabled || !pendingRuntimeActionEnabled
+      || (!isWorkbench && runtimeStateRefreshInFlight)) {
       setPendingRuntimeAction(null)
       return
     }
@@ -7622,6 +7775,9 @@ function RuntimeWorkspace() {
         >
           <Button type="button" variant="outline" size="sm" onClick={handleBack}>
             Back
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => refreshWorkspaceReads()}>
+            Refresh workspace
           </Button>
         </div>
         <ErrorSupportPanel error={appError} context={appErrorContext} />
@@ -7877,6 +8033,10 @@ function RuntimeWorkspace() {
               </h2>
               <RuntimeProgressSummary
                 key={`${selectedWorkspaceContextKey}:understanding`}
+                reviewItemCount={journeyReview.status === 'Review complete'
+                  ? (homeCompletionRead.currentData?.data ?? homeCompletionRead.currentData).population.pendingEvidence
+                    + (homeCompletionRead.currentData?.data ?? homeCompletionRead.currentData).population.pendingFindings
+                  : null}
                 sections={contextSections}
                 sectionsAvailable={contextSectionsAvailable}
                 readiness={contextReadiness}
@@ -7889,6 +8049,21 @@ function RuntimeWorkspace() {
       </Card>
 
       <div className="runtime-workspace__experience-flow">
+        <Card variant="default" className="runtime-workspace__action-panel" id="workspace-lifecycle-actions" aria-label="Workspace lifecycle">
+          <Card.Body className="runtime-workspace__action-panel-body">
+            <div className="runtime-workspace__action-panel-heading">
+              <h2>Validation and publication</h2>
+              {actionGateStatus ? <Status variant={actionGateStatus.variant} size="sm" showIcon>{actionGateStatus.message}</Status> : null}
+            </div>
+            {homeLifecycleActions.length ? <HorizontalScroll ariaLabel="Workspace lifecycle actions scroll region" gap="sm">
+              <div className="runtime-workspace__action-list runtime-workspace__action-list--bar" role="group" aria-label="Workspace lifecycle actions">
+                {homeLifecycleActions.map(action => <RuntimeActionButton key={getRuntimeActionKey(action)} action={action}
+                  disabled={Boolean(executingActionKey) || runtimeStateRefreshInFlight || !runtimeStateScopeReady || !runtimeInstance?.updatedAt}
+                  executing={executingActionKey === getRuntimeActionKey(action)} onExecute={handleExecuteAction} />)}
+              </div>
+            </HorizontalScroll> : <Status variant="neutral" size="sm">No lifecycle actions available</Status>}
+          </Card.Body>
+        </Card>
         <AdvisorRecommendation
           key={`${selectedWorkspaceContextKey}:advisor`}
           recommendation={advisorRecommendation}
@@ -7902,7 +8077,11 @@ function RuntimeWorkspace() {
         <WorkspaceJourney key={`${selectedWorkspaceContextKey}:journey`} items={workspaceJourneyItems} />
       </div>
 
+      <ControlledOutcomePanel runtimeInstanceId={contextRuntimeInstance?.runtimeInstanceKey || routeRuntimeId}
+        customerId={customerId} tenantId={tenantId} stateVersion={contextRuntimeInstance?.stateVersion} />
       <WorkspaceCapabilities
+        controlledOutcome={controlledRun}
+        reviewCompletion={journeyReview.status === 'Review complete' ? (homeCompletionRead.currentData?.data ?? homeCompletionRead.currentData) : null}
         intelligenceInventory={isWorkbench ? undefined : homeInventory}
         discovery={contextDiscovery}
         discoveryHealth={contextDiscoveryHealth}
@@ -8218,6 +8397,12 @@ function RuntimeWorkspace() {
                 id={getSectionDomId(activeSection, activeSectionIndex)}
                 acceptingRuntimePath={acceptingRuntimePath}
                 section={activeSection}
+                historyReadContext={runtimeStateSection ? {
+                  runtimeInstanceId, customerId, tenantId,
+                  sectionKey: selectedRuntimeStateSectionKey,
+                  control: runtimeStateBootstrap.control,
+                  sessionRevision: getSessionRevision(),
+                } : null}
                 discovery={discovery}
                 disabled={savingRuntimePath === activeSection.runtimePath}
                 executingActionKey={executingActionKey}
@@ -8403,6 +8588,8 @@ function RuntimeWorkspace() {
 
         </aside>
       </div>
+        </section>
+      </div> : null}
       <ConfirmationDialog
         open={Boolean(pendingRuntimeActionConfig && pendingRuntimeActionEnabled)}
         title={pendingRuntimeActionTitle}
@@ -8415,8 +8602,6 @@ function RuntimeWorkspace() {
         onCancel={handleCancelRuntimeActionConfirmation}
         onConfirm={handleConfirmRuntimeAction}
       />
-        </section>
-      </div> : null}
       <Dialog
         open={revisionDialogOpen}
         onClose={handleCloseRevisionDialog}

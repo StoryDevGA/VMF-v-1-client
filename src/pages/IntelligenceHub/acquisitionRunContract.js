@@ -2,6 +2,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const terminal = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED']
 const version = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 100
 const anchor = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 100
+export const ORIGINAL_EXTRACTION_UNCONFIRMED = 'ORIGINAL_EXTRACTION_OUTCOME_UNCONFIRMED'
 export const isAcquisitionRunId = value => typeof value === 'string' && uuid.test(value)
 export const readAcquisitionRun = (value, scope, requestKey) => {
   if (value?.contractVersion !== 'acquisition-run.v1' || !isAcquisitionRunId(value.runId)
@@ -36,6 +37,11 @@ export const readAcquisitionRun = (value, scope, requestKey) => {
       && (typeof item.sourceId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(item.sourceId))) return null
   }
   if (counts.get('BRIEF') !== 1) return null
+  if (value.reason === 'STOPPED_WORKER_RECOVERY' || value.outcomes.some(item => item.reason === ORIGINAL_EXTRACTION_UNCONFIRMED)) {
+    if (value.reason !== 'STOPPED_WORKER_RECOVERY' || value.status !== 'FAILED' || value.canonicalSaved !== false
+      || value.outcomes.some(item => item.status !== 'FAILED' || item.reason !== ORIGINAL_EXTRACTION_UNCONFIRMED
+        || item.evidenceObjectCount !== 0 || item.sourceId || item.contentHash)) return null
+  }
   if (value.canonicalSaved) {
     const all = value.outcomes.every(item => item.status === 'SUCCEEDED'), some = value.outcomes.some(item => item.status === 'SUCCEEDED')
     if (value.status !== (all ? 'SUCCEEDED' : some ? 'PARTIALLY_SUCCEEDED' : 'FAILED')) return null

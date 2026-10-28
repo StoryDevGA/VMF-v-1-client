@@ -151,8 +151,10 @@ export const buildRuntimeStateSectionSummaryQuery = ({
   sectionKey,
   customerId,
   tenantId,
+  historyRevision,
 }) => {
   const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  if (historyRevision !== undefined) params.set('historyRevision', String(historyRevision))
   const query = params.toString()
   return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/sections/${encodeURIComponent(String(sectionKey ?? '').trim())}${query ? `?${query}` : ''}`
 }
@@ -275,6 +277,9 @@ export const buildRuntimeOutcomeStudioQuery = ({ runtimeInstanceId, customerId, 
     `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio`,
     { customerId, tenantId },
   )
+
+export const buildRuntimeSyntheticOutcomeRunQuery = ({ runtimeInstanceId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/synthetic-outcome/run`, { customerId, tenantId })
 
 export const buildRuntimeOutcomeStudioReadinessQuery = ({ runtimeInstanceId, customerId, tenantId }) =>
   appendRuntimeStateScope(
@@ -825,6 +830,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       query: buildRuntimeOutcomeStudioQuery,
       providesTags: getRuntimeInstanceDetailTags,
     }),
+    getRuntimeSyntheticOutcomeRun: build.query({
+      query: buildRuntimeSyntheticOutcomeRunQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
 
     getRuntimeOutcomeStudioReadiness: build.query({
       query: buildRuntimeOutcomeStudioReadinessQuery,
@@ -1135,6 +1145,7 @@ export const {
   useGetRuntimeOutputLabDefinitionsQuery,
   useGetRuntimeOutputLabReadinessQuery,
   useGetRuntimeOutcomeStudioQuery,
+  useGetRuntimeSyntheticOutcomeRunQuery,
   useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
   useLazyGetRuntimeOutcomeSessionQuery,

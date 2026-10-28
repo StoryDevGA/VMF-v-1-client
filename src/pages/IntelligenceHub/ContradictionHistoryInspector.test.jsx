@@ -24,6 +24,14 @@ beforeEach(() => { state.revision = 0; state.buttons = {}; state.query.mockClear
 const show = props => render(<ContradictionHistoryInspector scope={scope} findingId="finding" {...props} />)
 const open = () => userEvent.click(screen.getByRole('button', { name: 'View recorded decisions' }))
 describe('exact read-only contradiction history inspection', () => {
+  it('shows the original inherited runtime without suggesting a current decision', async () => {
+    const parentId = '64b000000000000000000099'
+    state.read.currentData = response({ records: [{ ...row, runtimeInstanceId: parentId }] })
+    show(); await open()
+    await userEvent.click(screen.getByText('Inspect recorded decision basis'))
+    expect(screen.getByText(`Original runtime ${parentId} · Inherited historical record; not current review authority`)).toBeInTheDocument()
+    expect(screen.getByText(/Inspect the current finding to establish its present disposition/)).toBeInTheDocument()
+  })
   it('uses the compact native close control only for Review and preserves scoped recorded reads', async () => {
     show({compact:true});await open()
     const dialog=screen.getByRole('dialog')

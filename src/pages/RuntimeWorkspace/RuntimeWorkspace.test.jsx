@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { StrictMode } from 'react'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,6 +26,8 @@ import {
   useGetRuntimeStateBootstrapQuery,
   useGetRuntimeStateEvidenceQuery,
   useGetRuntimeStateEvidenceInventoryQuery,
+  useGetReviewCompletionQuery,
+  useGetRuntimeSyntheticOutcomeRunQuery,
   useGetRuntimeStateGraphManifestQuery,
   useGetRuntimeStateSectionSummaryQuery,
   useGetRuntimeOutputLabQuery,
@@ -70,6 +73,8 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeStateBootstrapQuery: vi.fn(),
   useGetRuntimeStateEvidenceQuery: vi.fn(),
   useGetRuntimeStateEvidenceInventoryQuery: vi.fn(),
+  useGetReviewCompletionQuery: vi.fn(),
+  useGetRuntimeSyntheticOutcomeRunQuery: vi.fn(),
   useGetRuntimeStateGraphManifestQuery: vi.fn(),
   useGetRuntimeStateSectionSummaryQuery: vi.fn(),
   useGetRuntimeOutputLabQuery: vi.fn(),
@@ -804,7 +809,10 @@ function VmfRouteProbe() {
 
 function RuntimeRevisionSwitchProbe() {
   const navigate = useNavigate()
-  return <button onClick={() => navigate('/app/runtime/value-narrative-002/workbench')}>Switch test revision</button>
+  return <>
+    <button onClick={() => navigate('/app/runtime/value-narrative-002/workbench')}>Switch test revision</button>
+    <button onClick={() => navigate('/app/runtime/value-narrative-001/workbench', { state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } } })}>Return test revision</button>
+  </>
 }
 
 function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001/workbench', navigationProbe = false) {
@@ -890,6 +898,32 @@ const acquisitionReceipt = args => ({ data: { acquisitionRun: {
 } } })
 
 describe('RuntimeWorkspace', () => {
+  it('uses the current native review receipt and keeps locked workspace separate from final assets', () => {
+    const current = { ...rendererPayload, lock: { locked: true }, revision: {
+      rootRuntimeInstanceKey: 'value-narrative-001', lineage: [{ runtimeInstanceId: 'runtime-1',
+        runtimeInstanceKey: 'value-narrative-001', revisionNumber: 3, relationship: 'CURRENT' }],
+    }, runtimeInstance: {
+      ...rendererPayload.runtimeInstance, stateVersion: 'journey-state', updatedAt: '2026-10-20T15:00:00.000Z',
+    } }
+    useGetRuntimeRendererQuery.mockReturnValue({ data: { data: current }, isLoading: false, isFetching: false, refetch: refetchRenderer })
+    useGetReviewCompletionQuery.mockReturnValue({ currentData: { data: {
+      contractVersion: 'intelligence-review-completion.v1',
+      scope: { runtimeInstanceId: 'runtime-1', runtimeInstanceKey: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012', tenantId: '507f1f77bcf86cd799439013' },
+      stateVersion: 'journey-state', runtimeUpdatedAt: '2026-10-20T15:00:00.000Z',
+      population: { completeness: 'COMPLETE', complete: true, evidenceCount: 47, pendingEvidence: 0,
+        pendingFindings: 0, confirmedReadinessBlockers: 0, hash: 'population' },
+      latestReceipt: { receiptId: 'native-review', currency: 'CURRENT', populationHash: 'population' },
+    } } })
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    const journey = screen.getByRole('list', { name: 'Workspace progress stages' })
+    expect(within(journey).getByRole('link', { name: /^Review: Review complete/ })).toBeInTheDocument()
+    expect(within(journey).getByRole('link', { name: /^Create: Check draft readiness/ })).toBeInTheDocument()
+    expect(within(journey).getByRole('link', { name: /^Publish: Check final assets/ })).toBeInTheDocument()
+    expect(within(journey).queryByText('Published')).not.toBeInTheDocument()
+    expect(screen.getByText('Review items').closest('li')).toHaveTextContent('Review items0')
+    expect(useGetReviewCompletionQuery.mock.lastCall[0]).toEqual(expect.objectContaining({ sessionRevision: expect.any(Number) }))
+  })
   it('does not present runtime publication as published Outcome Studio assets', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -1574,6 +1608,8 @@ describe('RuntimeWorkspace', () => {
       error: null,
     })
     useGetRuntimeStateEvidenceInventoryQuery.mockReturnValue({ currentData: null, isLoading: false, isFetching: false, error: null })
+    useGetReviewCompletionQuery.mockReturnValue({ currentData: null, isLoading: false, isFetching: false, error: null })
+    useGetRuntimeSyntheticOutcomeRunQuery.mockReturnValue({ currentData: null, isLoading: false, isFetching: false, error: null })
     useGetRuntimeStateBootstrapQuery.mockReturnValue({
       data: { data: runtimeStateBootstrapPayload },
       isLoading: false,
@@ -1750,6 +1786,189 @@ describe('RuntimeWorkspace', () => {
       },
       { skip: false },
     )
+  })
+
+  describe('coherent workspace read recovery', () => {
+    const entry = { pathname: '/app/runtime/value-narrative-001/workbench', state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } } }
+    const setup = (change = value => value) => {
+      const control = { ...runtimeStateBootstrapPayload.control, runtimeType: 'VALUE_NARRATIVE', frameworkKey: 'vmf-standard' }
+      let bootstrap = { ...runtimeStateBootstrapPayload, control }
+      let renderer = { ...rendererPayload, sectionStateSource: 'runtime_state_v2' }
+      let section = change({ control: { ...control, stateVersion: 'runtime-revision:2' }, section: {
+        sectionKey: 'customer_problem', stateVersion: 'runtime-revision:2', sourceStateVersion: 'runtime-revision:2',
+        sectionDetail: { input: 'Coherent current input', generated: null, accepted: null, review: {}, state: { status: 'DRAFT' }, lineage: { sectionKey: 'customer_problem', runtimePath: 'framework_state.sections.customer_problem' }, revisions: [], dependencies: {}, validation: {}, confidence: {}, intelligence: {}, metrics: {}, additionalEvidence: {}, evidenceObjects: [], gsilContext: {} },
+      } })
+      const pending = () => { let resolve; let reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail }); return { promise, resolve, reject } }
+      const reads = [pending(), pending(), pending()]
+      const refs = reads.map(read => vi.fn(() => read.promise))
+      useGetRuntimeStateBootstrapQuery.mockImplementation(() => ({ data: { data: bootstrap }, refetch: refs[0], isLoading: false, isFetching: false, error: null }))
+      useGetRuntimeRendererQuery.mockImplementation(() => ({ data: { data: renderer }, refetch: refs[1], isLoading: false, isFetching: false, error: null }))
+      useGetRuntimeStateSectionSummaryQuery.mockImplementation(() => ({ data: { data: section }, refetch: refs[2], isLoading: false, isFetching: false, error: null }))
+      return { reads, refs, coherent: () => {
+        bootstrap = { ...bootstrap, stateVersion: 'runtime-revision:2', control: { ...control, stateVersion: 'runtime-revision:2' }, sections: bootstrap.sections.map(row => ({ ...row, stateVersion: 'runtime-revision:2' })) }
+        renderer = { ...renderer, runtimeInstance: { ...renderer.runtimeInstance, stateVersion: 'runtime-revision:2' } }
+      }, changeSection: mutate => { section = mutate(section) } }
+    }
+    it('refreshes all three reads once and hides forms until the coherent group settles', async () => {
+      const state = setup()
+      const view = renderRuntimeWorkspace(entry)
+      await waitFor(() => state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(1)))
+      expect(screen.queryByLabelText('Customer Problem', { exact: true })).not.toBeInTheDocument()
+      await act(async () => { state.reads[0].resolve({ data: {} }); state.reads[1].resolve({ data: {} }) })
+      expect(screen.queryByLabelText('Customer Problem', { exact: true })).not.toBeInTheDocument()
+      state.coherent()
+      await act(async () => { state.reads[2].resolve({ data: {} }) })
+      view.rerender(runtimeWorkspaceTree(entry))
+      expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveValue('Coherent current input')
+      state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(1))
+    })
+    it('bounds persistent drift to one automatic attempt and offers an explicit group refresh', async () => {
+      const state = setup()
+      const view = renderRuntimeWorkspace(entry)
+      await waitFor(() => expect(state.refs[0]).toHaveBeenCalledTimes(1))
+      await act(async () => state.reads.forEach(read => read.resolve({ data: {} })))
+      expect(screen.getByRole('button', { name: 'Refresh workspace' })).toBeInTheDocument()
+      state.changeSection(section => ({ ...section, control: { ...section.control, stateVersion: 'runtime-revision:3' }, section: { ...section.section, stateVersion: 'runtime-revision:3', sourceStateVersion: 'runtime-revision:3' } }))
+      view.rerender(runtimeWorkspaceTree(entry))
+      state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(1))
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Refresh workspace' })))
+      state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(2))
+    })
+    it.each([
+      ['wrong tenant', value => ({ ...value, control: { ...value.control, tenantId: 'another-tenant' } })],
+      ['wrong package', value => ({ ...value, control: { ...value.control, packageId: 'another-package' } })],
+      ['wrong section', value => ({ ...value, section: { ...value.section, sectionKey: 'another_section' } })],
+      ['missing identity', value => ({ ...value, control: undefined })],
+      ['missing detail', value => ({ ...value, section: { ...value.section, sectionDetail: null } })],
+      ['source version mismatch', value => ({ ...value, section: { ...value.section, sourceStateVersion: 'old' } })],
+    ])('does not automatically retry %s', async (_name, change) => {
+      const state = setup(change)
+      renderRuntimeWorkspace(entry)
+      await act(async () => {})
+      state.refs.forEach(read => expect(read).not.toHaveBeenCalled())
+      expect(screen.getByRole('button', { name: 'Refresh workspace' })).toBeInTheDocument()
+      expect(screen.queryByLabelText('Customer Problem', { exact: true })).not.toBeInTheDocument()
+    })
+    it('contains a synchronous read failure while waiting for the other reads', async () => {
+      const state = setup()
+      state.refs[0].mockImplementation(() => { throw new Error('Bootstrap refresh failed') })
+      renderRuntimeWorkspace(entry)
+      await waitFor(() => expect(state.refs[2]).toHaveBeenCalledTimes(1))
+      expect(screen.queryByRole('button', { name: 'Refresh workspace' })).not.toBeInTheDocument()
+      await act(async () => { state.reads[1].resolve({ data: {} }); state.reads[2].resolve({ error: { status: 503, data: { message: 'Read unavailable' } } }) })
+      expect(screen.getByRole('button', { name: 'Refresh workspace' })).toBeInTheDocument()
+      expect(screen.queryByLabelText('Customer Problem', { exact: true })).not.toBeInTheDocument()
+    })
+    it('does not automatically retry a section network error even with a drift-shaped cached body', async () => {
+      const state = setup()
+      const readSection = useGetRuntimeStateSectionSummaryQuery.getMockImplementation()
+      useGetRuntimeStateSectionSummaryQuery.mockImplementation(() => ({ ...readSection(), error: { status: 403, data: { message: 'Access denied' } } }))
+      renderRuntimeWorkspace(entry)
+      await act(async () => {})
+      state.refs.forEach(read => expect(read).not.toHaveBeenCalled())
+      expect(screen.getByRole('button', { name: 'Refresh workspace' })).toBeInTheDocument()
+    })
+    it('explicitly refreshes Home without invoking the skipped section query', async () => {
+      const state = setup()
+      let failed = true
+      useGetRuntimeRendererQuery.mockImplementation(() => ({ data: { data: rendererPayload }, refetch: state.refs[1], isLoading: false, isFetching: false, error: failed ? { status: 503 } : null }))
+      state.refs[2].mockImplementation(() => { throw new Error('Skipped section must not be refetched') })
+      const view = renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Refresh workspace' })))
+      expect(state.refs[0]).toHaveBeenCalledTimes(1)
+      expect(state.refs[1]).toHaveBeenCalledTimes(1)
+      expect(state.refs[2]).not.toHaveBeenCalled()
+      failed = false
+      await act(async () => { state.reads[0].resolve({ data: {} }); state.reads[1].resolve({ data: {} }) })
+      view.rerender(runtimeWorkspaceTree('/app/runtime/value-narrative-001'))
+      expect(screen.getByLabelText(/execution progress summary/i)).toBeInTheDocument()
+    })
+    it('refreshes bootstrap alone before dependent queries are initialized', async () => {
+      const state = setup()
+      let initialized = false
+      useGetRuntimeStateBootstrapQuery.mockImplementation(() => ({ data: initialized ? { data: runtimeStateBootstrapPayload } : undefined, error: initialized ? null : { status: 503 }, isLoading: false, isFetching: false, refetch: state.refs[0] }))
+      useGetRuntimeRendererQuery.mockReturnValue({ data: { data: rendererPayload }, isLoading: false, isFetching: false, error: null, refetch: state.refs[1] })
+      const view = renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Refresh workspace' })))
+      expect(state.refs[0]).toHaveBeenCalledTimes(1)
+      expect(state.refs[1]).not.toHaveBeenCalled()
+      expect(state.refs[2]).not.toHaveBeenCalled()
+      initialized = true
+      await act(async () => state.reads[0].resolve({ data: { data: runtimeStateBootstrapPayload } }))
+      view.rerender(runtimeWorkspaceTree('/app/runtime/value-narrative-001'))
+      expect(screen.getByLabelText(/execution progress summary/i)).toBeInTheDocument()
+    })
+    it('ignores a completed old-session refresh and never starts mutations', async () => {
+      const state = setup()
+      const view = renderRuntimeWorkspace(entry)
+      await waitFor(() => expect(state.refs[0]).toHaveBeenCalledTimes(1))
+      state.coherent()
+      await act(async () => { setTokens({ accessToken: 'replacement-session', refreshToken: 'replacement-refresh' }) })
+      view.rerender(runtimeWorkspaceTree(entry))
+      expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveValue('Coherent current input')
+      await act(async () => state.reads.forEach(read => read.reject(new Error('Old session refresh failed'))))
+      expect(screen.queryByRole('button', { name: 'Refresh workspace' })).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveValue('Coherent current input')
+      expect(mutateRuntimeState).not.toHaveBeenCalled()
+      view.unmount()
+    })
+    it('ignores old-runtime failures after navigation to a different runtime', async () => {
+      const state = setup()
+      render(runtimeWorkspaceTree(entry, true))
+      await waitFor(() => expect(state.refs[0]).toHaveBeenCalledTimes(1))
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Switch test revision' })))
+      await act(async () => state.reads.forEach(read => read.reject(new Error('Old runtime refresh failed'))))
+      expect(screen.queryByText('Old runtime refresh failed')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Customer Problem', { exact: true })).not.toBeInTheDocument()
+      expect(mutateRuntimeState).not.toHaveBeenCalled()
+    })
+    it('does not publish a pending refresh after unmount', async () => {
+      const state = setup()
+      const view = renderRuntimeWorkspace(entry)
+      await waitFor(() => expect(state.refs[0]).toHaveBeenCalledTimes(1))
+      view.unmount()
+      await act(async () => state.reads.forEach(read => read.resolve({ error: { status: 500 } })))
+      expect(screen.queryByRole('button', { name: 'Refresh workspace' })).not.toBeInTheDocument()
+      expect(mutateRuntimeState).not.toHaveBeenCalled()
+    })
+    it.each(['during another runtime', 'after returning'])('retires the old visit when its refresh settles %s', async timing => {
+      const state = setup()
+      render(runtimeWorkspaceTree(entry, true))
+      await waitFor(() => expect(state.refs[0]).toHaveBeenCalledTimes(1))
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Switch test revision' })))
+      if (timing === 'during another runtime') {
+        await act(async () => state.reads.forEach(read => read.reject(new Error('Retired visit failed'))))
+      }
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Return test revision' })))
+      expect(screen.getByRole('button', { name: 'Refresh workspace' })).toBeInTheDocument()
+      state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(1))
+      const currentReads = state.refs.map(read => {
+        let resolve
+        read.mockImplementation(() => new Promise(done => { resolve = done }))
+        return value => resolve(value)
+      })
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Refresh workspace' })))
+      state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(2))
+      if (timing === 'after returning') {
+        await act(async () => state.reads.forEach(read => read.reject(new Error('Retired visit failed'))))
+      }
+      expect(screen.getByLabelText('Loading execution workspace')).toBeInTheDocument()
+      expect(screen.queryByText('Retired visit failed')).not.toBeInTheDocument()
+      state.coherent()
+      await act(async () => currentReads.forEach(resolve => resolve({ data: {} })))
+      expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveValue('Coherent current input')
+      expect(mutateRuntimeState).not.toHaveBeenCalled()
+    })
+    it('preserves the sole automatic refresh through StrictMode effect replay', async () => {
+      const state = setup()
+      render(<StrictMode>{runtimeWorkspaceTree(entry)}</StrictMode>)
+      await waitFor(() => state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(1)))
+      expect(screen.getByLabelText('Loading execution workspace')).toBeInTheDocument()
+      state.coherent()
+      await act(async () => state.reads.forEach(read => read.resolve({ data: {} })))
+      expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveValue('Coherent current input')
+      state.refs.forEach(read => expect(read).toHaveBeenCalledTimes(1))
+    })
   })
 
   it('renders the active section from the exact current V2 section detail', async () => {
@@ -6242,6 +6461,36 @@ describe('RuntimeWorkspace', () => {
     expect(acceptance).toHaveTextContent('Accepted on 2026-05-24.')
   })
 
+  it('shows authoritative zero readiness despite five retained accepted sections', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({ data: { data: { ...rendererPayload,
+      readiness: { ...rendererPayload.readiness, sectionTruth: { ...rendererPayload.readiness.sectionTruth, readySectionCount: 0, requiredSectionCount: 5 } },
+      sections: Array.from({ length: 5 }, (_, index) => ({ ...rendererPayload.sections[0], key: `retained_${index}`, runtimePath: `framework_state.sections.retained_${index}`, accepted: { content: 'Retained truth' }, state: { status: 'ACCEPTED', needsRegeneration: true }, runtimeStateSummary: { hasAccepted: true, stateStatus: 'ACCEPTED', truthHash: 'retained-truth-hash' } })),
+    } }, isLoading: false, isFetching: false, error: null, refetch: refetchRenderer })
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    const summary = screen.getByLabelText(/execution progress summary/i)
+    expect(within(summary).getByRole('progressbar')).toHaveAttribute('value', '0')
+    expect(within(summary).getByText('Ready')).toBeInTheDocument()
+    expect(within(summary).getByText('0/5')).toBeInTheDocument()
+    expect(screen.getByText('0 Sections Ready')).toBeInTheDocument()
+    expect(screen.getAllByText('0 of 5 ready')).toHaveLength(2)
+    expect(within(summary).getByText('5')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['missing', undefined], ['negative', { readySectionCount: -1, requiredSectionCount: 5 }],
+    ['fractional', { readySectionCount: 0.5, requiredSectionCount: 5 }],
+    ['string', { readySectionCount: '0', requiredSectionCount: 5 }],
+    ['missing total', { readySectionCount: 0 }],
+  ])('does not promote retained material when readiness is %s', (_name, sectionTruth) => {
+    useGetRuntimeRendererQuery.mockReturnValue({ data: { data: { ...rendererPayload, readiness: { ...rendererPayload.readiness, sectionTruth }, sections: [{ ...rendererPayload.sections[0], accepted: { content: 'Retained truth' } }] } }, isLoading: false, isFetching: false, error: null, refetch: refetchRenderer })
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    const summary = screen.getByLabelText(/execution progress summary/i)
+    expect(within(summary).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(summary).getByText('Ready').closest('li')).toHaveTextContent('Unavailable')
+    expect(screen.queryByText(/Sections Ready/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/of \d+ ready/)).not.toBeInTheDocument()
+  })
+
   it('omits accepted-truth progress when no runtime sections are projected', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -8831,6 +9080,115 @@ describe('RuntimeWorkspace', () => {
     expect(within(governedActions).getByRole('button', { name: /submit for review/i })).toBeEnabled()
   })
 
+  describe('new Execution Workspace lifecycle actions', () => {
+    const home = '/app/runtime/value-narrative-001'
+    const keys = ['RUN_VALIDATION', 'MARK_READY', 'SUBMIT_FOR_REVIEW', 'APPROVE', 'PUBLISH', 'LOCK_RECORD']
+    const actions = () => keys.map(actionKey => ({ actionKey, governedAction: actionKey,
+      buttonLabel: actionKey.replaceAll('_', ' '), enabled: true,
+      requiresConfirmation: ['SUBMIT_FOR_REVIEW', 'APPROVE', 'PUBLISH', 'LOCK_RECORD'].includes(actionKey) }))
+    const project = (commands = actions(), extra = {}) => useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, actions: commands, ...extra } },
+      isLoading: false, isFetching: false, error: null, refetch: refetchRenderer,
+    })
+    const group = () => within(screen.getByRole('group', { name: 'Workspace lifecycle actions' }))
+    it('shows only the six native lifecycle commands on Home without duplicating legacy controls', () => {
+      project([...actions(), { actionKey: 'SAVE', buttonLabel: 'Custom save', enabled: true },
+        { actionKey: 'GENERATE_SECTION', buttonLabel: 'Custom generate', enabled: true }])
+      renderRuntimeWorkspace(home)
+      expect(group().getAllByRole('button').map(button => button.textContent.trim())).toEqual(keys.map(key => key.replaceAll('_', ' ')))
+      expect(screen.queryByRole('group', { name: 'Governed runtime actions' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Custom save' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Custom generate' })).not.toBeInTheDocument()
+      expect(executeRuntimeAction).not.toHaveBeenCalled()
+    })
+    it('uses the existing exact-scoped CAS mutation and refetch for validation', async () => {
+      project(); renderRuntimeWorkspace(home)
+      await userEvent.setup().click(group().getByRole('button', { name: 'RUN VALIDATION' }))
+      expect(executeRuntimeAction).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012', tenantId: '507f1f77bcf86cd799439013', actionKey: 'RUN_VALIDATION',
+        body: { expectedUpdatedAt: rendererPayload.runtimeInstance.updatedAt } })
+      expect(refetchRenderer).toHaveBeenCalledTimes(1)
+    })
+    it.each(['PUBLISH', 'LOCK_RECORD'])('requires the shared confirmation and preserves cancel for %s', async actionKey => {
+      project(); renderRuntimeWorkspace(home); const user = userEvent.setup(), label = actionKey.replaceAll('_', ' ')
+      await user.click(group().getByRole('button', { name: label }))
+      let dialog = screen.getByRole('dialog'); expect(executeRuntimeAction).not.toHaveBeenCalled()
+      await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(executeRuntimeAction).not.toHaveBeenCalled()
+      await user.click(group().getByRole('button', { name: label }))
+      dialog = screen.getByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: label }))
+      expect(executeRuntimeAction).toHaveBeenCalledTimes(1)
+      expect(executeRuntimeAction.mock.calls[0][0]).toMatchObject({ actionKey, body: { expectedUpdatedAt: rendererPayload.runtimeInstance.updatedAt } })
+    })
+    it('retains native disabled reasons for locked or unavailable operations', () => {
+      project(actions().map(action => ({ ...action, enabled: false, disabledReason: 'The selected revision is locked.' })))
+      renderRuntimeWorkspace(home)
+      group().getAllByRole('button').forEach(button => {
+        expect(button).toBeDisabled()
+        expect(document.getElementById(button.getAttribute('aria-describedby'))).toHaveTextContent('The selected revision is locked.')
+      })
+    })
+    it.each(['fetching', 'missing CAS'])('does not dispatch while %s', async mode => {
+      project()
+      if (mode === 'fetching') useGetRuntimeRendererQuery.mockReturnValue({ ...useGetRuntimeRendererQuery(), isFetching: true })
+      else project(actions(), { runtimeInstance: { ...rendererPayload.runtimeInstance, updatedAt: undefined } })
+      renderRuntimeWorkspace(home)
+      await userEvent.setup().click(group().getByRole('button', { name: 'RUN VALIDATION' }))
+      expect(group().getByRole('button', { name: 'RUN VALIDATION' })).toBeDisabled()
+      expect(executeRuntimeAction).not.toHaveBeenCalled()
+    })
+    it('cancels confirmation when its exact runtime marker changes and requires a fresh click', async () => {
+      project(); const view = renderRuntimeWorkspace(home), user = userEvent.setup()
+      await user.click(group().getByRole('button', { name: 'PUBLISH' }))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      const updatedAt = '2026-10-20T18:00:00.000Z'
+      project(actions(), { runtimeInstance: { ...rendererPayload.runtimeInstance, updatedAt } })
+      view.rerender(runtimeWorkspaceTree(home))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(executeRuntimeAction).not.toHaveBeenCalled()
+      await user.click(group().getByRole('button', { name: 'PUBLISH' }))
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'PUBLISH' }))
+      expect(executeRuntimeAction).toHaveBeenCalledWith(expect.objectContaining({ body: { expectedUpdatedAt: updatedAt } }))
+    })
+    it('cancels a pending command after tenant context changes', async () => {
+      project(); const view = renderRuntimeWorkspace(home), user = userEvent.setup()
+      await user.click(group().getByRole('button', { name: 'LOCK RECORD' }))
+      useTenantContext.mockReturnValue({ customerId: '507f1f77bcf86cd799439012', tenantId: '507f1f77bcf86cd799439099' })
+      view.rerender(runtimeWorkspaceTree(home))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(executeRuntimeAction).not.toHaveBeenCalled()
+    })
+    it('cancels a pending command after a new login session in the same tenant', async () => {
+      project(); renderRuntimeWorkspace(home); const user = userEvent.setup()
+      await user.click(group().getByRole('button', { name: 'PUBLISH' }))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      await act(async () => { setTokens({ accessToken: 'replacement-session', refreshToken: 'replacement-refresh' }) })
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(executeRuntimeAction).not.toHaveBeenCalled()
+    })
+    it('shows a native rejection without marking the runtime published or retrying', async () => {
+      project(); unwrapAction.mockRejectedValueOnce({ status: 409, data: { error: { message: 'Current evidence is stale.', requestId: 'native-rejection' } } })
+      renderRuntimeWorkspace(home); const user = userEvent.setup()
+      await user.click(group().getByRole('button', { name: 'PUBLISH' }))
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'PUBLISH' }))
+      expect(await screen.findByText(/Current evidence is stale.*native-rejection/)).toBeInTheDocument()
+      expect(executeRuntimeAction).toHaveBeenCalledTimes(1)
+      expect(refetchRenderer).not.toHaveBeenCalled()
+    })
+    it('disables the action group while a command is pending', async () => {
+      project(); let finish
+      unwrapAction.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      renderRuntimeWorkspace(home); const user = userEvent.setup()
+      await user.click(group().getByRole('button', { name: 'RUN VALIDATION' }))
+      group().getAllByRole('button').forEach(button => expect(button).toBeDisabled())
+      await user.click(group().getByRole('button', { name: 'MARK READY' }))
+      expect(executeRuntimeAction).toHaveBeenCalledTimes(1)
+      await act(async () => finish({ data: {} }))
+    })
+  })
+
   it('closes a pending confirmation when the renderer disables that governed action before confirm', async () => {
     const user = userEvent.setup()
     const view = renderRuntimeWorkspace()
@@ -9614,6 +9972,120 @@ describe('RuntimeWorkspace', () => {
         runtimePath: 'framework_state.sections.customer_problem',
         sectionKey: 'customer_problem',
       },
+    })
+  })
+  describe('bounded referenced section comparison', () => {
+    const setupHistory = (change = value => value, query = {}) => {
+      const reference = { version: 'runtime-section-history.v1', stateVersion: 'rsv2:11111111-1111-4111-8111-111111111111', sourceHash: `sha256:${'a'.repeat(64)}`, index: -1, hash: 'b'.repeat(64), hasGenerated: true, hasAccepted: true }
+      const control = runtimeStateBootstrapPayload.control
+      const current = { control, section: { sectionKey: 'customer_problem', stateVersion: control.stateVersion, sectionDetail: {
+        input: 'Current context remains editable', generated: { content: 'Current generated content stays current.' }, accepted: null,
+        revisions: [{ revisionNumber: 1, generated: null, accepted: null, historyReference: reference }],
+        state: { status: 'GENERATED', revisionCount: 1 }, review: {}, lineage: {},
+      } } }
+      const historical = change({ control: { ...control }, section: { sectionKey: 'customer_problem', stateVersion: control.stateVersion }, history: {
+        revisionIndex: 0, reference: { ...reference }, revision: { revisionNumber: 1, generated: { content: 'The resolved earlier generated passage.' }, accepted: { content: 'The resolved earlier accepted passage.' } },
+      } })
+      useGetRuntimeRendererQuery.mockReturnValue({ data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } }, refetch: refetchRenderer, isLoading: false, isFetching: false, error: null })
+      useGetRuntimeStateSectionSummaryQuery.mockImplementation(args => args.historyRevision === undefined
+        ? { data: { data: current }, isLoading: false, isFetching: false, error: null }
+        : { currentData: { data: historical }, isLoading: false, isFetching: false, error: null, ...query })
+      return { current, historical, reference }
+    }
+    const openHistory = async () => {
+      const user = userEvent.setup()
+      renderRuntimeWorkspace({ pathname: '/app/runtime/value-narrative-001/workbench', state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } } })
+      expect(useGetRuntimeStateSectionSummaryQuery.mock.calls.some(([args]) => args.historyRevision !== undefined)).toBe(false)
+      await user.click(screen.getByRole('button', { name: /^compare$/i }))
+      return screen.getByRole('region', { name: /section truth comparison/i })
+    }
+
+    it('loads exactly one referenced revision only on Compare and keeps its body separate from current content', async () => {
+      setupHistory()
+      const region = await openHistory()
+      expect(region).toHaveTextContent('The resolved earlier generated passage.')
+      expect(region).toHaveTextContent('The resolved earlier accepted passage.')
+      expect(region).toHaveTextContent('Current generated content stays current.')
+      const calls = useGetRuntimeStateSectionSummaryQuery.mock.calls.filter(([args]) => args.historyRevision !== undefined)
+      expect(calls.length).toBeGreaterThan(0)
+      expect(calls.every(([args]) => args.historyRevision === 0 && args.sectionKey === 'customer_problem')).toBe(true)
+      expect(calls[0][0]).toEqual(expect.objectContaining({ runtimeInstanceId: 'value-narrative-001', customerId: runtimeStateBootstrapPayload.control.customerId, tenantId: runtimeStateBootstrapPayload.control.tenantId, historyRevision: 0, stateVersion: runtimeStateBootstrapPayload.control.stateVersion }))
+      expect(screen.getByDisplayValue('Current context remains editable')).toBeInTheDocument()
+      expect(executeRuntimeAction).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['loading', { currentData: undefined, isFetching: true }, 'Loading previous revision…'],
+      ['error', { currentData: undefined, error: { status: 409 } }, 'Previous revision is unavailable.'],
+      ['old cached data without currentData', { currentData: undefined, data: { history: { revision: { generated: { content: 'Must not leak cached content' } } } } }, 'Previous revision is unavailable.'],
+    ])('shows truthful %s history state', async (_label, query, expected) => {
+      setupHistory(value => value, query)
+      const region = await openHistory()
+      expect(region).toHaveTextContent(expected)
+      expect(region).not.toHaveTextContent('Must not leak cached content')
+      expect(region).not.toHaveTextContent('No previous generated revision')
+    })
+
+    it.each([
+      ['customer', value => { value.control.customerId = 'other-customer' }],
+      ['runtime', value => { value.control.id = 'other-runtime' }],
+      ['section', value => { value.section.sectionKey = 'other_section' }],
+      ['current state', value => { value.control.stateVersion = 'runtime-revision:2'; value.section.stateVersion = 'runtime-revision:2' }],
+      ['reference', value => { value.history.reference.hash = 'c'.repeat(64) }],
+      ['selected index', value => { value.history.revisionIndex = 1 }],
+    ])('rejects a mismatched %s historical response', async (_label, mutate) => {
+      setupHistory(value => { mutate(value); return value })
+      const region = await openHistory()
+      expect(region).toHaveTextContent('Previous revision is unavailable.')
+      expect(region).not.toHaveTextContent('The resolved earlier generated passage.')
+      expect(region).toHaveTextContent('Current generated content stays current.')
+    })
+
+    it('does not reuse the prior authenticated session history cache identity', async () => {
+      setupHistory()
+      const user = userEvent.setup()
+      const entry = { pathname: '/app/runtime/value-narrative-001/workbench', state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } } }
+      const view = renderRuntimeWorkspace(entry)
+      await user.click(screen.getByRole('button', { name: /^compare$/i }))
+      const firstArgs = useGetRuntimeStateSectionSummaryQuery.mock.calls.find(([args]) => args.historyRevision === 0)[0]
+      const read = useGetRuntimeStateSectionSummaryQuery.getMockImplementation()
+      view.unmount()
+      clearTokens()
+      useGetRuntimeStateSectionSummaryQuery.mockImplementation(args => args.historyRevision === undefined ? read(args) : { currentData: undefined, data: read(firstArgs).currentData, isLoading: false, isFetching: false })
+      renderRuntimeWorkspace(entry)
+      await user.click(screen.getByRole('button', { name: /^compare$/i }))
+      const lastArgs = useGetRuntimeStateSectionSummaryQuery.mock.calls.filter(([args]) => args.historyRevision === 0).at(-1)[0]
+      expect(lastArgs.sessionRevision).not.toBe(firstArgs.sessionRevision)
+      const region = screen.getByRole('region', { name: /section truth comparison/i })
+      expect(region).toHaveTextContent('Previous revision is unavailable.')
+      expect(region).not.toHaveTextContent('The resolved earlier generated passage.')
+    })
+
+    it('rejects old bootstrap and history data that agree with each other but not the current requested customer', async () => {
+      setupHistory()
+      useTenantContext.mockReturnValue({ customerId: 'other-customer', tenantId: runtimeStateBootstrapPayload.control.tenantId })
+      const region = await openHistory()
+      expect(region).toHaveTextContent('Previous revision is unavailable.')
+      expect(region).not.toHaveTextContent('The resolved earlier generated passage.')
+      expect(useGetRuntimeStateSectionSummaryQuery.mock.calls.filter(([args]) => args.historyRevision === 0).at(-1)[0].customerId).toBe('other-customer')
+    })
+    it('preserves present-null history as unavailable content rather than fabricated truth', async () => {
+      setupHistory(value => { value.history.revision.generated = null; value.history.revision.accepted = null; return value })
+      const region = await openHistory()
+      expect(region).toHaveTextContent('This revision has no recorded content for this comparison.')
+      expect(region).not.toHaveTextContent('Previous revision is unavailable.')
+    })
+
+    it('preserves absent accepted content in a generated-only referenced revision', async () => {
+      const { current, historical, reference } = setupHistory()
+      reference.hasAccepted = false
+      delete current.section.sectionDetail.revisions[0].accepted
+      historical.history.reference.hasAccepted = false
+      delete historical.history.revision.accepted
+      const region = await openHistory()
+      expect(region).toHaveTextContent('The resolved earlier generated passage.')
+      expect(region).toHaveTextContent('This revision has no recorded content for this comparison.')
+      expect(region).not.toHaveTextContent('Previous revision is unavailable.')
     })
   })
 })

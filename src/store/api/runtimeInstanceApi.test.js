@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { configureStore } from '@reduxjs/toolkit'
 
+it('reads the scoped synthetic run without transmitting the session cache identity', () => {
+  expect(buildRuntimeSyntheticOutcomeRunQuery({ runtimeInstanceId: 'runtime/3', customerId: 'customer', tenantId: 'tenant', sessionRevision: 4 }))
+    .toBe('/runtime-instances/runtime%2F3/synthetic-outcome/run?customerId=customer&tenantId=tenant')
+})
+
 it('encodes the exact source review endpoint and transmits only its guarded body', () => {
   const body = { expectedUpdatedAt: '2026-10-09T10:00:00Z', expectedSourceFingerprint: `sha256:${'a'.repeat(64)}`, facts: { authenticity: 'UNVERIFIED' } }
   expect(buildRecordRuntimeSourceVerificationQuery({ runtimeInstanceId: 'revision/2', sourceId: 'source?one', body, sessionRevision: 9 }))
@@ -28,6 +33,7 @@ it('builds the scoped Discovery Health read without transmitting cache-only sess
     .toBe('/runtime-instances/revision%2F2/state/discovery-health?customerId=customer-1&tenantId=tenant-1')
 })
 import {
+  buildRuntimeSyntheticOutcomeRunQuery,
   buildRecordRuntimeSourceVerificationQuery,
   buildOutcomePlanningQuery,
   buildOutcomePlanConfirmationQuery,
@@ -542,6 +548,9 @@ describe('runtimeInstanceApi', () => {
       customerId: 'customer 1',
       tenantId: 'tenant/1',
     })).toBe('/runtime-instances/value%20narrative%2F001/state/sections/section%2Fone?customerId=customer+1&tenantId=tenant%2F1')
+    expect(buildRuntimeStateSectionSummaryQuery({
+      runtimeInstanceId: 'runtime-1', sectionKey: 'customer_problem', customerId: 'customer-1', tenantId: 'tenant-1', historyRevision: 0,
+    })).toBe('/runtime-instances/runtime-1/state/sections/customer_problem?customerId=customer-1&tenantId=tenant-1&historyRevision=0')
     expect(buildRuntimeStateEvidenceQuery({
       runtimeInstanceId: 'value narrative/001',
       page: 2,

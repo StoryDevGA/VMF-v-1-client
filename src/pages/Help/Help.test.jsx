@@ -38,13 +38,26 @@ describe('Help page', () => {
 })
 
 
-describe('Intelligence Hub Help articles', () => {
+describe('Workflow Help articles', () => {
   it.each(HELP_ARTICLES.map(article => [article.slug, article.source]))('serves exact canonical article %s', (slug, source) => {
     const disk = readFileSync(new URL('../../../docs/help/customer/' + slug + '.md', import.meta.url), 'utf8')
     expect(source).toBe(disk)
     show('?article=' + slug)
     expect(screen.getByRole('heading', { name: source.split('\n')[0].replace(/^# /, ''), level: 2 })).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: 'Intelligence Hub Help articles' }).querySelector('[aria-current="page"]')).toHaveAttribute('href', expect.stringContaining('article=' + slug))
+    expect(screen.getByRole('navigation', { name: 'Workflow Help articles' }).querySelector('[aria-current="page"]')).toHaveAttribute('href', expect.stringContaining('article=' + slug))
+  })
+
+  it('links the existing Outcome Studio articles while retaining selected workspace context', () => {
+    show('?article=outcome-studio&runtimeInstanceId=root&revisionId=r2&customerId=c&tenantId=t')
+    const related = screen.getAllByRole('link', { name: 'Outcome Studio readiness' })
+      .find(link => !link.closest('nav'))
+    const target = new URL(related.getAttribute('href'), 'http://localhost')
+    expect(target.searchParams.get('article')).toBe('outcome-studio-readiness')
+    expect(target.searchParams.get('runtimeInstanceId')).toBe('root')
+    expect(target.searchParams.get('revisionId')).toBe('r2')
+    expect(target.searchParams.get('customerId')).toBe('c')
+    expect(target.searchParams.get('tenantId')).toBe('t')
+    expect(screen.queryByRole('link', { name: 'Return to Intelligence Hub' })).not.toBeInTheDocument()
   })
 
   it.each(['../execution-workspace', 'https://evil.example/', 'javascript:alert(1)', '%2e%2e%2fintelligence-hub', '__proto__'])('rejects unknown or unsafe article %s', slug => {

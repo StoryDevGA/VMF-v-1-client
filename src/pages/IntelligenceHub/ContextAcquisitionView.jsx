@@ -1,7 +1,8 @@
 import { selectAcquisitionAction } from '../../utils/discoveryAcquisition.js'
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
+import { Tickbox } from '../../components/Tickbox'
 import { FiArrowLeft, FiArrowRight, FiArrowUpRight, FiLock, FiPlus } from 'react-icons/fi'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
@@ -29,6 +30,7 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
   const [editor, setEditor] = useState(null)
   const [websiteAddress, setWebsiteAddress] = useState('')
   const [inspection, setInspection] = useState(null)
+  const researchDescriptionId = useId()
   const briefHeader = useRef(null)
   const restoreEditorFocus = useRef(false)
   useEffect(() => { if (!editor && active && restoreEditorFocus.current) { briefHeader.current?.querySelector('button')?.focus(); restoreEditorFocus.current = false } }, [editor, active])
@@ -84,7 +86,7 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
   const stale = basis !== stamp
   const action = selectAcquisitionAction(renderer, discovery)
   const editable = Boolean(briefAvailable && authority?.canAcquire === true && !locked && !loading && active)
-  const readiness = buildDiscoveryContextReadiness(draft)
+  const readiness = buildDiscoveryContextReadiness(draft, { acquisitionProfile: profile, documentCount: documents.length })
   const documentAttempt = discovery?.acquisition?.documentAcquisition?.latestAttempt
   const websiteAttempt = discovery?.acquisition?.websiteAcquisition
   const websiteCounts = websiteAttempt
@@ -244,6 +246,10 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
         <div className="intelligence-hub__context-controls"><Button size="sm" variant="outline" disabled={controlsDisabled} onClick={() => setEditor(null)}>Apply brief</Button><Button size="sm" variant="outline" disabled={busy || preparing} onClick={cancelEditing}>Cancel</Button></div>
       </div>}{dirty ? <p>Brief edits are staged locally. Acquisition has not been submitted.</p> : null}</> : <p>Brief details unavailable for this revision.</p>}
     </section>
+    <section className="intelligence-hub__research-availability" aria-label="Public research availability">
+      <div><Tickbox label="Research public information" checked={false} disabled readOnly aria-describedby={researchDescriptionId} /><p id={researchDescriptionId}>Unavailable. Live public research and controlled replay remain on hold.</p></div>
+      <Button type="button" size="sm" variant="outline" onClick={event => openInspection('Research availability', event.currentTarget)}>Research availability<FiArrowUpRight size={14} aria-hidden="true" /></Button>
+    </section>
     <div className="intelligence-hub__context-intake">
       <section><h2>Websites</h2>
         <div className="intelligence-hub__website-stage"><Input type="url" aria-label="Website address" placeholder="https://example.com" size="sm" fullWidth maxLength={500} value={websiteAddress} disabled={controlsDisabled} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); stageWebsite() } }} onChange={event => setWebsiteAddress(event.target.value)} /><Button size="sm" variant="outline" aria-label="Stage website" disabled={controlsDisabled || !validWebsite || draft.websiteSources.filter(Boolean).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT} onClick={stageWebsite}><FiPlus size={16} aria-hidden="true" /></Button></div>
@@ -276,8 +282,8 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
     </div>:null}
     <footer className="intelligence-hub__context-footer"><Button size="sm" variant="outline" onClick={()=>onSelectView('Overview')}><FiArrowLeft size={14} aria-hidden="true" />Overview</Button><small>Navigation does not approve evidence or change the revision.</small><Button size="sm" variant="outline" onClick={()=>onSelectView('Sources')}>Sources<FiArrowRight size={14} aria-hidden="true" /></Button></footer>
     {inspection && active ? <Dialog open onClose={closeInspection} size="lg" className="intelligence-hub__inspection-dialog" aria-label={inspection||'Context inspection'}><Dialog.Header><h2>{inspection}</h2></Dialog.Header><Dialog.Body>
-      <Select size="sm" label="Record" className="intelligence-hub__inspection-record" value={inspection||''} options={[{value:inspection||'',label:inspection||''}]} onChange={()=>{}} />
-      {inspection==='Publication and lock record'?<><dl className="intelligence-hub__inspection-facts"><div><dt>Selected revision</dt><dd>{renderer?.runtimeInstance?.name||'Selected workspace'} · {renderer?.revision?.revisionNumber?`R${renderer.revision.revisionNumber}`:'Revision unavailable'}</dd></div><div><dt>Lock state</dt><dd>{locked?'Locked':'Not locked'}</dd></div><div><dt>Frozen evidence membership and versions</dt><dd>Not supplied</dd></div><div><dt>Snapshot integrity</dt><dd>Not independently verified</dd></div></dl><p>Only an explicit authorised successor can change a locked revision. Acquisition and evidence acceptance remain separate.</p></>:<><p>Acquisition is separate from recomputation and source inspection. Recorded executions are inspected through their existing scoped receipts.</p><AcquisitionRunHistory scope={scope} active={active && Boolean(inspection) && isCurrent()} locked={locked} canAcquire={authority?.canAcquire===true} busy={busy||preparing||pendingRequest} onRetry={run=>{setRetryFrom(run.runId);setBlocked(true);setFeedback({message:`Retry prepared for Run ${run.runId}. Refresh current acquisition data, inspect inputs and staged documents, then submit a new explicit operation.`});closeInspection()}} /><p>Sources connected: {sourceSummaryLoading?'Loading…':sourceSummary?.uniqueSourceCount??'Unavailable'} · Documents processed: {sourceProcessingLabel(sourceSummary,sourceSummaryLoading)}</p><p>{sourceProcessingExplanation(sourceSummary)}</p><p>Snapshot continuity receipt unavailable. Recorded evidence and decisions remain attached to their revision.</p><p>Accepted evidence: {countsLoading?'Loading…':evidenceStatusCounts?.accepted??'Unavailable'} · Evidence awaiting review: {countsLoading?'Loading…':evidenceStatusCounts?.pending??'Unavailable'}</p></>}
+      {inspection!=='Research availability' ? <Select size="sm" label="Record" className="intelligence-hub__inspection-record" value={inspection||''} options={[{value:inspection||'',label:inspection||''}]} onChange={()=>{}} /> : null}
+      {inspection==='Research availability'?<><p>Public research is not available in this workspace. Research settings cannot be saved and no research run can start.</p><p>Live research requires approved provider and registry access, licensing, retention, regional and operating limits, budget and spend ownership.</p><p>Controlled replay also remains disabled. No controlled replay can be started from this workspace.</p><p>Continue using the existing website and document intake where authorised. Acquisition places candidates in Sources and Review; it does not accept evidence, recompute understanding or change a locked revision.</p></>:inspection==='Publication and lock record'?<><dl className="intelligence-hub__inspection-facts"><div><dt>Selected revision</dt><dd>{renderer?.runtimeInstance?.name||'Selected workspace'} · {renderer?.revision?.revisionNumber?`R${renderer.revision.revisionNumber}`:'Revision unavailable'}</dd></div><div><dt>Lock state</dt><dd>{locked?'Locked':'Not locked'}</dd></div><div><dt>Frozen evidence membership and versions</dt><dd>Not supplied</dd></div><div><dt>Snapshot integrity</dt><dd>Not independently verified</dd></div></dl><p>Only an explicit authorised successor can change a locked revision. Acquisition and evidence acceptance remain separate.</p></>:<><p>Acquisition is separate from recomputation and source inspection. Recorded executions are inspected through their existing scoped receipts.</p><AcquisitionRunHistory scope={scope} active={active && Boolean(inspection) && isCurrent()} locked={locked} canAcquire={authority?.canAcquire===true} busy={busy||preparing||pendingRequest} onRetry={run=>{setRetryFrom(run.runId);setBlocked(true);setFeedback({message:`Retry prepared for Run ${run.runId}. Refresh current acquisition data, inspect inputs and staged documents, then submit a new explicit operation.`});closeInspection()}} /><p>Sources connected: {sourceSummaryLoading?'Loading…':sourceSummary?.uniqueSourceCount??'Unavailable'} · Documents processed: {sourceProcessingLabel(sourceSummary,sourceSummaryLoading)}</p><p>{sourceProcessingExplanation(sourceSummary)}</p><p>Snapshot continuity receipt unavailable. Recorded evidence and decisions remain attached to their revision.</p><p>Accepted evidence: {countsLoading?'Loading…':evidenceStatusCounts?.accepted??'Unavailable'} · Evidence awaiting review: {countsLoading?'Loading…':evidenceStatusCounts?.pending??'Unavailable'}</p></>}
     </Dialog.Body><Dialog.Footer><Button size="sm" variant="outline" onClick={closeInspection}>Back to Context</Button></Dialog.Footer></Dialog> : null}
   </form>
 }

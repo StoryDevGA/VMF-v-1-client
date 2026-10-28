@@ -2327,6 +2327,9 @@
 .intelligence-hub__context-boundary > span { flex:1; }
 .intelligence-hub__context-brief { padding:var(--space-intelligence-summary-inline) 0; border-bottom:var(--border-width-thin) solid var(--color-border); }
 .intelligence-hub__context-brief > header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-intelligence-summary-inline); }
+.intelligence-hub__research-availability { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--spacing-sm); padding:var(--space-intelligence-summary-inline) 0; border-bottom:var(--border-width-thin) solid var(--color-border); }
+.intelligence-hub__research-availability > div { min-width:0; flex:1; }
+.intelligence-hub__research-availability .tickbox-label { font-size:var(--font-size-xs); }
 .intelligence-hub--context .intelligence-hub__context-brief-values { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-intelligence-summary-inline); margin:var(--space-intelligence-summary-block) 0; font-size:var(--font-size-xs); }
 .intelligence-hub__context-brief-values > div { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.35fr); gap:var(--space-intelligence-inspection-rhythm); padding:var(--spacing-sm) 0; border-bottom:var(--border-width-thin) solid var(--color-intelligence-summary-border); align-items:center; }
 .intelligence-hub__context-brief-values dt { font-size:var(--font-size-intelligence-inspection-term); line-height:var(--line-height-intelligence-summary-label); color:var(--color-text-secondary); }
@@ -2356,6 +2359,7 @@
 @media (max-width:1050px) { .intelligence-hub--context .intelligence-hub__context-brief-values { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:700px) {
  .intelligence-hub--context .intelligence-hub__context-intake,.intelligence-hub__brief-editor { grid-template-columns:minmax(0,1fr); }
+ .intelligence-hub__research-availability { flex-direction:column; align-items:flex-start; }
  .intelligence-hub__context-intake > section + section { border-left:0; border-top:var(--border-width-thin) solid var(--color-border); padding:var(--spacing-md) 0 0; }
  .intelligence-hub--context .intelligence-hub__context-brief-values { grid-template-columns:minmax(0,1fr); }
  .intelligence-hub--context .intelligence-hub__context-workspace .btn { min-height:var(--control-height-touch); }

@@ -22,6 +22,16 @@ The stage path is fail-closed:
 - **Output Shaping** — blocked until the narrative plan is persisted and predecessor fingerprints match.
 - **Rendered-Expression RL** — blocked until the shaped candidate is persisted and the rendered-expression review passes.
 
+All passed stages permit a separate approval; they do not prove that a final version was saved. Finalisation also verifies the current source, exact plan and stage bindings and the supported clean render. A renderer or persistence failure keeps finalisation blocked. Retrieve the saved request before an eligible retry. An already committed approval returns the same asset version and receipts.
+
+## Successor readiness and recovery
+
+**Duplicate as Working Draft — Preserve this version** retains the exact selected source version. Before confirmation, check the source and target Runtime revisions. Keeping the default uses the source revision; rebinding requires explicit selection of a newer revision in the same Framework and package lineage. A material lineage change is a new-asset workflow.
+
+The target must independently satisfy evidence readiness and the required quality stages. The successor preserves request intent, output contract, structure and style unless changed through the governed amendment workflow. Its content is recomputed from accepted target truth and evidence with new receipts; a historical source approval does not establish current target readiness. Review content and lineage changes after the governed Working Draft is saved. Approval remains a separate action.
+
+Preparing, generating, blocked and unknown outcomes must remain distinct from a saved successor. Retrieve the operation after a lost response. A safe repeat uses the same action identity and returns the existing result. An unknown provider outcome is not permission to run the provider again, wait out a timer or create a fresh duplicate. Use the reported readback or recovery action; source or target changes require fresh confirmation. A blocked successor never changes the preserved source version.
+
 An available workspace does not establish that a particular request is ready. Use the request-specific blocker, affected section or reference and next action. The workspace identifies the specific blocker. A green foundation stage, resolved pack, or recorded binding does not prove that the corresponding quality stage executed.
 
 ## Snapshot completeness and section support
@@ -37,8 +47,6 @@ The current snapshot read is a diagnostic. It does not replace the evidence rece
 ### Development example
 
 This recorded example from 30 September 2026 shows a complete inventory of 853 records with 62 records in the governed section projection. Six contradiction candidates, missing Constraints and unresolved section references still block Generate Draft. Candidates require evaluation of provenance, scope, time and materiality before a contradiction is established. The counts and readiness are historical, not a current status for your workspace.
-
-<img src="assets/ss-040-readiness.png" alt="Recorded Outcome Studio example showing a complete evidence snapshot, unresolved contradictions and Constraints, and disabled Generate Draft" width="440" />
 
 ## Evidence and retry rules
 
@@ -60,4 +68,4 @@ Review the identified evidence through the governed runtime workflow, then resol
 
 If the source revision is locked, use the authorized governed revision workflow rather than editing its saved evidence. A provider failure needs its own diagnosis; an ARL finding needs the identified meaning correction. Neither can be cleared by treating an incomplete snapshot as complete or weakening a required-section rule. See [Outcome Studio](outcome-studio.md) for the clarification workflow.
 
-If any mandatory stage is missing, failed, incomplete, or not linked to the current lineage, the result remains foundation-only or blocked and cannot be presented as a fully governed outcome. Help publication remains pending repository binding and read-back. Other release or acceptance checks remain separate from this runtime status.
+If any mandatory stage is missing, failed, incomplete, or not linked to the current lineage, the result remains foundation-only or blocked and cannot be presented as a fully governed outcome. A saved receipt or readiness label cannot substitute for the missing stage.

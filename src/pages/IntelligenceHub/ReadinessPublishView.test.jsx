@@ -29,6 +29,7 @@ it('keeps evidence, interpretation, publication checks and human decisions separ
   expect(screen.getByText('Stale receipt')).toBeInTheDocument()
   expect(screen.getAllByText('Record not supplied')).toHaveLength(2)
   expect(screen.queryByRole('button',{name:/Publish|Lock|Authorise|Accept/})).not.toBeInTheDocument()
+  expect(screen.getByRole('link',{name:'Open Workspace Home'})).toHaveAttribute('href','/app/runtime/revision-1#workspace-lifecycle-actions')
 })
 it('opens live evidence details and advanced anchors without inferring approval',async()=>{
   const user=userEvent.setup();show()
@@ -61,7 +62,7 @@ it.each([['Exception disclosure',0,'No governed exception disclosure'],['Publica
   const user=userEvent.setup();show()
   await user.click(within(screen.getByRole('region',{name:'Human decisions'})).getAllByRole('button',{name:'Inspect'})[index])
   expect(screen.getByRole('dialog')).toHaveTextContent(text)
-  if(index===1)expect(within(screen.getByRole('dialog')).getByRole('link',{name:'Open Workspace Structure'})).toHaveAttribute('href',base.structureHref)
+  if(index===1)expect(within(screen.getByRole('dialog')).getByRole('link',{name:'Open Workspace Home'})).toHaveAttribute('href','/app/runtime/revision-1#workspace-lifecycle-actions')
 })
 it('assurance does not equate completion with certification',async()=>{
   const user=userEvent.setup();show();await user.click(screen.getByRole('button',{name:'Inspect assurance'}))
@@ -110,7 +111,7 @@ it('retains read-only navigation on locked revisions and does not submit a gover
   const user=userEvent.setup();show({locked:true})
   await user.click(screen.getByRole('button',{name:'Go to completion'}));expect(calls.navigate).toHaveBeenLastCalledWith('Review')
   await user.click(screen.getByRole('button',{name:'After lock',exact:true}));expect(calls.navigate).toHaveBeenLastCalledWith('After lock')
-  expect(screen.getByRole('link',{name:'Open Workspace Structure'})).toHaveAttribute('href',base.structureHref)
+  expect(screen.getByRole('link',{name:'Open Workspace Home'})).toHaveAttribute('href','/app/runtime/revision-1#workspace-lifecycle-actions')
 })
 it('preserves advanced diagnostics and suppresses refresh while current reads are fetching',async()=>{
   const user=userEvent.setup();show({refreshing:true,inventoryStatus:'Loading…',reviewStatus:'Unavailable'})

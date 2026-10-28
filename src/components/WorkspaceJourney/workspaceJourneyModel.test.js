@@ -1,5 +1,42 @@
 import { describe, expect, it } from 'vitest'
-import { getWorkspaceJourneyReviewSummary } from './workspaceJourneyModel.js'
+import { getWorkspaceJourneyReviewSummary, getWorkspaceJourneyCompletion } from './workspaceJourneyModel.js'
+
+describe('current scoped native review completion', () => {
+  const fixture = () => ({
+    runtime: { stateVersion: 'state', updatedAt: '2026-10-20T15:00:00.000Z' },
+    scope: { runtimeInstanceId: 'r3', customerId: 'customer', tenantId: 'tenant' },
+    response: { data: { contractVersion: 'intelligence-review-completion.v1',
+      scope: { runtimeInstanceId: 'r3', customerId: 'customer', tenantId: 'tenant' },
+      stateVersion: 'state', runtimeUpdatedAt: '2026-10-20T15:00:00.000Z',
+      population: { completeness: 'COMPLETE', complete: true, evidenceCount: 47,
+        pendingEvidence: 0, pendingFindings: 0, confirmedReadinessBlockers: 0, hash: 'population' },
+      latestReceipt: { receiptId: 'receipt', currency: 'CURRENT', populationHash: 'population' } } },
+  })
+  it('shows disposition completion without claiming draft readiness or official certification', () => {
+    expect(getWorkspaceJourneyCompletion(fixture())).toMatchObject({ status: 'Review complete', state: 'complete' })
+    expect(getWorkspaceJourneyCompletion(fixture()).detail).toContain('Draft readiness is checked separately')
+  })
+  it.each(['loading', 'error', 'runtime', 'customer', 'tenant', 'state', 'updated'])('does not reuse completion after %s changes', kind => {
+    const input = fixture()
+    if (kind === 'loading') input.loading = true
+    if (kind === 'error') input.error = { status: 500 }
+    if (kind === 'runtime') input.scope.runtimeInstanceId = 'other'
+    if (kind === 'customer') input.scope.customerId = 'other'
+    if (kind === 'tenant') input.scope.tenantId = 'other'
+    if (kind === 'state') input.runtime.stateVersion = 'new'
+    if (kind === 'updated') input.runtime.updatedAt = 'new'
+    expect(getWorkspaceJourneyCompletion(input).state).toBe('unknown')
+  })
+  it.each(['stale', 'hash', 'pending', 'confirmed', 'missing'])('keeps %s receipts incomplete', kind => {
+    const input = fixture(), record = input.response.data
+    if (kind === 'stale') record.latestReceipt.currency = 'STALE'
+    if (kind === 'hash') record.latestReceipt.populationHash = 'different'
+    if (kind === 'pending') record.population.pendingFindings = 1
+    if (kind === 'confirmed') record.population.confirmedReadinessBlockers = 1
+    if (kind === 'missing') record.latestReceipt = null
+    expect(getWorkspaceJourneyCompletion(input).status).toBe('Review needed')
+  })
+})
 
 describe('getWorkspaceJourneyReviewSummary', () => {
   it('shows contradiction and pending evidence counts separately when both need review', () => {

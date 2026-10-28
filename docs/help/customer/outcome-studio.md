@@ -25,6 +25,22 @@ A request is fully governed only when all six persisted quality stages have comp
 
 The final approval gate requires the actual persisted stage receipts for the same runtime, plan, draft, and draft iteration. Pack resolution or a readiness badge alone is not a stage receipt.
 
+## Final approval and saved versions
+
+Passing the stages creates a governed Working Draft for review. Approval is a separate, explicit action. The server verifies the current plan, source revision, exact stage lineage and supported rendered output before saving the final asset and its version together with their receipts. A renderer or persistence failure does not establish approval. Retrieve the saved request and review its first blocker before taking the offered recovery action.
+
+An eligible repeat of approval returns the same committed version. It must not create another final asset or version. Business qualifications, source attribution and certainty limits remain in the content; technical validation and lineage receipts are shown separately from the clean output.
+
+## Duplicate as Working Draft — Preserve this version
+
+Select the source asset version you want to preserve, including an available historical or published version. The confirmation shows that exact source version and its Runtime revision alongside the target Runtime revision. The default target is the source version's revision. A newer revision is used only when you explicitly select it under the same Framework and package lineage; the action never silently switches to the latest revision. A material Framework or package-lineage change requires a new asset.
+
+Duplication preserves the original request intent, output contract, structure and style. Changes to those instructions use the governed request amendment workflow. The selected source version remains unchanged and viewable. The successor recomposes from the target revision's accepted truth and evidence and records fresh provider, validation and lineage receipts. It does not inherit the source version's ARL or RL approval, copy approved prose as new evidence, or strengthen qualified claims.
+
+Preparation or generation in progress is not a saved Working Draft. The successor becomes a governed Working Draft only after its required stages pass and its saved result can be retrieved. Review both content and source-to-target lineage changes before a separate approval. If the target evidence is not ready or a required stage fails, the preserved version remains available and no completed successor is claimed.
+
+Keep the same action identity when retrieving or repeating an eligible duplicate action. It returns the existing successor rather than creating another one. If the outcome of a provider call or save is unknown, retrieve the operation first; do not start another duplicate merely because the response was lost. Follow the recovery action the server offers. Changed source, target, evidence or contract bindings require a fresh explicit confirmation.
+
 ## When a request is blocked
 
 The workspace shows the first blocking stage and its next action. A failed or incomplete stage prevents downstream stages from being fabricated and prevents customer-ready approval. If ARL Meaning Review ran and rejected the draft, its findings identify the meaning corrections needed. If ARL did not run, failed to execute, or has a missing or stale receipt, that is an execution or lineage problem; it does not establish that the draft was rejected on meaning. Narrative, shaping and rendered-expression stages remain blocked until a valid ARL pass is recorded.
@@ -48,5 +64,3 @@ To recover, review the named section and correct the relevant evidence through t
 For a locked revision, use the authorized governed revision workflow to supply or correct evidence; do not change the locked source to bypass clarification. A provider failure and an ARL review finding are separate from evidence readiness. An ARL finding can require a meaning correction even when the snapshot and required sections are ready; it is not automatically a system defect.
 
 See [Outcome Studio readiness](outcome-studio-readiness.md) for the snapshot states and a development example.
-
-Help publication remains pending repository binding and read-back. Deployment, production readiness, and Product/QA acceptance are separate gates from Outcome Studio execution.

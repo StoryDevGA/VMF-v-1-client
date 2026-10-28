@@ -10,6 +10,18 @@ const context = {
 }
 
 describe('WorkspaceCapabilities', () => {
+  it('uses verified frozen counts and actual synthetic stage outcomes without suggesting customer output availability', () => {
+    const cards = buildWorkspaceCapabilityCards({ ...context, controlledOutcome: { status: 'Controlled run failed', data: {
+      basis: { counts: { sources: 8, evidence: 47 } }, run: { status: 'FAILED' },
+      stages: [{ stageKey: 'WORKING_DRAFT', status: 'FAILED' }],
+    } }, reviewCompletion: { population: { pendingFindings: 0, pendingEvidence: 0, confirmedReadinessBlockers: 0 } } })
+    expect(cards[0].metrics.slice(0, 2)).toEqual([{ label: 'Sources', value: 8 }, { label: 'Evidence', value: 47 }])
+    expect(cards[1].status).toBe('Review complete')
+    expect(cards[3].status).toBe('Controlled run failed')
+    expect(cards[3].metrics).toContainEqual({ label: 'ARL', value: null })
+    expect(cards[3].metrics).toContainEqual({ label: 'Customer outputs', value: 'Prohibited' })
+    expect(cards[3].eyebrow).toBe('CONTROLLED SYNTHETIC TEST')
+  })
   it('renders the four prototype cards with context-preserving destination contracts', () => {
     render(
       <MemoryRouter>

@@ -8,6 +8,18 @@ const review = { contractVersion: 'discovery-contradiction-review-v1', reviewId:
   contradictionId: 'finding-a', evidencePairHash: 'sha256:' + 'a'.repeat(64), disposition: 'REOPENED', rationale: 'Recorded human rationale.', reviewedBy: '64b000000000000000000001',
   reviewedAt: '2026-10-06T10:00:00.000Z', reviewedStateVersion: 'historical-version', reviewEpoch: '' }
 describe('stored finding read boundaries', () => {
+  it('accepts a valid original foreign latest record only while the current finding is STALE', () => {
+    const inherited = { ...review, runtimeInstanceId: '64b000000000000000000099' }
+    const response = status => storedFindingFixture({}, { records: [storedFindingRow('finding-a', {
+      reviewStatus: status, latestReview: inherited })] })
+    expect(read(response('STALE'))?.candidates[0]).toMatchObject({ status: 'STALE', latestReview: inherited })
+    for (const status of ['NOT_CONTRADICTORY', 'CONFIRMED', 'REOPENED', 'UNREVIEWED']) expect(read(response(status))).toBeNull()
+    for (const runtimeInstanceId of ['foreign-name', '', null]) {
+      const invalid = response('STALE'); invalid.findings.records[0].latestReview = { ...inherited, runtimeInstanceId }
+      expect(read(invalid)).toBeNull()
+    }
+    expect(read(response('STALE'), { scope: { ...scope, tenantId: 'departed-tenant' } })).toBeNull()
+  })
   it('projects exact canonical pairs without granting mutation authority', () => {
     expect(read()).toMatchObject({ available: true, total: 1, candidates: [{ id: 'finding-a', evidence: [{ sourceId: 'source-1' }, { sourceId: 'source-2' }] }] })
     expect(read()).not.toHaveProperty('canReview')

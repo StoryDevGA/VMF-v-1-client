@@ -1,0 +1,5 @@
+.controlled-outcome { margin-block: var(--spacing-md); }
+.controlled-outcome code { overflow-wrap: anywhere; }
+.controlled-outcome dd { margin-inline-start: 0; }
+.controlled-outcome li { margin-block: var(--spacing-sm); }
+.controlled-outcome ol { padding-inline-start: var(--spacing-lg); }

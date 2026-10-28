@@ -39,7 +39,7 @@ function Help() {
         </p>
       </header>
 
-      <nav className="help__articles" aria-label="Intelligence Hub Help articles">
+      <nav className="help__articles" aria-label="Workflow Help articles">
         {HELP_ARTICLES.map(item => <Link key={item.slug} to={getHelpArticleHref(search, item.slug)} aria-current={article?.slug === item.slug ? 'page' : undefined}>{item.title}</Link>)}
       </nav>
       {returnHref ? <Link className="help__return" to={returnHref}>Return to Intelligence Hub</Link> : null}

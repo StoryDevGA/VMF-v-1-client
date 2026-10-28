@@ -53,6 +53,8 @@ export const buildWorkspaceCapabilityCards = ({
   discoveryHealth,
   evidenceDetail = null,
   intelligenceInventory,
+  controlledOutcome,
+  reviewCompletion,
   sections = [],
   sectionsAvailable = false,
   loading = false,
@@ -65,15 +67,15 @@ export const buildWorkspaceCapabilityCards = ({
     workspaceRuntimeInstanceId,
     selectedRevisionId,
   )
-  const sourceCount = intelligenceInventory !== undefined
+  const sourceCount = controlledOutcome?.data?.basis?.counts?.sources ?? (intelligenceInventory !== undefined
     ? readCount(intelligenceInventory?.sources?.readCount)
     : readProjectedCount(
     discovery?.sourceRegistrySummary?.count,
     evidenceDetail?.sourceRegistrySummary?.count,
     discovery?.lineageSummary?.sourceCount,
     readiness.sourceCount,
-  )
-  const evidenceSummaryCount = intelligenceInventory !== undefined
+  ))
+  const evidenceSummaryCount = controlledOutcome?.data?.basis?.counts?.evidence ?? (intelligenceInventory !== undefined
     ? readCount(intelligenceInventory?.evidence?.readCount)
     : readProjectedCount(
     discovery?.evidenceObjectSummary?.evidenceObjectCount,
@@ -81,7 +83,7 @@ export const buildWorkspaceCapabilityCards = ({
     evidenceDetail?.evidence?.reviewSummary?.evidenceObjectCount,
     readiness.evidenceObjectCount,
     evidenceDetail?.totalCapped === false ? evidenceDetail.total : null,
-  )
+  ))
   const coveragePercent = readPercentage(
     discoveryHealth?.coveragePercent
       ?? readiness.coveragePercent
@@ -139,10 +141,14 @@ export const buildWorkspaceCapabilityCards = ({
       mark: 'IQ',
       eyebrow: 'IMPROVE · INTELLIGENCE',
       title: 'Intelligence Quality',
-      status: loading ? 'Loading' : qualityStatus,
+      status: loading ? 'Loading' : reviewCompletion ? 'Review complete' : qualityStatus,
       statusVariant: loading ? 'neutral' : qualityStatus === 'Review recommended' ? 'warning' : 'neutral',
       description: 'Inspect and resolve quality findings before they affect outputs.',
-      metrics: [
+      metrics: reviewCompletion ? [
+        { label: 'Pending findings', value: reviewCompletion.population.pendingFindings },
+        { label: 'Pending evidence', value: reviewCompletion.population.pendingEvidence },
+        { label: 'Blocking findings', value: reviewCompletion.population.confirmedReadinessBlockers },
+      ] : [
         { label: 'Contradictions', value: contradictionCount },
         { label: 'Missing areas', value: missingAreaCount },
         { label: 'Weak signals', value: readCount(readiness.weakSignalCount) },
@@ -171,12 +177,17 @@ export const buildWorkspaceCapabilityCards = ({
     {
       key: 'outcome-studio',
       mark: 'OS',
-      eyebrow: 'CUSTOMER OUTCOMES',
+      eyebrow: controlledOutcome ? 'CONTROLLED SYNTHETIC TEST' : 'CUSTOMER OUTCOMES',
       title: 'Outcome Studio',
-      status: loading ? 'Loading' : 'Unavailable',
+      status: loading ? 'Loading' : controlledOutcome?.status || 'Unavailable',
       statusVariant: 'neutral',
-      description: 'Create, approve and finalise customer-ready communications.',
-      metrics: [
+      description: controlledOutcome ? 'Native Development/Test stage receipts. Customer output approval and publication are prohibited.' : 'Create, approve and finalise customer-ready communications.',
+      metrics: controlledOutcome ? [
+        { label: 'Stages recorded', value: Array.isArray(controlledOutcome.data?.stages) ? controlledOutcome.data.stages.length : UNAVAILABLE },
+        { label: 'ARL', value: controlledOutcome.data?.stages?.find(stage => stage.stageKey === 'ARL_MEANING_REVIEW')?.status
+          || (controlledOutcome.data?.run?.status === 'NOT_STARTED' ? 'Not run' : UNAVAILABLE) },
+        { label: 'Customer outputs', value: 'Prohibited' },
+      ] : [
         { label: 'Working drafts', value: UNAVAILABLE },
         { label: 'Approved', value: UNAVAILABLE },
         { label: 'Published', value: UNAVAILABLE },

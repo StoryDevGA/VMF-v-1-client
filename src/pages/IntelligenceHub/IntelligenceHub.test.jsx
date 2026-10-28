@@ -48,6 +48,7 @@ vi.mock('../../components/Button', async importOriginal => {
     return <actual.Button {...props} />
   } }
 })
+let canonicalCurrentControl
 let readinessFields = {}
 let summaryControlOverrides = {}
 let contextInputs
@@ -97,7 +98,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
 const queries = {
   useGetRuntimeStateFindingsQuery: (args, options) => ({ isUninitialized: options.skip }),
   useGetRuntimeStateLockBasisQuery: (args, options) => ({ data: options.skip ? undefined : { data: lockFixture || lockBasisFixture({ locked: false }) }, isFetching: lockBusy, isUninitialized: options.skip, error: lockFailure ? { status: 503 } : undefined }),
-  useGetRuntimeStateDiscoveryHealthQuery: (args, options) => ({ data: options.skip ? undefined : { data: healthFixture || discoveryHealthFixture() },
+  useGetRuntimeStateDiscoveryHealthQuery: (args, options) => ({ data: options.skip ? undefined : { data: healthFixture || discoveryHealthFixture(canonicalCurrentControl ? { stateVersion: canonicalCurrentControl.stateVersion } : {}) },
     isFetching: healthBusy, isUninitialized: options.skip, error: healthFailure ? { status: 503 } : undefined }),
   useGetRuntimeStateGraphNeighbourhoodQuery: (args, options) => ({ data: options.skip ? undefined : { data: typeof neighbourhoodFixture === 'function' ? neighbourhoodFixture(args) : neighbourhoodFixture },
     error: neighbourhoodFailure ? { status: 503 } : undefined, isFetching: neighbourhoodBusy, isUninitialized: options.skip }),
@@ -105,7 +106,7 @@ const queries = {
     isFetching: inventoryBusy, error: inventoryFailure ? { status: 503 } : undefined }),
   useGetRuntimeStateSourceSummaryQuery: () => ({ data: { data: {
     contractVersion: 'intelligence-source-summary.v1', scope: { customerId: 'customer-1', tenantId: 'tenant-1', runtimeInstanceId: 'revision-2' },
-    stateVersion: 'version-2', currency: 'AS_READ', readAt: '2026-10-06T10:00:00.000Z', countLimit: 1000,
+    stateVersion: canonicalCurrentControl?.stateVersion ?? 'version-2', currency: 'AS_READ', readAt: '2026-10-06T10:00:00.000Z', countLimit: 1000,
     basis: 'DOCUMENT_SOURCE_CURRENT_CONTENT_SUCCESS_RECEIPT', readReceipt: { bounded: true, fullLegacyFrameworkStateFetched: false, maxSerializedPayloadBytes: 524288, maxTimeMS: 2000, requestTimeoutMS: 6000 },
     sourceCompleteness: 'COMPLETE', uniqueSourceCount: 2, documentSourceCount: 1, sourceCountsByType: { UPLOADED_DOCUMENT: 1, WEBSITE: 1 },
     processingCompleteness: 'COMPLETE', documentsProcessed: 1, knownProcessedCount: 1, unknownCount: 0, staleCount: 0,
@@ -115,13 +116,13 @@ const queries = {
     const fixture = typeof sourcePageFixture === 'function' ? sourcePageFixture(args) : sourcePageFixture
     const rows = (fixture?.sourceRegistry || []).filter(source => !args.sourceId || source.sourceId === args.sourceId)
       .map(source => ({ ...source, evidenceObjectCount: 17 }))
-    return { data: { data: { control: { ...renderer.runtimeInstance, id: args.runtimeInstanceId }, sourceRegistry: rows, total: rows.length, totalPages: 1, pageSize: args.pageSize, completeness: 'COMPLETE' } },
+    return { data: { data: { control: { ...(canonicalCurrentControl ?? renderer.runtimeInstance), id: args.runtimeInstanceId }, sourceRegistry: rows, total: rows.length, totalPages: 1, pageSize: args.pageSize, completeness: 'COMPLETE' } },
       ...(args.sourceId && !rows.length ? { error: { data: { error: { message: 'The requested source is unavailable in this revision.' } } } } : {}), isLoading: false }
   },
   useGetReviewCompletionQuery: () => ({ data: { data: {
     contractVersion: 'intelligence-review-completion.v1',
     scope: { customerId: 'customer-1', tenantId: 'tenant-1', runtimeInstanceKey: 'revision-2', rootRuntimeInstanceKey: 'workspace-1' },
-    stateVersion: 'version-2', currency: 'AS_READ', readAt: '2026-10-06T10:00:00.000Z',
+    stateVersion: canonicalCurrentControl?.stateVersion ?? 'version-2', currency: 'AS_READ', readAt: '2026-10-06T10:00:00.000Z',
     population: { completeness: 'COMPLETE', policy: 'revision-evidence-contradiction-decisions.v1',
       hash: 'a'.repeat(64), pendingEvidence: 1, pendingFindings: 2, decisionCount: 7, complete: false },
     ...completionOverrides,
@@ -157,6 +158,7 @@ const queries = {
     return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: emptyEvidenceTotal ? 0 : additionalUnclassifiedEvidence ? 4 : 3 } }, isLoading: false }
   },
   useGetRuntimeStateGraphManifestQuery: (...args) => { calls.manifest(...args); const fixture = coverageManifestFixture(); fixture.manifest.status = graphManifestState;
+    if (canonicalCurrentControl) { fixture.control.stateVersion = canonicalCurrentControl.stateVersion; fixture.manifest.stateVersion = canonicalCurrentControl.stateVersion; fixture.manifest.sourceStateVersion = canonicalCurrentControl.stateVersion }
     if (neighbourhoodFixture) { fixture.manifest.graphHash = neighbourhoodHash; fixture.manifest.counts = { nodeCount: 100, edgeCount: 150 } }
     fixture.control.id = args[0].runtimeInstanceId; fixture.control.runtimeInstanceKey = args[0].runtimeInstanceId;
     return { data: { data: fixture }, ...(graphReadError ? { error: { status: 503 } } : {}) } },
@@ -207,7 +209,7 @@ const queries = {
     if (name === 'useGetRuntimeStateDiscoveryHealthQuery') calls.health(...args)
     const result = query(...args)
     if (name === 'useGetRuntimeStateEvidenceQuery' && result.data?.data) {
-      result.data.data = { ...result.data.data, control: { ...renderer.runtimeInstance, id: args[0].runtimeInstanceId, ...(args[0].pageSize === 1 && !args[0].reviewStatus ? summaryControlOverrides : {}) } }
+      result.data.data = { ...result.data.data, control: { ...(canonicalCurrentControl ?? renderer.runtimeInstance), id: args[0].runtimeInstanceId, ...(args[0].pageSize === 1 && !args[0].reviewStatus ? summaryControlOverrides : {}) } }
       if (args[0].sourceId || args[0].evidenceObjectId) result.data.data.evidenceObjects = (result.data.data.evidenceObjects || [])
         .filter(item => (!args[0].sourceId || item.sourceId === args[0].sourceId) && (!args[0].evidenceObjectId || item.evidenceObjectId === args[0].evidenceObjectId))
     }
@@ -347,6 +349,33 @@ describe('Intelligence Hub', () => {
     expect(panel().getByRole('region', { name: 'Recorded lock basis' })).toHaveTextContent('Refresh this view')
     if (view === 'after-lock') expect(panel().queryByText('Published and locked')).not.toBeInTheDocument()
   })
+  it('shows only actual verified frozen receipt counts and hides them after a failed scoped read', async () => {
+    lockFixture = lockBasisFixture()
+    const verifiedStateVersion = 'rsv2:123e4567-e89b-42d3-a456-426614174000'
+    lockFixture.control.stateVersion = verifiedStateVersion
+    canonicalCurrentControl = { ...renderer.runtimeInstance, stateVersion: verifiedStateVersion }
+    readinessFields = { runtimeInstance: canonicalCurrentControl }
+    inventoryFixture = evidenceInventoryFixture({ stateVersion: verifiedStateVersion })
+    expect(lockFixture.control.stateVersion).toBe(canonicalCurrentControl.stateVersion)
+    lockFixture.control.revision = { revisionNumber: 2 }
+    lockFixture.lockBasis.frozenInventory = { available: true, completeness: 'VERIFIED', reason: null,
+      contractVersion: 'runtime-evidence-membership.v1', snapshotId: 'evidence_snapshot_123e4567-e89b-42d3-a456-426614174000',
+      membershipHash: 'c'.repeat(64), basisStateVersion: verifiedStateVersion, lockSnapshotId: 'lock-receipt-2',
+      lockSnapshotHash: 'a'.repeat(64), revisionNumber: 2, counts: { sources: 19, evidence: 853, sections: 5 },
+      verification: { basis: 'EXACT_PERSISTED_MEMBERSHIP', materialHashAlgorithm: 'sha256-canonical-json-housekeeping-excluded.v1', auditLinkVerified: true } }
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish', { rerender } = show(search)
+    await userEvent.click(screen.getByText('Current readiness read basis', { selector: 'summary' }))
+    const basis = within(screen.getByRole('region', { name: 'Recorded lock basis' }))
+    expect(basis.getByText('Frozen sources').nextElementSibling).toHaveTextContent('19')
+    expect(basis.getByText('Frozen evidence objects').nextElementSibling).toHaveTextContent('853')
+    expect(basis.getByText('Frozen membership hash').nextElementSibling).toHaveTextContent('c'.repeat(64))
+    expect(basis.getByText(/Native frozen membership/)).toHaveTextContent('does not grant post-lock intake or impact authority')
+    expect(basis.queryByText(/Frozen source membership and exact evidence versions are unavailable/)).not.toBeInTheDocument()
+    expect(basis.getByText(/have not been independently verified/)).toBeInTheDocument()
+    lockFailure = true
+    rerender(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(within(screen.getByRole('region', { name: 'Recorded lock basis' })).queryByText('Frozen membership hash')).not.toBeInTheDocument()
+  })
   it.each(['after-lock', 'evidence-readiness'])('rejects retained Refresh from %s after navigation and session change', async view => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=' + view)
@@ -372,6 +401,7 @@ describe('Intelligence Hub', () => {
     sourceSummaryOverrides = {}; sourceSummaryBusy = false; sourceSummaryFailure = false
     inventoryFixture = undefined; inventoryBusy = false; inventoryFailure = false
     completionOverrides = {}; completionBusy = false; completionFailure = false
+    canonicalCurrentControl = undefined
     readinessFields = {}
     summaryControlOverrides = {}
     contextInputs = undefined
@@ -1593,7 +1623,8 @@ describe('Intelligence Hub', () => {
     fireEvent.click(screen.getByText('Current readiness read basis', { selector: 'summary' }))
     expect(within(screen.getByRole('region', { name: 'Recorded lock basis' })).getByText('recorded-lock-id')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Publish & lock revision' })).not.toBeInTheDocument()
-    expect(screen.getByText('Publish/Lock remains in Workspace Structure.')).toBeInTheDocument()
+    expect(screen.getByText('Validation, publication and lock actions are in Workspace Home.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Workspace Home' })).toHaveAttribute('href', '/app/runtime/revision-2#workspace-lifecycle-actions')
     expect(screen.getByRole('link', { name: 'Workspace Structure' })).toHaveAttribute('href', '/app/workspace-structure?runtimeInstanceId=workspace-1&revisionId=revision-2')
     expect(screen.getByRole('region', { name: 'Human decisions' })).toHaveTextContent('Review completionUnavailable')
     expect(screen.queryByText(/Working revision R/)).not.toBeInTheDocument()

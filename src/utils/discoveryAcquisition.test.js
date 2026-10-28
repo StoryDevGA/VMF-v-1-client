@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { buildDiscoveryDocumentSource, buildDiscoveryInputsPayload, normalizeWebsiteSourceDrafts, selectAcquisitionAction, formatIntelligenceHubEvidenceError } from './discoveryAcquisition.js'
+import { buildDiscoveryDocumentSource, buildDiscoveryInputsPayload, buildDiscoveryContextReadiness, normalizeWebsiteSourceDrafts, selectAcquisitionAction, formatIntelligenceHubEvidenceError } from './discoveryAcquisition.js'
+
+describe('STANDARD document-only acquisition readiness', () => {
+  const brief = { companyName: 'Synthetic', marketRegion: 'Test', targetOffer: 'Trial', companyWebsite: 'https://identity.invalid', websiteSources: [''] }
+  it('permits prepared STANDARD documents without making the identity URL a fetch input', () => {
+    expect(buildDiscoveryContextReadiness(brief, { acquisitionProfile: 'STANDARD', documentCount: 1 }).complete).toBe(true)
+    expect(buildDiscoveryInputsPayload(brief)).toEqual(expect.objectContaining({ companyWebsite: brief.companyWebsite }))
+    expect(buildDiscoveryInputsPayload(brief)).not.toHaveProperty('websiteSources')
+    expect(buildDiscoveryContextReadiness({ ...brief, companyName: '' }, { acquisitionProfile: 'STANDARD', documentCount: 1 }).missingLabels).toEqual(['Company name'])
+  })
+  it.each([undefined, 0, -1, 1.5, 6, '1', NaN])('retains the website requirement for invalid or absent prepared count %s', documentCount => {
+    expect(buildDiscoveryContextReadiness(brief, { acquisitionProfile: 'STANDARD', documentCount }).missingLabels).toContain('Website URL')
+  })
+  it.each([undefined, 'ENHANCED', 'STRATEGIC'])('retains the website requirement outside explicit STANDARD: %s', acquisitionProfile => {
+    expect(buildDiscoveryContextReadiness(brief, { acquisitionProfile, documentCount: 1 }).complete).toBe(false)
+  })
+})
 describe('shared acquisition parity contracts', () => {
   it('preserves canonical brief payload and unique website drafts', () => {
     expect(normalizeWebsiteSourceDrafts({ companyWebsite:'https://example.org',websiteSources:[' https://example.org ','https://example.com'] })).toEqual(['https://example.org','https://example.com'])

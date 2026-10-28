@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { useGetAcquisitionRunsQuery, useGetAcquisitionRunQuery } from '../../store/api/runtimeInstanceApi.js'
-import { isAcquisitionRunId, readAcquisitionRun, acquisitionRunLabel } from './acquisitionRunContract.js'
+import { isAcquisitionRunId, readAcquisitionRun, acquisitionRunLabel, ORIGINAL_EXTRACTION_UNCONFIRMED } from './acquisitionRunContract.js'
 
 export default function AcquisitionRunHistory({ scope, active, locked, canAcquire, busy, onRetry }) {
   const [cursor, setCursor] = useState(null)
@@ -36,7 +36,9 @@ export default function AcquisitionRunHistory({ scope, active, locked, canAcquir
       {detail.isFetching ? <p role="status">Verifying Run receipt…</p> : !isAcquisitionRunId(selected) || detail.error || !run ? <p>Exact Run receipt unavailable in this revision. Refresh or inspect another recorded Run.</p>
         : <><p>{acquisitionRunLabel(run)}</p><p>Original basis: {run.basisStateVersion} · {run.currency?.replaceAll('_', ' ') || 'Currency unavailable'}</p>
           {run.predecessorRunId ? <Button type="button" variant="ghost" onClick={() => open(run.predecessorRunId)}>Inspect predecessor Run</Button> : null}
-          {run.outcomes ? <ul>{run.outcomes.map(item => <li key={`${item.kind}-${item.inputIndex}`}>{item.kind} {item.inputIndex + 1}: {item.status.replaceAll('_', ' ')} · {item.evidenceObjectCount} evidence objects</li>)}</ul> : <p>{run.recovery}</p>}
+          {run.outcomes ? <ul>{run.outcomes.map(item => <li key={`${item.kind}-${item.inputIndex}`}>{item.kind} {item.inputIndex + 1}: {item.reason === ORIGINAL_EXTRACTION_UNCONFIRMED
+            ? 'Original extraction outcome unconfirmed. No evidence was saved by this Run.'
+            : <>{item.status.replaceAll('_', ' ')} · {item.evidenceObjectCount} evidence objects</>}</li>)}</ul> : <p>{run.recovery}</p>}
           {!locked && canAcquire && ['FAILED', 'PARTIALLY_SUCCEEDED'].includes(run.status) ? <Button type="button" variant="outline" disabled={busy} onClick={() => onRetry(run)}>Prepare explicit retry of this Run</Button> : null}
         </>}
     </section> : null}
