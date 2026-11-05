@@ -1,5 +1,6 @@
 .outcome-studio-workspace {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-lg);
   min-width: 0;
   padding-block: var(--spacing-xl);

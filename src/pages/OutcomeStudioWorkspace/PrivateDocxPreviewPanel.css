@@ -1,0 +1,7 @@
+.private-docx-preview { margin-block: var(--spacing-md); min-width: 0; }
+.private-docx-preview__body, .private-docx-preview__pages { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--spacing-lg); min-width: 0; overflow-wrap: anywhere; }
+.private-docx-preview .status { min-width: 0; max-width: 100%; align-items: flex-start; }
+.private-docx-preview .status__text { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.private-docx-preview__pages figure { margin: 0; min-width: 0; }
+.private-docx-preview__image { display: block; width: 100%; height: auto; border: var(--border-width-thin) solid var(--color-border); }
+.private-docx-preview code { overflow-wrap: anywhere; }

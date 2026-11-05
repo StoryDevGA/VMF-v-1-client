@@ -25,6 +25,20 @@ A request is fully governed only when all six persisted quality stages have comp
 
 The final approval gate requires the actual persisted stage receipts for the same runtime, plan, draft, and draft iteration. Pack resolution or a readiness badge alone is not a stage receipt.
 
+## Private Word-document preview — development/test
+
+The development/test workspace can show a **Private Word document** panel for an eligible saved document. It is non-authoritative and labelled **Private preview · not reviewed**. Document review and final approval are still required; delivery is held. This panel does not create a document, run its review, approve it or download a final file.
+
+If the panel shows **Controlled Development/Test snapshot**, you are viewing a saved test document. Workspace access was checked for that read. This does not make its source a customer-approved master or give permission to approve or deliver the document.
+
+A **Corrected private version** preserves the earlier document and its failed review. The correction awaits its own review and does not inherit approval. Approval and delivery remain on hold.
+
+Choose a saved document if a choice is offered, then select **View saved preview**. The **Document pages** tab shows the actual saved pages. Use **Previous page** and **Next page** to move through them. The **Text alternative** tab provides content from the same saved document; use Document pages to inspect its layout. **Document lineage** identifies the candidate and renderer version separately from the paper itself.
+
+If no eligible document or no saved preview is available, there is nothing to view yet. If saved documents or the preview are unavailable or cannot be verified, use **Refresh saved documents** to check again. This reads saved information; it does not create a preview or run a review. If the problem persists, ask the workspace administrator to investigate.
+
+The earlier controlled run receipts remain separate. An earlier meaning-review pass does not approve this Word document, and an earlier failed presentation review remains failed. Do not repeat that earlier quality chain to clear the private document's hold.
+
 ## Final approval and saved versions
 
 Passing the stages creates a governed Working Draft for review. Approval is a separate, explicit action. The server verifies the current plan, source revision, exact stage lineage and supported rendered output before saving the final asset and its version together with their receipts. A renderer or persistence failure does not establish approval. Retrieve the saved request and review its first blocker before taking the offered recovery action.

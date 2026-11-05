@@ -56,6 +56,7 @@ import {
 import './OutcomeStudioWorkspace.css'
 import DuplicateOutcomeDialog from './DuplicateOutcomeDialog.jsx'
 import ControlledOutcomePanel from './ControlledOutcomePanel.jsx'
+import PrivateDocxPreviewPanel from './PrivateDocxPreviewPanel.jsx'
 import { controlledOutcomeRuntimeId } from './controlledOutcomeModel.js'
 
 const EMPTY_ARRAY = Object.freeze([])
@@ -2073,6 +2074,7 @@ function OutcomeStudioWorkspace() {
       <p>Native synthetic receipts, isolated from customer output approval and publication.</p></div>
       <Button variant="outline" onClick={() => navigate(getOutcomeStudioReturnTarget(runtimeInstanceId))}>Execution Workspace</Button>
     </header>
+    <PrivateDocxPreviewPanel runtimeInstanceId={runtimeInstanceId} customerId={customerId} tenantId={tenantId} />
     <ControlledOutcomePanel runtimeInstanceId={runtimeInstanceId} customerId={customerId} tenantId={tenantId} />
   </section>
 }

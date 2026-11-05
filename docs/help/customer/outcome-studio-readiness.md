@@ -24,6 +24,14 @@ The stage path is fail-closed:
 
 All passed stages permit a separate approval; they do not prove that a final version was saved. Finalisation also verifies the current source, exact plan and stage bindings and the supported clean render. A renderer or persistence failure keeps finalisation blocked. Retrieve the saved request before an eligible retry. An already committed approval returns the same asset version and receipts.
 
+## Private Word-document preview readiness — development/test
+
+A saved private Word document and its visible pages are preparation evidence. The **Private preview · not reviewed** label means a separate document review and final approval are still required. Delivery remains held. The preview panel offers viewing and refresh controls; it cannot create, review, approve or deliver a final document.
+
+**No eligible saved Word document** and **No saved preview** mean there is no viewable result for that selection. An unavailable or unverifiable preview is a read or verification problem, not a finding that the document's meaning or presentation was rejected. Use **Refresh saved documents** to check the saved information again; ask the workspace administrator if it remains unavailable.
+
+Showing pages or opening the text alternative does not clear a failed review. Earlier controlled-run receipts retain their own outcomes and cannot establish approval of this private rendition. See [Outcome Studio](outcome-studio.md) for the available preview controls.
+
 ## Successor readiness and recovery
 
 **Duplicate as Working Draft — Preserve this version** retains the exact selected source version. Before confirmation, check the source and target Runtime revisions. Keeping the default uses the source revision; rebinding requires explicit selection of a newer revision in the same Framework and package lineage. A material lineage change is a new-asset workflow.
