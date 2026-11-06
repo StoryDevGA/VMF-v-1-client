@@ -2,6 +2,14 @@
 
 React application built with Vite, featuring a comprehensive design system and reusable UI components.
 
+## Repository Housekeeping
+
+Vite, Vitest and the build wrapper report to the terminal. Historical server stdout/stderr and sprint test/build captures were archived; save future captures and temporary diagnostics under C:\Dev\StoryLineOS\VMF-Evidence in a dated workstream folder, outside this repository.
+
+Keep src/, public/, scripts/, node_modules/, .git/, local .claude settings and package/environment/Vite/Vitest/lint configuration. docs/help/ contains application-imported Help content and images, so it stays here. dist/ is generated build output used by npm run preview and the release-copy script; it was retained. copy_paste.sh remains because release commands call it. No release command is authorized by housekeeping.
+
+[6 November 2026 client cleanup record and preservation manifests](C:/Dev/StoryLineOS/VMF-Evidence/workspace-cleanup/2026-11-06-client-cleanup/README.md). The archive contains old logs, Fallow caches, a historical SS-036 verification record and empty generated-document directories. Canonical project planning/reference documentation lives in ../docs/.
+
 ## Technology Stack
 
 - **React 19.2** - Modern React with hooks

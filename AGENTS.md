@@ -7,6 +7,13 @@
 3. Touch only what you must. Clean up only your own mess.
 4. Define success criteria. Loop until verified.
 
+## Repository Housekeeping
+
+- Keep raw server/test/build captures and temporary diagnostic tools outside this repository, under C:\Dev\StoryLineOS\VMF-Evidence in a dated workstream folder. Do not redirect output into root log files. Generated analysis caches may be recreated by their tools.
+- Keep source/tests in src/, assets in public/, maintained scripts/, dependencies node_modules/, Git metadata and existing environment/build/test/lint/tooling settings. Retain copy_paste.sh because package release commands call it; housekeeping does not authorize running release commands.
+- docs/help/ contains application-imported articles, images and publication metadata. It is a required build input, including ignored files. Retain dist/ for existing preview and release-copy commands. Canonical project planning/reference documentation remains in ../docs/.
+- Historical logs, caches and local verification evidence were preserved in the [6 November 2026 client cleanup record](C:/Dev/StoryLineOS/VMF-Evidence/workspace-cleanup/2026-11-06-client-cleanup/README.md).
+
 ## Super Admin Page Standard
 
 - Super Admin management and catalogue pages must follow `docs/design-system/super-admin-management-page-standard.md`.
