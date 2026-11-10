@@ -1,6 +1,8 @@
 import { selectAcquisitionAction } from '../../utils/discoveryAcquisition.js'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
-import { Button } from '../../components/Button'
+import { Button, ButtonGroup } from '../../components/Button'
+import { Card } from '../../components/Card'
+import { Fieldset } from '../../components/Fieldset'
 import { Dialog } from '../../components/Dialog'
 import { Tickbox } from '../../components/Tickbox'
 import { FiArrowLeft, FiArrowRight, FiArrowUpRight, FiLock, FiPlus } from 'react-icons/fi'
@@ -12,6 +14,7 @@ import { buildEmptyDiscoveryDraftInputs, normalizeWebsiteSourceDrafts, buildDisc
 import { useExecuteRuntimeActionMutation, useUpdateRuntimeDiscoveryInputsMutation } from '../../store/api/runtimeInstanceApi.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import AcquisitionRunHistory from './AcquisitionRunHistory.jsx'
+import PostLockSubmissionPanel from './PostLockSubmissionPanel.jsx'
 import { sourceProcessingLabel, sourceProcessingExplanation } from './sourceSummaryModel.js'
 import { acquisitionRunFromResponse, acquisitionRunFromError, acquisitionRunLabel } from './acquisitionRunContract.js'
 
@@ -23,7 +26,7 @@ export default function ContextAcquisitionView(props) {
   return <ScopedContextAcquisitionView key={ownershipKey} {...props} sessionRevision={sessionRevision} />
 }
 
-function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, authority, loading, locked, runtimeInstanceId, customerId, tenantId, contextKey, refresh, onSelectView, evidenceStatusCounts, countsLoading, sourceSummary, sourceSummaryLoading, active = true }) {
+function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, authority, loading, locked, runtimeInstanceId, customerId, tenantId, contextKey, refresh, onSelectView, evidenceStatusCounts, countsLoading, sourceSummary, sourceSummaryLoading, active = true, availabilityReadAllowed = false, availabilityLoading = false, availabilityError, availabilityRoute = '' }) {
   const [execute] = useExecuteRuntimeActionMutation()
   const [updateInputs] = useUpdateRuntimeDiscoveryInputsMutation()
   const [draft, setDraft] = useState(() => draftFrom(discovery))
@@ -231,8 +234,34 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
     if (controlsDisabled || !validWebsite || draft.websiteSources.filter(Boolean).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT) return
     change('websiteSources', [...draft.websiteSources.filter(Boolean), websiteAddress.trim()]); setWebsiteAddress('')
   }
-  return <form className="intelligence-hub__context-workspace intelligence-hub__acquisition" onSubmit={acquire}>
-    <div className="intelligence-hub__context-boundary"><FiLock size={16} aria-hidden="true" /><span>{locked ? 'This revision is locked. Gather new evidence through an authorised successor revision.' : 'Gather evidence for this revision. Accepted understanding remains separate.'}</span><Button size="sm" variant="outline" onClick={event => openInspection('Publication and lock record', event.currentTarget)}>Why separate?<FiArrowUpRight size={14} aria-hidden="true" /></Button></div>
+  if (locked && !pendingRequest) return <div className="intelligence-hub__locked-context">
+    <PostLockSubmissionPanel scope={{ runtimeInstanceId, customerId, tenantId }} renderer={renderer}
+      contextKey={contextKey} route={availabilityRoute} canRead={availabilityReadAllowed} loading={availabilityLoading}
+      error={availabilityError} active={active} locked />
+    <Card variant="outlined"><Card.Header><h3>Context acquisition</h3></Card.Header><Card.Body>
+      <Fieldset disabled><Fieldset.Legend>Acquisition for the locked revision</Fieldset.Legend><Fieldset.Content>
+        <Input id={`${researchDescriptionId}-locked-website`} label="Website address" size="sm" value="" placeholder="Acquisition unavailable while locked" readOnly />
+        <Button variant="outline" size="sm" disabled>Select evidence files</Button>
+        <Button size="sm" disabled>Acquire new evidence</Button>
+      </Fieldset.Content></Fieldset>
+      <ButtonGroup stackOnMobile><Button size="sm" variant="outline" onClick={event => openInspection('Why evidence remains separate', event.currentTarget)}>Why separate?</Button>
+        <Button size="sm" variant="outline" onClick={event => openInspection('Evidence intake and processing history', event.currentTarget)}>Runs and processing history</Button></ButtonGroup>
+      <p>This revision is locked. New evidence stays outside its frozen basis until review and explicit successor admission.</p>
+    </Card.Body></Card>
+    {inspection && active ? <Dialog open onClose={closeInspection} size="lg" aria-label={inspection}>
+      <Dialog.Header><h2>{inspection}</h2></Dialog.Header><Dialog.Body>
+        {inspection === 'Evidence intake and processing history' ? <>
+          <p>Inspect recorded acquisition Runs for this locked revision. Inspection does not acquire evidence or prepare a retry.</p>
+          <AcquisitionRunHistory scope={scope} active={active && isCurrent()} locked canAcquire={false} busy={busy || preparing} />
+        </> : <>
+        <p>Later evidence is submitted outside locked membership. A human impact conclusion and explicit successor admission remain separate. Neither action changes the locked understanding.</p>
+        <p>Submission availability comes from the server. A blocked or failed check does not mean there is no evidence.</p>
+        </>}
+      </Dialog.Body><Dialog.Footer><Button variant="outline" size="sm" onClick={closeInspection}>Back to Context</Button></Dialog.Footer>
+    </Dialog> : null}
+  </div>
+  return <><form className="intelligence-hub__context-workspace intelligence-hub__acquisition" onSubmit={acquire}>
+    <div className="intelligence-hub__context-boundary"><FiLock size={16} aria-hidden="true" /><span>{locked ? 'This revision is locked. Acquisition cannot change its frozen evidence. Separate post-lock availability is shown below.' : 'Gather evidence for this revision. Accepted understanding remains separate.'}</span><Button size="sm" variant="outline" onClick={event => openInspection('Publication and lock record', event.currentTarget)}>Why separate?<FiArrowUpRight size={14} aria-hidden="true" /></Button></div>
     <section className="intelligence-hub__context-brief">
       <header ref={briefHeader}><h2>Evidence gathering brief</h2>{!editor ? <Button size="sm" variant="outline" aria-label="Edit evidence gathering brief" disabled={!briefAvailable || controlsDisabled} onClick={startEditing}>Edit</Button> : null}</header>
       {briefAvailable ? <>{!editor ? <dl className="intelligence-hub__context-brief-values">
@@ -285,5 +314,7 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
       {inspection!=='Research availability' ? <Select size="sm" label="Record" className="intelligence-hub__inspection-record" value={inspection||''} options={[{value:inspection||'',label:inspection||''}]} onChange={()=>{}} /> : null}
       {inspection==='Research availability'?<><p>Public research is not available in this workspace. Research settings cannot be saved and no research run can start.</p><p>Live research requires approved provider and registry access, licensing, retention, regional and operating limits, budget and spend ownership.</p><p>Controlled replay also remains disabled. No controlled replay can be started from this workspace.</p><p>Continue using the existing website and document intake where authorised. Acquisition places candidates in Sources and Review; it does not accept evidence, recompute understanding or change a locked revision.</p></>:inspection==='Publication and lock record'?<><dl className="intelligence-hub__inspection-facts"><div><dt>Selected revision</dt><dd>{renderer?.runtimeInstance?.name||'Selected workspace'} · {renderer?.revision?.revisionNumber?`R${renderer.revision.revisionNumber}`:'Revision unavailable'}</dd></div><div><dt>Lock state</dt><dd>{locked?'Locked':'Not locked'}</dd></div><div><dt>Frozen evidence membership and versions</dt><dd>Not supplied</dd></div><div><dt>Snapshot integrity</dt><dd>Not independently verified</dd></div></dl><p>Only an explicit authorised successor can change a locked revision. Acquisition and evidence acceptance remain separate.</p></>:<><p>Acquisition is separate from recomputation and source inspection. Recorded executions are inspected through their existing scoped receipts.</p><AcquisitionRunHistory scope={scope} active={active && Boolean(inspection) && isCurrent()} locked={locked} canAcquire={authority?.canAcquire===true} busy={busy||preparing||pendingRequest} onRetry={run=>{setRetryFrom(run.runId);setBlocked(true);setFeedback({message:`Retry prepared for Run ${run.runId}. Refresh current acquisition data, inspect inputs and staged documents, then submit a new explicit operation.`});closeInspection()}} /><p>Sources connected: {sourceSummaryLoading?'Loading…':sourceSummary?.uniqueSourceCount??'Unavailable'} · Documents processed: {sourceProcessingLabel(sourceSummary,sourceSummaryLoading)}</p><p>{sourceProcessingExplanation(sourceSummary)}</p><p>Snapshot continuity receipt unavailable. Recorded evidence and decisions remain attached to their revision.</p><p>Accepted evidence: {countsLoading?'Loading…':evidenceStatusCounts?.accepted??'Unavailable'} · Evidence awaiting review: {countsLoading?'Loading…':evidenceStatusCounts?.pending??'Unavailable'}</p></>}
     </Dialog.Body><Dialog.Footer><Button size="sm" variant="outline" onClick={closeInspection}>Back to Context</Button></Dialog.Footer></Dialog> : null}
-  </form>
+  </form><PostLockSubmissionPanel scope={{ runtimeInstanceId, customerId, tenantId }} renderer={renderer}
+    contextKey={contextKey} route={availabilityRoute} canRead={availabilityReadAllowed} loading={availabilityLoading}
+    error={availabilityError} active={active} locked={locked} /></>
 }

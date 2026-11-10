@@ -4,6 +4,17 @@
   gap: var(--spacing-md);
   align-items: start;
 }
+.workspace-structure__continuity { margin-block: var(--spacing-md); min-width: 0; }
+.workspace-structure__continuity .card__header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--spacing-sm); }
+.workspace-structure__continuity .card__body { display: grid; gap: var(--spacing-md); min-width: 0; }
+.workspace-structure__continuity :is(p, dd, a) { overflow-wrap: anywhere; }
+.workspace-structure__continuity dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--spacing-md); margin: 0; }
+.workspace-structure__continuity dl > div { min-width: 0; }
+.workspace-structure__continuity dt { color: var(--color-text-secondary); }
+.workspace-structure__continuity dd { margin: var(--spacing-xs) 0 0; }
+@media (max-width: 767px) {
+  .workspace-structure__continuity dl { grid-template-columns: minmax(0, 1fr); }
+}
 .workspace-structure__layout > *,
 .workspace-structure__layout .card__body { min-width: 0; }
 .workspace-structure__layout .card__body {

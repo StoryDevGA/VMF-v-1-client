@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useSelector } from 'react-redux'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Select } from '../../components/Select'
@@ -6,11 +7,17 @@ import { FiArrowLeft, FiArrowRight, FiArrowUpRight, FiLock } from 'react-icons/f
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import { displayHubToken } from './intelligenceHubModel.js'
 import RecordedLockBasisDetails from './RecordedLockBasisDetails.jsx'
+import { postLockOperationalExplanations } from './lockBasisModel.js'
+import { selectCurrentUser } from '../../store/slices/authSlice.js'
+import PostLockEvidenceHistory from './PostLockEvidenceHistory.jsx'
+import { PostLockMaterial } from './PostLockSubmissionPanel.jsx'
 
-export default function AfterLockView({ renderer, lockBasis, lockBasisLoading, scope, stateVersion, route, active, canInspect, onBasisInspectionReady, onSelectView, onRefresh, refreshing }) {
+export default function AfterLockView({ renderer, lockBasis, lockBasisLoading, operationalCapability, scope, stateVersion, route, active, canInspect, onBasisInspectionReady, onSelectView, onRefresh, refreshing }) {
   const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
+  const user = useSelector(selectCurrentUser)
+  const actorId = String(user?.id ?? user?._id ?? '')
   const scopeKey = JSON.stringify(scope)
-  const ownerKey = JSON.stringify([scope, stateVersion, route, active, canInspect, lockBasisLoading, lockBasis?.available, lockBasis?.locked, lockBasis?.reason, lockBasis?.snapshot?.snapshotHash, sessionRevision])
+  const ownerKey = JSON.stringify([scope, stateVersion, route, active, canInspect, lockBasisLoading, lockBasis?.available, lockBasis?.locked, lockBasis?.reason, lockBasis?.snapshot?.snapshotHash, lockBasis?.frozenInventory, operationalCapability, sessionRevision])
   const token = Symbol('after-lock-frame')
   const frame = useRef(null), opener = useRef(null), restore = useRef(null), latestBasis = useRef(null)
   const [inspection, setInspection] = useState(null)
@@ -41,6 +48,17 @@ export default function AfterLockView({ renderer, lockBasis, lockBasisLoading, s
   const navigate = view => { if (owned()) onSelectView(view) }
   const locked = canInspect && !lockBasisLoading && lockBasis?.available === true && lockBasis?.locked === true
   const unlocked = canInspect && !lockBasisLoading && lockBasis?.reason === 'LOCK_NOT_RECORDED'
+  const capabilityExplanations = postLockOperationalExplanations(active && canInspect
+    ? lockBasisLoading ? { state: 'CHECKING' } : operationalCapability : null)
+    .map(text => text === 'Impact review and successor admission require a selected evidence item and are unavailable here.'
+      ? 'Select a saved evidence item below for its own impact-review and successor-admission checks.' : text)
+  const recordedMembership = locked && lockBasis.frozenInventory ? lockBasis.frozenInventory : null
+  const historyAvailable = locked && recordedMembership?.available === true && operationalCapability?.state === 'VERIFIED'
+    && /^[a-f0-9]{24}$/.test(actorId)
+  const historyScope = { runtimeInstanceId: scope?.revisionId, customerId: scope?.customerId, tenantId: scope?.tenantId }
+  const historyFrame = JSON.stringify([scopeKey, stateVersion, route, active, canInspect, sessionRevision, actorId, recordedMembership?.membershipHash])
+  const membershipDescription = recordedMembership ? 'Verified recorded membership metadata supplied'
+    : locked && !lockBasis.frozenInventory ? 'Not supplied · frozen membership not recorded' : 'Unavailable'
   const revision = renderer?.revision?.revisionNumber ? `R${renderer.revision.revisionNumber}` : 'Selected revision'
   const notice = locked ? `${revision} is frozen. New evidence is reviewed separately before any updated revision is created.`
     : lockBasisLoading ? 'Checking the selected revision’s lock basis…'
@@ -48,17 +66,23 @@ export default function AfterLockView({ renderer, lockBasis, lockBasisLoading, s
   const inspectButton = title => <Button size="sm" variant="outline" disabled={!active || !canInspect} onClick={event => open(event.currentTarget)}>{title}</Button>
   return <div className="intelligence-hub__after-lock-workspace">
     <div className="intelligence-hub__after-lock-notice"><FiLock size={16} aria-hidden="true" /><span>{notice}</span><Button size="sm" variant="outline" disabled={!active || !canInspect} onClick={event => open(event.currentTarget)}>Why this is separate<FiArrowUpRight size={14} aria-hidden="true" /></Button></div>
-    <section className="intelligence-hub__after-lock-empty" role="status" aria-label="Post-lock discovery inbox"><strong>{lockBasisLoading ? 'Checking lock basis' : unlocked ? 'After-lock review not active' : locked ? 'Post-lock inbox not supplied' : 'Lock basis unavailable'}</strong><p>{locked ? 'This is not a zero-item result.' : unlocked ? 'Post-lock inbox is not active because the selected revision is unlocked.' : lockBasisLoading ? 'Post-lock evidence cannot be assessed while the scoped lock read is pending.' : 'Post-lock evidence cannot be assessed without a verified lock basis.'} <Button size="sm" variant="outline" disabled={!active || !canInspect} onClick={() => navigate('Context')}>Gather separate evidence</Button>{inspectButton('Inspect basis and history')}</p></section>
+    <section className="intelligence-hub__after-lock-empty" role="status" aria-label="Post-lock discovery inbox"><strong>{lockBasisLoading ? 'Checking lock basis' : unlocked ? 'After-lock review not active' : historyAvailable ? 'Post-lock evidence and review' : locked ? 'Saved evidence availability unverified' : 'Lock basis unavailable'}</strong><p>{historyAvailable ? 'Saved submissions remain outside the frozen basis. Open an item below to inspect its original source, current impact decision and recorded successor admission.' : locked ? 'This is not a zero-item result.' : unlocked ? 'Post-lock inbox is not active because the selected revision is unlocked.' : lockBasisLoading ? 'Post-lock evidence cannot be assessed while the scoped lock read is pending.' : 'Post-lock evidence cannot be assessed without a verified lock basis.'} <Button size="sm" variant="outline" disabled={!active || !canInspect} onClick={() => navigate('Context')}>Gather separate evidence</Button>{inspectButton('Inspect basis and history')}</p>{capabilityExplanations.map(text => <p key={text}>{text}</p>)}</section>
+    {locked ? <PostLockEvidenceHistory key={historyFrame} scope={historyScope} renderer={renderer} lockBasis={lockBasis}
+      active={active && canInspect && historyAvailable} checking={lockBasisLoading || refreshing}
+      sessionRevision={sessionRevision} frameKey={historyFrame} actorId={actorId} Material={PostLockMaterial} /> : null}
     <footer className="intelligence-hub__after-lock-footer"><Button size="sm" variant="outline" disabled={!active || !canInspect} onClick={() => navigate('Readiness & publish')}><FiArrowLeft size={14} aria-hidden="true" />Readiness &amp; publish</Button><small>Navigation does not approve evidence or change the revision.</small><Button size="sm" variant="outline" disabled={!active || !canInspect} onClick={() => navigate('Coverage')}>Coverage<FiArrowRight size={14} aria-hidden="true" /></Button></footer>
     <details className="intelligence-hub__after-lock-advanced"><summary>Recorded lock read basis</summary><RecordedLockBasisDetails model={canInspect ? lockBasis : null} loading={lockBasisLoading} /><p>Canonical readiness: {canInspect ? displayHubToken(renderer?.readiness?.state) : 'Unavailable'}. Outcome readiness: Unavailable.</p><p>Recorded publication state: {canInspect ? displayHubToken(renderer?.publish?.state) : 'Unavailable'}. Recorded output eligibility: {canInspect && typeof renderer?.publish?.outputEligibility?.outputEligible === 'boolean' ? renderer.publish.outputEligibility.outputEligible ? 'Eligible' : 'Not eligible' : 'Unavailable'}.</p><Button size="sm" variant="outline" disabled={!active || !canInspect || refreshing} aria-busy={Boolean(refreshing)} onClick={() => { if (owned() && !refreshing) onRefresh() }}>Refresh lock reads</Button></details>
     {visible ? <Dialog open size="lg" className="intelligence-hub__dialog intelligence-hub__inspection-dialog intelligence-hub__after-lock-inspection" aria-label="After-lock basis and impact history" onClose={close} onCancel={event => { event.preventDefault(); if (event.target === event.currentTarget) close() }}>
       <Dialog.Header><h2>After-lock basis and impact history</h2></Dialog.Header>
-      <Dialog.Body><Select className="intelligence-hub__inspection-record" label="Record" size="sm" value="after-lock" options={[{value:'after-lock',label:'After-lock basis and impact history'}]} onChange={() => {}} /><p>Inspect acquisition in Context, sources in Sources and evidence decisions in Review. Navigation grants no acquisition or successor authority. Locked Context cannot acquire evidence. Post-lock intake, impact assessment, approval and updated revision continuity are not supplied by these reads.</p><dl className="intelligence-hub__inspection-facts">{[
+      <Dialog.Body><Select className="intelligence-hub__inspection-record" label="Record" size="sm" value="after-lock" options={[{value:'after-lock',label:'After-lock basis and impact history'}]} onChange={() => {}} /><p>Inspect acquisition in Context, sources in Sources and evidence decisions in Review. Navigation grants no acquisition or successor authority. Supply separate evidence in Context. Open a saved item on After Lock for its server-derived impact review and successor admission. Each action requires its own authority, rationale and confirmation.</p>{capabilityExplanations.map(text => <p key={text}>{text}</p>)}<dl className="intelligence-hub__inspection-facts">{[
         ['Protected understanding', locked ? `Recorded locked ${revision}` : unlocked ? 'No recorded lock' : 'Lock basis unavailable'],
-        ['Exact frozen assertions and new versions', 'Not supplied · frozen membership not recorded'],
-        ['Production post-lock inbox and history', 'Not supplied'],
-        ['Updated revision continuity', 'Not supplied'],
-      ].map(([title,value]) => <div key={title}><dt>{title}</dt><dd>{value}</dd></div>)}</dl><Button size="sm" variant="outline" onClick={() => navigate('Context')}>Gather separate evidence<FiArrowRight size={14} aria-hidden="true" /></Button><Button size="sm" variant="outline" onClick={() => navigate('Review')}>Review evidence<FiArrowRight size={14} aria-hidden="true" /></Button></Dialog.Body>
+        ['Exact frozen assertions and new versions', membershipDescription],
+        ...(recordedMembership ? [['Frozen membership snapshot', recordedMembership.snapshotId], ['Frozen membership hash', recordedMembership.membershipHash],
+          ['Frozen basis state version', recordedMembership.basisStateVersion], ['Frozen sources', recordedMembership.counts.sources],
+          ['Frozen evidence objects', recordedMembership.counts.evidence], ['Frozen sections', recordedMembership.counts.sections]] : []),
+        ['Saved post-lock evidence and history', historyAvailable ? 'Read the saved evidence list; select an item for verified review and admission history.' : 'Unavailable for the current read'],
+        ['Updated revision continuity', 'Read from a selected item’s verified admission receipt; not inferred from its lock state'],
+      ].map(([title,value]) => <div key={title}><dt>{title}</dt><dd>{value}</dd></div>)}</dl><p>Recorded membership metadata does not establish independent verification of the original snapshot or replay bodies.</p><Button size="sm" variant="outline" onClick={() => navigate('Context')}>Gather separate evidence<FiArrowRight size={14} aria-hidden="true" /></Button><Button size="sm" variant="outline" onClick={() => navigate('Review')}>Review evidence<FiArrowRight size={14} aria-hidden="true" /></Button></Dialog.Body>
       <Dialog.Footer><Button size="sm" variant="outline" onClick={close}><FiArrowLeft size={14} aria-hidden="true" />Back to After lock</Button></Dialog.Footer>
     </Dialog> : null}
   </div>

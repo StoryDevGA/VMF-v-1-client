@@ -929,6 +929,37 @@
   border-block-start: 0;
   background: var(--color-surface);
 }
+.intelligence-hub--context .intelligence-hub__locked-context {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
+  min-width: 0;
+}
+.intelligence-hub--context .intelligence-hub__locked-context :is(section, form, .card, .card__body) { min-width: 0; }
+.intelligence-hub--context .intelligence-hub__locked-context :is(p, li, dd, label) { overflow-wrap: anywhere; }
+.intelligence-hub--context .intelligence-hub__locked-context .status { max-width: 100%; }
+.intelligence-hub--context .intelligence-hub__locked-context .status__text { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.intelligence-hub--context .intelligence-hub__locked-context .intelligence-hub__inspection-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-md); }
+.intelligence-hub--context .intelligence-hub__locked-context .intelligence-hub__inspection-facts > div { display: block; min-width: 0; }
+.intelligence-hub--context .intelligence-hub__locked-context .intelligence-hub__inspection-facts dd { margin-block-start: var(--spacing-2xs); }
+@media (max-width: 767px) {
+  .intelligence-hub--context .intelligence-hub__locked-context .intelligence-hub__inspection-facts { grid-template-columns: minmax(0, 1fr); }
+}
+.intelligence-hub--context .intelligence-hub__locked-context form { display: grid; gap: var(--spacing-md); }
+.intelligence-hub--context .intelligence-hub__locked-context .intelligence-hub__context-workspace {
+  padding: 0;
+  border: 0;
+  gap: var(--spacing-lg);
+  background: transparent;
+}
+.intelligence-hub--after-lock .intelligence-hub__after-lock-workspace :is(section, form, .card, .card__body) { min-width: 0; }
+.intelligence-hub--after-lock .intelligence-hub__after-lock-workspace :is(p, li, dd, label) { overflow-wrap: anywhere; }
+.intelligence-hub--after-lock .intelligence-hub__after-lock-workspace .status { max-width: 100%; }
+.intelligence-hub--after-lock .intelligence-hub__after-lock-workspace .status__text { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.intelligence-hub--after-lock .intelligence-hub__after-lock-workspace form { display: grid; gap: var(--spacing-md); }
+@media (max-width: 767px) {
+  .intelligence-hub--after-lock .intelligence-hub__after-lock-workspace .intelligence-hub__inspection-facts > div { grid-template-columns: minmax(0, 1fr); }
+}
 .intelligence-hub--context .intelligence-hub__grid { gap: var(--spacing-sm); }
 .intelligence-hub--context .intelligence-hub__context-top { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 .intelligence-hub--context .intelligence-hub__context-bottom { grid-template-columns: minmax(0, 46fr) minmax(0, 59fr) minmax(0, 36fr); }

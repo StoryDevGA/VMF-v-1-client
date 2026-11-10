@@ -52,6 +52,11 @@ process.stdout.write(JSON.stringify({
 }
 
 describe('SuperAdminAuditLogs constants parity', () => {
+  it.each(['POST_LOCK_EVIDENCE_SUBMITTED', 'POST_LOCK_IMPACT_DECISION_RECORDED'])('SS-056 action %s has one filter option matching its backend registry', (action) => {
+    const backendRegistries = loadBackendRegistrySnapshot()
+    expect(backendRegistries.auditActions).toContain(action)
+    expect(ACTION_OPTIONS.filter((option) => option.value === action)).toEqual([{ value: action, label: action }])
+  })
   it('keeps Audit Logs filter constants aligned with backend audit registries', () => {
     const backendRegistries = loadBackendRegistrySnapshot()
 

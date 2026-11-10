@@ -1,4 +1,6 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render as renderWithDOM, screen, within } from '@testing-library/react'
+import { configureStore } from '@reduxjs/toolkit'
+import { Provider } from 'react-redux'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,12 +8,26 @@ import IntelligenceHub from './IntelligenceHub.jsx'
 import { evidenceInventoryFixture } from '../../test/evidenceInventoryFixture.js'
 import { coverageManifestFixture } from '../../test/coverageManifestFixture.js'
 import { graphNeighbourhoodFixture, neighbourhoodHash } from '../../test/graphNeighbourhoodFixture.js'
-import { clearTokens } from '../../utils/tokenStorage.js'
+import { clearTokens, setTokens } from '../../utils/tokenStorage.js'
 import { assuranceReviewFixture, assuranceReceiptFixture } from '../../test/assuranceReviewFixture.js'
 import { discoveryHealthFixture } from '../../test/discoveryHealthFixture.js'
 import { lockBasisFixture } from '../../test/lockBasisFixture.js'
 
+// Submission behavior and its authenticated store are covered by the panel suite.
+vi.mock('./PostLockSubmissionPanel.jsx', () => ({ default: () => null, PostLockMaterial: () => null }))
+vi.mock('./PostLockEvidenceHistory.jsx', () => ({ default: () => null }))
+// These suites inspect scoped read/navigation composition; exact recording identity
+// and saved-item action stores are exercised in the dedicated panel suites.
+const readStore = configureStore({ reducer: () => ({ auth: { user: null } }) })
+const render = (ui, options) => renderWithDOM(ui, { wrapper: ({ children }) => <Provider store={readStore}>{children}</Provider>, ...options })
+
 let lockFixture, lockBusy, lockFailure, lockMissing
+let operationalFixture, operationalBusy, operationalFailure, operationalMissing, operationalOriginalArgs, tenantScope
+const operationalBody = () => ({ contractVersion: 'post-lock-evidence-operational-capability.v1', readAt: '2026-11-06T22:00:00.000Z', currency: 'AS_READ',
+  recording: { eligibility: 'BLOCKED', blockedBy: ['FROZEN_MEMBERSHIP_NOT_RECORDED'], binding: null,
+    checks: { authority: 'VMF_UPDATE_VERIFIED', isolation: 'CLEAR', frozenBasis: 'NOT_RECORDED', policy: 'NOT_CHECKED', storageIndexes: 'NOT_CHECKED' } },
+  impact: { eligibility: 'ITEM_REQUIRED' }, admission: { eligibility: 'ITEM_REQUIRED' },
+  execution: { mode: 'EXPLICIT_SUBMIT_REQUIRED', recheck: 'SERVER_RECHECKS_ON_SUBMIT', indexRead: 'OUTSIDE_TRANSACTION_NOT_ATOMIC', submissionMaterial: 'NOT_CHECKED' } })
 
 const renderer = {
   runtimeInstance: {
@@ -32,6 +48,12 @@ const renderer = {
 }
 
 const calls = { execute: vi.fn(), update: vi.fn(), evidence: vi.fn(), manifest: vi.fn(), graph: vi.fn(), coverage: vi.fn(), refresh: vi.fn(), coverageView: vi.fn(), completion: vi.fn(), health: vi.fn(), headerRefresh: vi.fn(), afterLockHeader: vi.fn(), readinessRefresh: vi.fn(), reportRefresh: vi.fn(), sectionSource: vi.fn(), reviewReturn: vi.fn() }
+calls.operational = vi.fn()
+calls.afterLockView = vi.fn()
+vi.mock('./AfterLockView.jsx', async importOriginal => {
+  const actual = await importOriginal()
+  return { ...actual, default: props => { calls.afterLockView(props); return <actual.default {...props} /> } }
+})
 vi.mock('./CoverageView.jsx', async importOriginal => {
   const actual = await importOriginal()
   return { ...actual, default: props => { calls.coverageView(props); return <actual.default {...props} /> } }
@@ -92,10 +114,16 @@ let healthBusy = false
 let healthFailure = false
 let healthCurrentMissing = false
 vi.mock('../../hooks/useTenantContext.js', () => ({
-  useTenantContext: () => ({ customerId: 'customer-1', tenantId: 'tenant-1' }),
+  useTenantContext: () => tenantScope || ({ customerId: 'customer-1', tenantId: 'tenant-1' }),
 }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => {
 const queries = {
+  useGetRuntimePostLockOperationalCapabilityQuery: (args, options) => {
+    calls.operational(args, options)
+    return { data: options.skip ? undefined : { data: operationalFixture || operationalBody(), meta: { version: 'v1' } },
+      originalArgs: operationalOriginalArgs || args, isSuccess: !options.skip && !operationalBusy && !operationalFailure,
+      isFetching: operationalBusy, isUninitialized: options.skip, error: operationalFailure ? { status: operationalFailure, data: { error: { message: 'private server message' } } } : undefined }
+  },
   useGetRuntimeStateFindingsQuery: (args, options) => ({ isUninitialized: options.skip }),
   useGetRuntimeStateLockBasisQuery: (args, options) => ({ data: options.skip ? undefined : { data: lockFixture || lockBasisFixture({ locked: false }) }, isFetching: lockBusy, isUninitialized: options.skip, error: lockFailure ? { status: 503 } : undefined }),
   useGetRuntimeStateDiscoveryHealthQuery: (args, options) => ({ data: options.skip ? undefined : { data: healthFixture || discoveryHealthFixture(canonicalCurrentControl ? { stateVersion: canonicalCurrentControl.stateVersion } : {}) },
@@ -226,7 +254,8 @@ const queries = {
       } } }
       : detailPending || (name === 'useGetRuntimeStateEvidenceQuery' && args[0].pageSize === 25 && sourceCurrentPending)
         || (name === 'useGetRuntimeStateDiscoveryHealthQuery' && healthCurrentMissing)
-        || (name === 'useGetRuntimeStateLockBasisQuery' && lockMissing) ? undefined : result.data
+        || (name === 'useGetRuntimeStateLockBasisQuery' && lockMissing)
+        || (name === 'useGetRuntimePostLockOperationalCapabilityQuery' && operationalMissing) ? undefined : result.data
     return {
       ...result,
       data: initialOverviewPending && detailPending ? undefined : result.data,
@@ -396,6 +425,7 @@ describe('Intelligence Hub', () => {
   })
   beforeEach(() => {
     lockFixture = undefined; lockBusy = false; lockFailure = false; lockMissing = false
+    operationalFixture = undefined; operationalBusy = false; operationalFailure = undefined; operationalMissing = false; operationalOriginalArgs = undefined; tenantScope = undefined
     neighbourhoodFixture = undefined; neighbourhoodFailure = false; neighbourhoodBusy = false
     manifestRefreshPromise = undefined
     sourceSummaryOverrides = {}; sourceSummaryBusy = false; sourceSummaryFailure = false
@@ -546,7 +576,7 @@ describe('Intelligence Hub', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Graph basis' })); await user.click(screen.getByText('Technical graph basis', { selector: 'summary' })); await user.click(screen.getByRole('link', { name: 'Inspect acquisition and revision routes in Context →' }))
     expect(screen.getByTestId('route-proof')).toHaveTextContent('graphContextReturn=inspection')
-    expect(screen.getByText(/This revision is locked. Inspect its sources/)).toBeInTheDocument()
+    expect(screen.getByText(/This revision is locked. New evidence stays outside its frozen basis/)).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'Return to graph inspection →' }))
     expect(screen.getByTestId('route-proof')).toHaveTextContent('graphAfterEdgeKey=edge%3Aa%3A047')
     expect(screen.getByTestId('route-proof')).toHaveTextContent('graphObjectId=evidence-2')
@@ -1417,7 +1447,7 @@ describe('Intelligence Hub', () => {
     readinessFields = { readiness: { state: 'LOCKED' }, publish: { published: true }, lock: { state: 'LOCKED', locked: true } }
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
     expect(screen.getByText('R2 is frozen. New evidence is reviewed separately before any updated revision is created.')).toBeInTheDocument()
-    expect(screen.getByRole('status', {name:'Post-lock discovery inbox'})).toHaveTextContent('Post-lock inbox not supplied')
+    expect(screen.getByRole('status', {name:'Post-lock discovery inbox'})).toHaveTextContent('Saved evidence availability unverified')
     expect(screen.getByRole('status', {name:'Post-lock discovery inbox'})).toHaveTextContent('This is not a zero-item result.')
     expect(screen.queryByRole('button', {name:'Save decision'})).not.toBeInTheDocument()
     expect(screen.queryByRole('button', {name:/Approve assessment/})).not.toBeInTheDocument()
@@ -1425,6 +1455,147 @@ describe('Intelligence Hub', () => {
     await userEvent.click(screen.getByRole('button', {name:'View basis'}))
     expect(screen.getByRole('dialog')).toHaveTextContent('Not supplied · frozen membership not recorded')
     expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('uses the separate operational read instead of the legacy unavailable-only capability', () => {
+    lockFixture = lockBasisFixture()
+    lockFixture.lockBasis.outsideSnapshotIntake = { contractVersion: 'post-lock-evidence-intake-capability.v1',
+      available: false, reason: 'FROZEN_MEMBERSHIP_NOT_RECORDED', blockedBy: ['FROZEN_MEMBERSHIP_NOT_RECORDED'],
+      policy: { status: 'NOT_CHECKED' }, frozenBasis: { available: false },
+      registrationAvailable: false, dispositionAvailable: false, impactApplicationAvailable: false }
+    readinessFields = { readiness: { state: 'LOCKED' }, publish: { published: true }, lock: { state: 'LOCKED', locked: true } }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    expect(screen.getByRole('status', { name: 'Post-lock discovery inbox' }))
+      .toHaveTextContent('Post-lock recording is unavailable because exact frozen evidence membership was not recorded.')
+    const [args, options] = calls.operational.mock.calls.at(-1)
+    expect(args).toEqual(expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1',
+      stateVersion: 'version-2', sessionRevision: expect.any(Number), basisKey: expect.any(String), frameKey: expect.any(String) }))
+    expect(options).toEqual({ skip: false, refetchOnMountOrArgChange: true })
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+  })
+  it.each(['busy', 'missing', 'denied', 'dependency', 'malformed', 'old-owner'])('withholds retained operational and legacy reasons during %s', async kind => {
+    lockFixture = lockBasisFixture()
+    lockFixture.lockBasis.outsideSnapshotIntake = { contractVersion: 'post-lock-evidence-intake-capability.v1', available: false, reason: 'POST_LOCK_POLICY_NOT_RECORDED' }
+    operationalBusy = kind === 'busy'; operationalMissing = kind === 'missing'
+    operationalFailure = kind === 'denied' ? 403 : kind === 'dependency' ? 503 : undefined
+    if (kind === 'malformed') operationalFixture = { ...operationalBody(), contractVersion: 'future private version' }
+    if (kind === 'old-owner') operationalOriginalArgs = { runtimeInstanceId: 'previous-revision' }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    const page = screen.getByRole('status', { name: 'Post-lock discovery inbox' })
+    expect(page).not.toHaveTextContent('no recorded post-lock policy')
+    expect(page).not.toHaveTextContent('exact frozen evidence membership was not recorded')
+    expect(page).toHaveTextContent(kind === 'busy' ? 'Checking post-lock recording availability' : kind === 'denied' ? 'could not be read with your current access' : 'availability could not be verified')
+    expect(page).not.toHaveTextContent('private')
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect basis and history' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent(kind === 'busy' ? 'Checking post-lock recording availability' : kind === 'denied' ? 'could not be read with your current access' : 'availability could not be verified')
+  })
+  it('skips the operational read until the scoped lock read is completed and on other views', async () => {
+    lockFixture = lockBasisFixture(); lockBusy = true
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock', view = show(search)
+    expect(calls.operational.mock.calls.at(-1)[1].skip).toBe(true)
+    lockBusy = false
+    view.rerender(<MemoryRouter initialEntries={['/app/intelligence' + search]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(calls.operational.mock.calls.at(-1)[1].skip).toBe(false)
+    await userEvent.click(screen.getByRole('tab', { name: 'Context' }))
+    expect(calls.operational.mock.calls.at(-1)[1].skip).toBe(true)
+  })
+  it.each(['state', 'basis', 'returning-frame'])('does not refetch a departed operational entry through a retained Hub handler after %s changes', async kind => {
+    lockFixture = lockBasisFixture()
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock', view = show(search)
+    const retained = calls.afterLockView.mock.calls.at(-1)[0].onRefresh
+    const oldArgs = calls.operational.mock.calls.at(-1)[0]
+    if (kind === 'state') {
+      lockFixture.control.stateVersion = 'version-3'
+      readinessFields = { runtimeInstance: { ...renderer.runtimeInstance, stateVersion: 'version-3' } }
+    }
+    if (kind === 'basis') {
+      lockFixture.lockBasis.snapshot.snapshotHash = 'f'.repeat(64)
+      lockFixture.lockBasis.replay.anchor.lockSnapshotHash = 'f'.repeat(64)
+    }
+    if (kind === 'returning-frame') {
+      await userEvent.click(screen.getByRole('tab', { name: 'Context' }))
+      await userEvent.click(screen.getByRole('tab', { name: 'After lock' }))
+    } else view.rerender(<MemoryRouter initialEntries={['/app/intelligence' + search]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(calls.operational.mock.calls.at(-1)[0].frameKey).not.toBe(oldArgs.frameKey)
+    calls.refresh.mockClear(); act(() => retained())
+    expect(calls.refresh).not.toHaveBeenCalled()
+  })
+  it('rejects a same-route late result from the departed frame after returning', async () => {
+    lockFixture = lockBasisFixture(); show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    const oldArgs = calls.operational.mock.calls.at(-1)[0]
+    await userEvent.click(screen.getByRole('tab', { name: 'Context' }))
+    operationalOriginalArgs = oldArgs
+    await userEvent.click(screen.getByRole('tab', { name: 'After lock' }))
+    expect(calls.operational.mock.calls.at(-1)[0].frameKey).not.toBe(oldArgs.frameKey)
+    expect(screen.getByRole('status', { name: 'Post-lock discovery inbox' })).toHaveTextContent('availability could not be verified')
+    expect(screen.getByRole('status', { name: 'Post-lock discovery inbox' })).not.toHaveTextContent('exact frozen evidence membership was not recorded')
+  })
+  it.each(['logout', 'account replacement'])('suppresses an old-session completed result after %s', kind => {
+    lockFixture = lockBasisFixture()
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock', view = show(search)
+    operationalOriginalArgs = calls.operational.mock.calls.at(-1)[0]
+    const session = operationalOriginalArgs.sessionRevision
+    act(() => kind === 'logout' ? clearTokens() : setTokens({ accessToken: 'replacement-session', refreshToken: 'replacement-refresh' }))
+    view.rerender(<MemoryRouter initialEntries={['/app/intelligence' + search]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(calls.operational.mock.calls.at(-1)[0].sessionRevision).not.toBe(session)
+    expect(screen.getByRole('status', { name: 'Post-lock discovery inbox' })).toHaveTextContent('availability could not be verified')
+    act(() => clearTokens())
+  })
+  it('rejects the retained Hub refresh after an in-place After lock route change', async () => {
+    lockFixture = lockBasisFixture()
+    function RouteSwitch() {
+      const navigate = useNavigate()
+      return <><button onClick={() => navigate('/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock&sourceId=changed')}>Change After lock route</button><IntelligenceHub /></>
+    }
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock']}><Routes><Route path="/app/intelligence" element={<RouteSwitch />} /></Routes></MemoryRouter>)
+    const retained = calls.afterLockView.mock.calls.at(-1)[0].onRefresh, oldArgs = calls.operational.mock.calls.at(-1)[0]
+    await userEvent.click(screen.getByRole('button', { name: 'Change After lock route' }))
+    expect(calls.operational.mock.calls.at(-1)[0].frameKey).not.toBe(oldArgs.frameKey)
+    calls.refresh.mockClear(); act(() => retained()); expect(calls.refresh).not.toHaveBeenCalled()
+  })
+  it('rechecks current refresh ownership between every scheduled read', () => {
+    lockFixture = lockBasisFixture(); show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    const refresh = calls.afterLockView.mock.calls.at(-1)[0].onRefresh
+    calls.refresh.mockClear(); calls.refresh.mockImplementationOnce(() => clearTokens())
+    act(() => refresh())
+    expect(calls.refresh).toHaveBeenCalledTimes(1)
+    expect(calls.refresh.mock.calls[0][0]).toBe('useGetRuntimeRendererQuery')
+  })
+  it('displays a fully matching eligible read without enabling submission or review', async () => {
+    const stateVersion = 'rsv2:123e4567-e89b-42d3-a456-426614174000', runtimeId = '1'.repeat(24)
+    tenantScope = { customerId: '2'.repeat(24), tenantId: '3'.repeat(24) }
+    const runtime = { ...renderer.runtimeInstance, id: runtimeId, runtimeInstanceKey: 'positive-revision', ...tenantScope, stateVersion,
+      packageId: '4'.repeat(24), packageVersion: 'v1', dependencyLockId: 'dependency-1',
+      evidence: { dependencySnapshotId: 'dependency-1', dependencySnapshotHash: 'd'.repeat(64) } }
+    const revision = { ...renderer.revision, lineage: [{ runtimeInstanceId: runtimeId, relationship: 'CURRENT' }] }
+    readinessFields = { runtimeInstance: runtime, revision, package: { packageId: runtime.packageId, frameworkVersion: 'v1', snapshotId: 'dependency-1' },
+      lock: { locked: true, state: 'LOCKED' } }
+    lockFixture = lockBasisFixture()
+    Object.assign(lockFixture.control, runtime, { revision: { revisionNumber: 2 } })
+    Object.assign(lockFixture.lockBasis.replay.anchor, { runtimeInstanceId: runtimeId, runtimeInstanceKey: runtime.runtimeInstanceKey })
+    lockFixture.lockBasis.frozenInventory = { available: true, completeness: 'VERIFIED', reason: null, contractVersion: 'runtime-evidence-membership.v1',
+      snapshotId: 'evidence_snapshot_123e4567-e89b-42d3-a456-426614174000', membershipHash: 'c'.repeat(64), basisStateVersion: stateVersion,
+      lockSnapshotId: 'lock-receipt-2', lockSnapshotHash: 'a'.repeat(64), revisionNumber: 2, counts: { sources: 2, evidence: 3, sections: 1 },
+      verification: { basis: 'EXACT_PERSISTED_MEMBERSHIP', materialHashAlgorithm: 'sha256-canonical-json-housekeeping-excluded.v1', auditLinkVerified: true } }
+    operationalFixture = operationalBody()
+    operationalFixture.recording = { eligibility: 'ELIGIBLE_AS_READ', blockedBy: [], checks: { authority: 'VMF_UPDATE_VERIFIED', isolation: 'CLEAR', frozenBasis: 'VERIFIED', policy: 'VERIFIED', storageIndexes: 'VERIFIED_AS_WRITER' },
+      binding: { ...tenantScope, runtimeInstanceId: runtimeId, runtimeInstanceKey: runtime.runtimeInstanceKey, revisionNumber: 2, basisStateVersion: stateVersion,
+        evidenceSnapshotId: lockFixture.lockBasis.frozenInventory.snapshotId, membershipHash: 'c'.repeat(64), lockSnapshotId: 'lock-receipt-2', lockSnapshotHash: 'a'.repeat(64),
+        packageId: '4'.repeat(24), packageVersion: 'v1', dependencySnapshotId: 'dependency-1', dependencySnapshotHash: 'd'.repeat(64), policyHash: 'e'.repeat(64) } }
+    show(`?runtimeInstanceId=workspace-1&revisionId=${runtimeId}&view=after-lock`)
+    expect(screen.getByRole('status', { name: 'Post-lock discovery inbox' })).toHaveTextContent('server verified recording prerequisites')
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect basis and history' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('server verified recording prerequisites')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Verified recorded membership metadata supplied')
+    expect(screen.queryByRole('button', { name: /Submit|Admit|Save decision|Create revision/i })).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('withholds old capability details after a customer or tenant context change', () => {
+    lockFixture = lockBasisFixture()
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock', view = show(search)
+    tenantScope = { customerId: 'other-customer', tenantId: 'other-tenant' }
+    view.rerender(<MemoryRouter initialEntries={['/app/intelligence' + search]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(calls.operational.mock.calls.at(-1)[1].skip).toBe(true)
+    expect(screen.queryByText(/exact frozen evidence membership was not recorded/)).not.toBeInTheDocument()
   })
   it.each([{}, { state:'LOCKED', locked:false }])('does not assert protection when lock state is missing or conflicting (%j)', lock => {
     lockFailure=true; readinessFields={lock}
@@ -1437,7 +1608,8 @@ describe('Intelligence Hub', () => {
     await userEvent.click(screen.getByRole('button', {name:'Why this is separate'}))
     const dialog=screen.getByRole('dialog', {name:'After-lock basis and impact history'})
     expect(dialog).not.toHaveTextContent('Recorded locked R2')
-    expect(dialog).toHaveTextContent('Locked Context cannot acquire evidence')
+    expect(dialog).toHaveTextContent('Navigation grants no acquisition or successor authority.')
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
   })
   it('preserves After lock on explanation close and navigates with selected context', async () => {
     const user=userEvent.setup(); show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
@@ -1497,13 +1669,15 @@ describe('Intelligence Hub', () => {
     expect(calls.refresh).not.toHaveBeenCalled()
   })
 
-  it('refreshes the selected bounded renderer and lock basis from After lock', async () => {
+  it('refreshes the three initialized current After lock reads with the current operational identity', async () => {
     const user = userEvent.setup()
     show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
     await refreshCurrentView(user)
-    expect(calls.refresh).toHaveBeenCalledTimes(2)
+    expect(calls.refresh).toHaveBeenCalledTimes(3)
+    expect(calls.refresh.mock.calls.map(([name]) => name)).toEqual(['useGetRuntimeRendererQuery', 'useGetRuntimeStateLockBasisQuery', 'useGetRuntimePostLockOperationalCapabilityQuery'])
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeStateLockBasisQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2' }))
     expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeRendererQuery', expect.objectContaining({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1' }))
+    expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimePostLockOperationalCapabilityQuery', calls.operational.mock.calls.at(-1)[0])
   })
 
   it('does not render revision data when route context is missing', () => {

@@ -220,6 +220,34 @@ export const buildRuntimeStateLockBasisQuery = ({ runtimeInstanceId, customerId,
   return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/lock-basis?${params}`
 }
 
+export const buildRuntimePostLockOperationalCapabilityQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/post-lock-evidence-capability?${params}`
+}
+
+export const buildSubmitRuntimePostLockEvidenceQuery = ({ runtimeInstanceId, customerId, tenantId, body }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return { url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/post-lock-evidence?${params}`,
+    method: 'POST', body }
+}
+
+export const buildRuntimePostLockEvidenceQuery = ({ runtimeInstanceId, customerId, tenantId, submissionId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/post-lock-evidence/${encodeURIComponent(String(submissionId ?? '').trim())}?${params}`
+}
+
+export const buildRuntimePostLockEvidenceListQuery = ({ runtimeInstanceId, customerId, tenantId, cursor }) => {
+  const params = new URLSearchParams({ customerId, tenantId, pageSize: '5' })
+  if (cursor) params.set('cursor', cursor)
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/post-lock-evidence?${params}`
+}
+
+export const buildRuntimePostLockImpactHistoryQuery = ({ runtimeInstanceId, customerId, tenantId, submissionId, afterSequence = 0 }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  params.set('afterSequence', String(afterSequence)); params.set('limit', '20')
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/post-lock-evidence/${encodeURIComponent(String(submissionId ?? '').trim())}/impact-decisions?${params}`
+}
+
 export const buildRuntimeStateContradictionHistoryQuery = ({ runtimeInstanceId, customerId, tenantId, findingId, page = 1, pageSize = 10 }) => {
   const params = buildRuntimeStateScopeParams({ customerId, tenantId })
   params.set('findingId', findingId); params.set('page', page); params.set('pageSize', pageSize)
@@ -710,6 +738,12 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getCreateRuntimeRevisionInvalidationTags,
     }),
 
+    admitRuntimePostLockEvidence: build.mutation({
+      query: buildCreateRuntimeRevisionQuery,
+      // Verify the exact admission and child explicitly; do not replace the locked parent read mid-command.
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
     getRuntimeInstance: build.query({
       query: buildRuntimeInstanceDetailQuery,
       providesTags: getRuntimeInstanceDetailTags,
@@ -765,6 +799,37 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     getRuntimeStateLockBasis: build.query({
       query: buildRuntimeStateLockBasisQuery,
       providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimePostLockOperationalCapability: build.query({
+      query: buildRuntimePostLockOperationalCapabilityQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    submitRuntimePostLockEvidence: build.mutation({
+      query: buildSubmitRuntimePostLockEvidenceQuery,
+      // Pending material does not invalidate or replace the frozen evidence basis.
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimePostLockEvidence: build.query({
+      query: buildRuntimePostLockEvidenceQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimePostLockEvidenceList: build.query({
+      query: buildRuntimePostLockEvidenceListQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimePostLockImpactHistory: build.query({
+      query: buildRuntimePostLockImpactHistoryQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+    recordRuntimePostLockImpact: build.mutation({
+      query: ({ body, ...args }) => ({ url: buildRuntimePostLockImpactHistoryQuery(args).replace(/&afterSequence=[^&]*&limit=20$/, ''), method: 'POST', body }),
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
@@ -1122,6 +1187,7 @@ export const {
   useListRuntimeInstanceActivityQuery,
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeRevisionMutation,
+  useAdmitRuntimePostLockEvidenceMutation,
   useGetRuntimeInstanceQuery,
   useGetRuntimeInstanceSummaryQuery,
   useGetRuntimeStateBootstrapQuery,
@@ -1133,6 +1199,14 @@ export const {
   useGetRuntimeStateGraphManifestQuery,
   useGetRuntimeStateDiscoveryHealthQuery,
   useGetRuntimeStateLockBasisQuery,
+  useGetRuntimePostLockOperationalCapabilityQuery,
+  useSubmitRuntimePostLockEvidenceMutation,
+  useLazyGetRuntimePostLockEvidenceQuery,
+  useGetRuntimePostLockEvidenceQuery,
+  useGetRuntimePostLockEvidenceListQuery,
+  useGetRuntimePostLockImpactHistoryQuery,
+  useLazyGetRuntimePostLockImpactHistoryQuery,
+  useRecordRuntimePostLockImpactMutation,
   useGetRuntimeStateContradictionHistoryQuery,
   useGetRuntimeStateFindingsQuery,
   useGetRuntimeStateGraphProjectionQuery,

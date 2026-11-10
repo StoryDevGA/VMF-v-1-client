@@ -1,5 +1,52 @@
 import { describe, expect, it } from 'vitest'
+import { buildSubmitRuntimePostLockEvidenceQuery, buildRuntimePostLockEvidenceQuery,
+  useSubmitRuntimePostLockEvidenceMutation, useLazyGetRuntimePostLockEvidenceQuery } from './runtimeInstanceApi.js'
 import { configureStore } from '@reduxjs/toolkit'
+
+describe('Structure session cache ownership', () => {
+  it.each(['getRuntimeRenderer', 'getRuntimeStateBootstrap', 'getRuntimeStateSectionSummary'])('%s isolates a same-scope new session and late old fulfillment', async endpoint => {
+    const store = configureStore({ reducer: { [runtimeInstanceApi.reducerPath]: runtimeInstanceApi.reducer },
+      middleware: getDefaultMiddleware => getDefaultMiddleware().concat(runtimeInstanceApi.middleware) })
+    const scope = { runtimeInstanceId: 'same-runtime', customerId: 'shared-customer', tenantId: 'same-tenant', sectionKey: 'customer_context' }
+    const oldSession = { ...scope, sessionRevision: 1 }, newSession = { ...scope, sessionRevision: 2 }
+    const read = args => runtimeInstanceApi.endpoints[endpoint].select(args)(store.getState()).data
+    try {
+      await store.dispatch(runtimeInstanceApi.util.upsertQueryData(endpoint, oldSession, { marker: 'old-account' }))
+      expect(read(newSession)).toBeUndefined()
+      await store.dispatch(runtimeInstanceApi.util.upsertQueryData(endpoint, newSession, { marker: 'new-account' }))
+      await store.dispatch(runtimeInstanceApi.util.upsertQueryData(endpoint, oldSession, { marker: 'late-old-account' }))
+      expect(read(newSession)).toEqual({ marker: 'new-account' })
+      expect(read(oldSession)).toEqual({ marker: 'late-old-account' })
+    } finally { store.dispatch(runtimeInstanceApi.util.resetApiState()) }
+  })
+  it('keeps the session cache identity out of all three request URLs', () => {
+    const scope = { runtimeInstanceId: 'same-runtime', customerId: 'shared-customer', tenantId: 'same-tenant', sectionKey: 'customer_context' }
+    for (const build of [buildRuntimeRendererQuery, buildRuntimeStateBootstrapQuery, buildRuntimeStateSectionSummaryQuery]) {
+      expect(build({ ...scope, sessionRevision: 2 })).toEqual(build(scope))
+      expect(String(build({ ...scope, sessionRevision: 2 }))).not.toContain('sessionRevision')
+    }
+  })
+})
+
+describe('post-lock pending submission transport', () => {
+  it('sends only the frozen body with explicit customer/tenant scope and encoded runtime', () => {
+    const body = { contractVersion: 'post-lock-evidence-submission.v1', requestKey: 'one-frozen-intent' }
+    expect(buildSubmitRuntimePostLockEvidenceQuery({ runtimeInstanceId: 'revision/3', customerId: 'customer & one',
+      tenantId: 'tenant/one', body, sessionRevision: 8, frameKey: 'private-cache-only' })).toEqual({
+      url: '/runtime-instances/revision%2F3/post-lock-evidence?customerId=customer+%26+one&tenantId=tenant%2Fone', method: 'POST', body })
+  })
+  it('reads one encoded original submission without transmitting local ownership or adding list parameters', () => {
+    expect(buildRuntimePostLockEvidenceQuery({ runtimeInstanceId: 'revision/3', customerId: 'customer', tenantId: 'tenant',
+      submissionId: 'submission/?', sessionRevision: 4, frameKey: 'read-1' }))
+      .toBe('/runtime-instances/revision%2F3/post-lock-evidence/submission%2F%3F?customerId=customer&tenantId=tenant')
+  })
+  it('exports the actual mutation and exact lazy read, with no workflow or frozen-inventory invalidation', () => {
+    expect(typeof useSubmitRuntimePostLockEvidenceMutation).toBe('function')
+    expect(typeof useLazyGetRuntimePostLockEvidenceQuery).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.submitRuntimePostLockEvidence.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimePostLockEvidence.initiate).toBe('function')
+  })
+})
 
 it('reads the scoped synthetic run without transmitting the session cache identity', () => {
   expect(buildRuntimeSyntheticOutcomeRunQuery({ runtimeInstanceId: 'runtime/3', customerId: 'customer', tenantId: 'tenant', sessionRevision: 4 }))
@@ -33,6 +80,8 @@ it('builds the scoped Discovery Health read without transmitting cache-only sess
     .toBe('/runtime-instances/revision%2F2/state/discovery-health?customerId=customer-1&tenantId=tenant-1')
 })
 import {
+  buildRuntimePostLockOperationalCapabilityQuery,
+  useGetRuntimePostLockOperationalCapabilityQuery,
   buildRuntimeSyntheticOutcomeRunQuery,
   buildRecordRuntimeSourceVerificationQuery,
   buildOutcomePlanningQuery,
@@ -206,6 +255,29 @@ import {
 } from './runtimeInstanceApi.js'
 
 describe('runtimeInstanceApi', () => {
+  it('registers the read-only scoped recording availability endpoint and keeps ownership identity off the wire', () => {
+    expect(buildRuntimePostLockOperationalCapabilityQuery({ runtimeInstanceId: 'revision/2', customerId: 'customer & one', tenantId: 'tenant/one',
+      sessionRevision: 7, stateVersion: 'state', basisKey: 'basis', frameKey: 'local-frame', body: { confirm: true } }))
+      .toBe('/runtime-instances/revision%2F2/post-lock-evidence-capability?customerId=customer+%26+one&tenantId=tenant%2Fone')
+    expect(typeof useGetRuntimePostLockOperationalCapabilityQuery).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimePostLockOperationalCapability.initiate).toBe('function')
+    expect(RUNTIME_HEAVY_READ_OPTIONS).toEqual({ maxRetries: 0 })
+    expect(getRuntimeInstanceDetailTags(undefined, undefined, { runtimeInstanceId: 'revision/2' })).toEqual([{ type: 'RuntimeInstance', id: 'revision/2' }])
+  })
+  it('keeps actual RTK current cache entries separate across session, state, basis and returning local frames without making a request', async () => {
+    const store = configureStore({ reducer: { [runtimeInstanceApi.reducerPath]: runtimeInstanceApi.reducer },
+      middleware: getDefault => getDefault().concat(runtimeInstanceApi.middleware) })
+    const base = { runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', sessionRevision: 1, stateVersion: 'v1', basisKey: 'basis-1', frameKey: 'frame-1' }
+    const args = [base, { ...base, sessionRevision: 2 }, { ...base, stateVersion: 'v2' }, { ...base, basisKey: 'basis-2' }, { ...base, frameKey: 'frame-3' }]
+    try {
+      for (const [index, arg] of args.entries()) await store.dispatch(runtimeInstanceApi.util.upsertQueryData('getRuntimePostLockOperationalCapability', arg, { marker: index }))
+      for (const [index, arg] of args.entries()) {
+        const entry = runtimeInstanceApi.endpoints.getRuntimePostLockOperationalCapability.select(arg)(store.getState())
+        expect(entry.data).toEqual({ marker: index }); expect(entry.originalArgs).toEqual(arg)
+      }
+      expect(Object.keys(store.getState()[runtimeInstanceApi.reducerPath].mutations)).toEqual([])
+    } finally { store.dispatch(runtimeInstanceApi.util.resetApiState()) }
+  })
   it('sends canonical evidence selection without an undefined node ID or session on the wire', () => {
     const url = buildRuntimeStateGraphNeighbourhoodQuery({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1',
       evidenceObjectId: 'canonical:one & exact', mode: 'Lineage', graphHash: `sha256:${'a'.repeat(64)}`, sessionRevision: 9 })

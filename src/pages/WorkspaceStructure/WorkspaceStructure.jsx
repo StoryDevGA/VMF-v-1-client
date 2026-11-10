@@ -11,6 +11,7 @@ import { Status } from '../../components/Status'
 import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { StructureNavigationGuard } from './StructureNavigationGuard.jsx'
+import PostLockAvailability from '../IntelligenceHub/PostLockAvailability.jsx'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectResolvedPermissions } from '../../store/slices/authSlice.js'
 import { hasCustomerPermission, hasTenantPermission } from '../../utils/authorization.js'
@@ -21,7 +22,7 @@ import { useGetRuntimeRendererQuery, useGetRuntimeStateBootstrapQuery, useGetRun
   useExecuteRuntimeActionMutation, useAcceptRuntimeSectionMutation, useMutateRuntimeStateMutation, useUpdateRuntimeSectionEvidenceMutation, useReviewRuntimeSectionEvidenceMutation } from '../../store/api/runtimeInstanceApi.js'
 import { buildDiscoveryDocumentSource, DISCOVERY_DOCUMENT_ACCEPT, DISCOVERY_DOCUMENT_MAX_COUNT, DOCUMENT_EXTRACTION_HELPER_TEXT, formatDocumentSize, formatSectionSupportingFileError } from '../../utils/discoveryAcquisition.js'
 import { sectionDocuments, sectionEvidence, reviewableSectionEvidence, verifiedSectionEvidenceReview, verifiedSectionFileUpload } from './sectionFilesModel.js'
-import { readUnderstandingCatalogue, readUnderstandingBasis, understandingContent, understandingLineageHref, sectionContextText, sectionContextValue, sameSectionInput } from './understandingModel.js'
+import { readUnderstandingCatalogue, readUnderstandingBasis, readRevisionContinuity, understandingContent, understandingLineageHref, sectionContextText, sectionContextValue, sameSectionInput } from './understandingModel.js'
 import '../IntelligenceHub/IntelligenceHub.css'
 import './WorkspaceStructure.css'
 
@@ -52,13 +53,18 @@ export default function WorkspaceStructure() {
 
 export function ScopedStructure({ scope, session, canUpdate, search, setSearch, onDraftState = ignoreDraft }) {
   const args = { runtimeInstanceId: scope.runtimeInstanceId, customerId: scope.customerId, tenantId: scope.tenantId }
+  const readArgs = { ...args, sessionRevision: session }
   const skip = !Object.values(scope).every(Boolean)
-  const rendererRead = useGetRuntimeRendererQuery(args, { skip })
-  const bootstrapRead = useGetRuntimeStateBootstrapQuery(args, { skip })
+  const rendererRead = useGetRuntimeRendererQuery(readArgs, { skip, refetchOnMountOrArgChange: true })
+  const bootstrapRead = useGetRuntimeStateBootstrapQuery(readArgs, { skip, refetchOnMountOrArgChange: true })
   const catalogue = !rendererRead.error && !bootstrapRead.error ? readUnderstandingCatalogue(rendererRead.currentData ?? rendererRead.data, bootstrapRead.currentData ?? bootstrapRead.data, scope) : null
+  const availabilityCatalogue = !rendererRead.error && !bootstrapRead.error
+    ? readUnderstandingCatalogue(rendererRead.currentData, bootstrapRead.currentData, scope) : null
+  const revisionChecking = rendererRead.isLoading || rendererRead.isFetching || bootstrapRead.isLoading || bootstrapRead.isFetching
+  const continuity = !revisionChecking && getSessionRevision() === session ? readRevisionContinuity(availabilityCatalogue) : null
   const requestedKey = search.get('section') || catalogue?.sections[0]?.sectionKey || ''
   const selected = catalogue?.sections.find(row => row.sectionKey === requestedKey)
-  const sectionRead = useGetRuntimeStateSectionSummaryQuery({ ...args, sectionKey: selected?.nativeKey || '' }, { skip: skip || !selected })
+  const sectionRead = useGetRuntimeStateSectionSummaryQuery({ ...readArgs, sectionKey: selected?.nativeKey || '' }, { skip: skip || !selected, refetchOnMountOrArgChange: true })
   const loading = [rendererRead, bootstrapRead, sectionRead].some(read => read.isLoading || read.isFetching)
   const basis = !loading && !sectionRead.error ? readUnderstandingBasis(catalogue, sectionRead.currentData ?? sectionRead.data, requestedKey, canUpdate) : null
   const [execute] = useExecuteRuntimeActionMutation(), [accept] = useAcceptRuntimeSectionMutation(), [mutate] = useMutateRuntimeStateMutation()
@@ -210,7 +216,29 @@ export function ScopedStructure({ scope, session, canUpdate, search, setSearch, 
     <header className="intelligence-hub__heading"><div><p className="intelligence-hub__eyebrow">Workspace Structure · {catalogue?.renderer.package?.packageName || 'Selected Framework package'}</p>
       <h1 id="workspace-structure-title">Workspace Structure</h1><p>{catalogue?.renderer.package?.frameworkVersion ? `Framework package v${catalogue.renderer.package.frameworkVersion}` : 'Package provenance unavailable'}</p></div>
       <Button size="sm" variant="outline" disabled={busy || !selected} onClick={inspect}>Refresh section basis</Button></header>
-    {!catalogue || !section ? <p role="status">{loading ? 'Loading selected workspace structure…' : 'The selected workspace, package or section could not be verified. Open Workspace Structure from the selected Workspace Home.'}</p> : <div className="workspace-structure__layout">
+    <Card variant="outlined" className="workspace-structure__continuity" role="region" aria-label="Revision continuity">
+      <Card.Header><h2>Revision relationship and status</h2><Button size="sm" variant="outline" disabled={skip || busy || dirty || revisionChecking} onClick={() => {
+        if (getSessionRevision() === session && !busy && !dirty && !revisionChecking) { rendererRead.refetch(); bootstrapRead.refetch() }
+      }}>Refresh revision status</Button></Card.Header><Card.Body>
+        {!continuity ? <p role="status">{revisionChecking ? 'Checking the selected revision and its relationships…' : 'Revision relationships and readiness could not be verified. No predecessor, successor or ready state is inferred.'}</p>
+          : <><h3>{`R${continuity.number} · ${continuity.locked ? 'Locked revision' : continuity.stage}`}</h3>
+            <p>{continuity.locked ? 'This revision is locked. Its recorded evidence and understanding stay unchanged; inspect its history or open its successor separately.'
+              : continuity.parent ? 'This successor has its own evidence basis. Predecessor approval does not establish its readiness, publication or lock.' : 'Status applies only to this selected revision. Evidence review, understanding acceptance and publication remain separate.'}</p>
+            <dl>{[['Readiness', continuity.readiness], ['Publication', continuity.published], ['State version', continuity.stateVersion]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+            <ButtonGroup gap="md" stackOnMobile>
+              {continuity.parent ? <Link to={getExecutionWorkspaceDestinationHref('structure', scope.workspaceId, continuity.parent.key)}>{`Inspect predecessor R${continuity.parent.number}`}</Link> : null}
+              {continuity.child ? <Link to={getExecutionWorkspaceDestinationHref('structure', scope.workspaceId, continuity.child.key)}>{`Open successor R${continuity.child.number}`}</Link> : null}
+              <Link to={hubHref('after-lock')}>Inspect post-lock evidence and decisions</Link>
+            </ButtonGroup>
+            {continuity.child ? <p>A successor is recorded. Open it to read its own current readiness; that state is not inferred from this predecessor.</p> : null}
+            {!continuity.locked ? <p>Review evidence and the selected section's permitted controls before proceeding. This view does not run, approve or lock the revision.</p> : null}
+          </>}
+      </Card.Body></Card>
+    {catalogue?.renderer.lock?.locked === true || catalogue?.renderer.lock?.state === 'LOCKED' ? <PostLockAvailability
+      scope={scope} renderer={availabilityCatalogue?.renderer} contextKey={JSON.stringify(scope)} route={search.toString()}
+      canRead={Boolean(availabilityCatalogue)} loading={Boolean(rendererRead.isLoading || rendererRead.isFetching || bootstrapRead.isLoading || bootstrapRead.isFetching)}
+      error={rendererRead.error || bootstrapRead.error} /> : null}
+    {!catalogue || !section ? <p role="status">{loading ? 'Loading selected workspace structure…' : catalogue && catalogue.sections.length === 0 ? 'No sections are supplied for this revision. No section readiness or accepted understanding is asserted.' : 'The selected workspace, package or section could not be verified. Open Workspace Structure from the selected Workspace Home.'}</p> : <div className="workspace-structure__layout">
       <Card variant="outlined"><Card.Body>
         <p className="intelligence-hub__eyebrow">Workspace section</p><h2>{section.label}</h2><p>{section.helpText}</p>
         <ButtonGroup><Badge size="sm">{section.required ? 'Required' : 'Optional'}</Badge><Status size="sm" variant={basis?.acceptedCurrent ? 'success' : 'warning'}>{basis?.acceptedCurrent ? 'Understanding accepted' : detail?.state?.status || 'Current detail unavailable'}</Status></ButtonGroup>

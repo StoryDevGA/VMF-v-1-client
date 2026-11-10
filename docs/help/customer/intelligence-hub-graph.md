@@ -1,0 +1,29 @@
+# Intelligence Hub Intelligence Graph
+
+Intelligence Graph is an inspection surface for the existing six-layer explainability model and five modes. Quality resolves findings; Context acquires evidence.
+
+When opened with **Inspect evidence A/B in Graph** from Quality, the scoped link retains the requested canonical evidence identity. The neighbourhood read resolves its recorded global graph object, without deriving an object ID from text or substituting a displayed object. Missing, private, ambiguous or unavailable evidence stays unavailable. The finding ID is Quality return context, not a Graph finding node or decision. **Return to selected Quality finding** restores the exact finding and Quality population/type/search; Sources, Context, reload and Help retain the scoped canonical inspection. An explicit new mode/search/object selection changes that inspection.
+
+## Inspect relationships and completeness
+
+Graph totals, displayed objects and projection-limited findings are different populations. A bounded or partial view showing zero contradictions does not establish whole-revision absence. Connected neighbourhoods need an explicit selected-object scope and completeness receipt; a larger flat cap is not a substitute.
+
+Grouped objects must resolve to individually identifiable evidence, relationships and provenance before an exact handoff can be established. Confidence, validation and reasoning are separate properties. An unavailable property must not be interpreted as a failed decision or a zero score.
+
+The object inspector names confidence, validation and reasoning separately. Expand **Recorded confidence details** on an individual object to inspect its recorded reason, basis, factors and qualifications. Missing or unsupported properties remain unavailable; a longer list identifies the displayed subset. A group's shared display values do not establish that every member has the same confidence basis. Recorded confidence does not certify evidence, approve a decision or establish target readiness.
+
+Use **Inspect individual objects** on a displayed group to see the delivered member identities. Select an identity to inspect that object's own visible relationships, then use **Return to group** for the combined view. Individual inspection is retained in the scoped page link. The member list covers this bounded projection; it does not establish complete graph membership or exact source provenance. Refresh or unavailable data closes the list; reopen it after recovery to inspect the current read.
+
+Where an individual source or evidence object supplies recorded provenance IDs, use **Open exact source** or **Open exact source and evidence** to open the canonical Sources read. That read confirms availability in the selected revision; a recorded graph link does not establish acceptance or frozen membership. Use **Return to graph inspection** to restore the original mode, search and selected identity. Groups require an individual selection before an exact provenance handoff. If the IDs are unavailable, any domain search is explicitly labelled as such.
+
+## Follow the correct owner
+
+In individual Journey, Lineage and Impact inspection, **Selected object neighbourhood** reads the selected object's recorded one-hop connections, including identities outside the initial graph projection. Journey reads both directions, Lineage reads incoming relationships and Impact reads outgoing relationships. Each page contains at most 48 relationships. **Next relationship page** checks a possible continuation; **First relationship page** returns to the initial read. Pages remain separate. An exhausted continuation does not establish that the current page contains every relationship. Private details remain unavailable, and one-hop completeness does not establish whole-revision coverage or absence of contradictions. Choose a connected identity to inspect that exact object. The selected identity and relationship cursor survive reload, Help and exact Sources return; changing mode, search or selection clears the cursor. If connections cannot be verified against the current scoped graph, retry the read instead of relying on retained details.
+
+Use [Sources](intelligence-hub-sources.md) for exact provenance, [Intelligence Quality](intelligence-quality.md) for a finding decision and [Context](intelligence-hub-context.md) for acquisition. Navigation performs no decision or acquisition. Locked inspection remains available.
+
+**Graph lifecycle inspection** names the verified locked or unlocked revision state. Unknown, conflicting or refreshing lifecycle information stays unavailable; an unlocked label does not grant acquisition authority. For a locked revision, Graph inspects recorded relationships while frozen accepted evidence and truth remain unchanged. **Inspect acquisition and revision routes in Context** explains the permitted workflow. When opened from an individual Graph inspection, Context provides **Return to graph inspection** for the same scoped object, mode, search and relationship page. Navigation does not create a successor or run acquisition.
+
+The actual technical graph destination is unverified. Existing workspace workbench is labelled as an inspection fallback, not a delivered technical graph editor. Do not infer technical graph availability from that link.
+
+Mode, search and selected object are recorded in the scoped page link, so reload, Back and the Help return retain your inspection. Choosing another mode or changing search clears the previous selection and selects a displayed object where available. A saved individual object outside the initial bounded projection can be inspected through its verified neighbourhood read; another object is not substituted when that read is unavailable. Search applies to the initially displayed view. Where a projected relationship is unavailable, inspect the reason rather than treating the subset as complete.

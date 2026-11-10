@@ -1,12 +1,19 @@
-import { render, screen } from '@testing-library/react'
+import { render as renderWithDOM, screen } from '@testing-library/react'
+import { configureStore } from '@reduxjs/toolkit'
+import { Provider } from 'react-redux'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import IntelligenceHub from './IntelligenceHub.jsx'
 
 const state = vi.hoisted(() => ({ conflict: false, locked: false, evidenceCurrent: true, candidateCurrent: true, candidate: vi.fn(), evidence: vi.fn(), refresh: vi.fn(), accept: vi.fn() }))
+vi.mock('./PostLockSubmissionPanel.jsx', () => ({ default: () => null, PostLockMaterial: () => null }))
+vi.mock('./PostLockEvidenceHistory.jsx', () => ({ default: () => null }))
+const readStore = configureStore({ reducer: () => ({ auth: { user: null } }) })
+const render = (ui, options) => renderWithDOM(ui, { wrapper: ({ children }) => <Provider store={readStore}>{children}</Provider>, ...options })
 vi.mock('../../hooks/useTenantContext.js', () => ({ useTenantContext: () => ({ customerId: 'customer', tenantId: 'tenant' }) }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useGetRuntimePostLockOperationalCapabilityQuery: (_args, options) => ({ isUninitialized: options.skip, refetch: state.refresh }),
   useAcceptRuntimeDiscoveryMutation: () => [state.accept],
   useGetRuntimeStateFindingsQuery: (_args, options) => ({ isUninitialized: options.skip }),
   useGetRuntimeStateSourceSummaryQuery: () => ({ refetch: state.refresh }),

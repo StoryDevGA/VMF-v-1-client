@@ -5,6 +5,33 @@ import { isDiscoveryAcceptanceUnlocked } from '../IntelligenceHub/discoveryAccep
 const object = value => Boolean(value && typeof value === 'object' && !Array.isArray(value))
 const text = value => typeof value === 'string' ? value.trim() : ''
 export const understandingContent = value => typeof value?.content === 'string' ? value.content : ''
+export function readRevisionContinuity(catalogue) {
+  const renderer = catalogue?.renderer, revision = renderer?.revision, runtime = renderer?.runtimeInstance
+  if (revision?.contractVersion !== 'runtime-revision.v1' || !Number.isInteger(revision.revisionNumber)
+    || revision.revisionNumber < 1 || !text(runtime?.runtimeInstanceKey) || !text(runtime?.stateVersion)
+    || !Array.isArray(revision.lineage)) return null
+  const current = revision.lineage.filter(row => row.relationship === 'CURRENT')
+  if (current.length !== 1 || current[0].runtimeInstanceId !== runtime.id
+    || current[0].runtimeInstanceKey !== runtime.runtimeInstanceKey || current[0].revisionNumber !== revision.revisionNumber) return null
+  const related = (relationship, id, key, number) => {
+    const rows = revision.lineage.filter(row => row.relationship === relationship)
+    if (!id && !key) return rows.length ? undefined : null
+    if (!text(id) || !text(key) || key === runtime.runtimeInstanceKey || id === runtime.id || rows.length !== 1
+      || rows[0].runtimeInstanceId !== id || rows[0].runtimeInstanceKey !== key || rows[0].revisionNumber !== number) return undefined
+    return { key, number }
+  }
+  const parent = related('PARENT', revision.parentRuntimeId, revision.parentRuntimeInstanceKey, revision.revisionNumber - 1)
+  const child = related('CHILD', revision.createRevision?.existingChildRuntimeId,
+    revision.createRevision?.existingChildRuntimeInstanceKey, revision.revisionNumber + 1)
+  if (parent === undefined || child === undefined) return null
+  const locked = renderer.lock?.locked === true && renderer.lock?.state === 'LOCKED'
+  const readiness = locked ? 'Locked — inspection only' : renderer.readiness?.ready === false ? 'Not ready'
+    : renderer.readiness?.ready === true && renderer.readiness?.state === 'READY' ? 'Ready according to this revision’s server read' : 'Readiness unverified'
+  return { number: revision.revisionNumber, stateVersion: runtime.stateVersion, locked, parent, child, readiness,
+    stage: text(renderer.lifecycle?.stage) || 'Unavailable',
+    published: renderer.publish?.published === true && renderer.publish?.state === 'PUBLISHED' ? 'Published'
+      : renderer.publish?.published === false ? 'Not published' : 'Publication unverified' }
+}
 export function understandingLineageHref(basis, scope = {}) {
   if (!basis?.acceptedCurrent || !validateHubContext({ renderer: basis.renderer, ...scope, revisionId: scope.runtimeInstanceId }).valid) return ''
   const runtimeKey = basis.renderer.runtimeInstance.runtimeInstanceKey

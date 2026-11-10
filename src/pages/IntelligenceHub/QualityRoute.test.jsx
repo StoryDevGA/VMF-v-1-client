@@ -1,4 +1,6 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render as renderWithDOM, screen, within } from '@testing-library/react'
+import { configureStore } from '@reduxjs/toolkit'
+import { Provider } from 'react-redux'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -9,12 +11,17 @@ import { createHash, webcrypto } from 'node:crypto'
 import { flushSync } from 'react-dom'
 
 const state = vi.hoisted(() => ({ current: true, wrongTenant: false, locked: true, authorityHash: 'sha256:' + 'a'.repeat(64), error: null, storedError: null, storedRows: null, busy: false, rendererBusy: false, rendererError: null, selectedCandidate: 'first', history: vi.fn(), qualityControl: {}, tenant: 'tenant-1', qualityView: vi.fn(), quality: vi.fn(), findings: vi.fn(), refresh: vi.fn(), execute: vi.fn(), update: vi.fn(), reviewEvidence: vi.fn(), reviewFinding: vi.fn(), accept: vi.fn() }))
+vi.mock('./PostLockSubmissionPanel.jsx', () => ({ default: () => null, PostLockMaterial: () => null }))
+vi.mock('./PostLockEvidenceHistory.jsx', () => ({ default: () => null }))
+const readStore = configureStore({ reducer: () => ({ auth: { user: null } }) })
+const render = (ui, options) => renderWithDOM(ui, { wrapper: ({ children }) => <Provider store={readStore}>{children}</Provider>, ...options })
 vi.mock('./QualityView.jsx', async importOriginal => {
   const actual = await importOriginal()
   return { ...actual, default: props => { state.qualityView(props); return <actual.default {...props} /> } }
 })
 vi.mock('../../hooks/useTenantContext.js', () => ({ useTenantContext: () => ({ customerId: 'customer-1', tenantId: state.tenant }) }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useGetRuntimePostLockOperationalCapabilityQuery: (_args, options) => ({ isUninitialized: options.skip, refetch: state.refresh }),
   useAcceptRuntimeDiscoveryMutation: () => [state.accept],
   useGetRuntimeStateFindingsQuery: (args, options) => {
     state.findings(args, options)
@@ -229,7 +236,7 @@ describe('Quality selected-context integration', () => {
     expect(href.pathname).toBe('/app/intelligence');expect(href.searchParams.get('view')).toBe('context')
     for(const [key,value] of Object.entries({runtimeInstanceId:'root',revisionId:'revision-2',customerId:'customer-1',tenantId:'tenant-1',sourceQuery:'preserved-source',findingId:'first',findingContext:'root:revision-2:customer-1:tenant-1',qualityReturnView:'Review'}))expect(href.searchParams.get(key)).toBe(value)
     await userEvent.click(link)
-    expect(screen.getByRole('tab',{name:'Context',exact:true})).toHaveAttribute('aria-selected','true');expect(screen.getByRole('heading',{name:'Evidence gathering brief'})).toBeVisible()
+    expect(screen.getByRole('tab',{name:'Context',exact:true})).toHaveAttribute('aria-selected','true');expect(screen.getByRole('heading',{name:'Context acquisition'})).toBeVisible()
     expect(screen.getByRole('button',{name:'Acquire new evidence'})).toBeDisabled();expect(state.execute).not.toHaveBeenCalled();expect(state.update).not.toHaveBeenCalled()
   })
 

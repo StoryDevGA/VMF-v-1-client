@@ -3,11 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ScopedStructure } from './WorkspaceStructure.jsx'
-import { readUnderstandingCatalogue, readUnderstandingBasis, understandingLineageHref } from './understandingModel.js'
+import { readUnderstandingCatalogue, readUnderstandingBasis, readRevisionContinuity, understandingLineageHref } from './understandingModel.js'
 import { readGraphInspection } from '../IntelligenceHub/intelligenceGraphModel.js'
 import { clearTokens, getSessionRevision } from '../../utils/tokenStorage.js'
 
-const calls = vi.hoisted(() => ({ execute: vi.fn(), accept: vi.fn(), mutate: vi.fn(), upload: vi.fn(), review: vi.fn(), renderer: vi.fn(), bootstrap: vi.fn(), section: vi.fn() }))
+const calls = vi.hoisted(() => ({ execute: vi.fn(), accept: vi.fn(), mutate: vi.fn(), upload: vi.fn(), review: vi.fn(), renderer: vi.fn(), bootstrap: vi.fn(), section: vi.fn(), availability: vi.fn() }))
+vi.mock('../IntelligenceHub/PostLockAvailability.jsx', () => ({ default: props => { calls.availability(props); return <p>Availability read boundary</p> } }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeRendererQuery: (...args) => calls.renderer(...args),
   useGetRuntimeStateBootstrapQuery: (...args) => calls.bootstrap(...args),
@@ -45,14 +46,91 @@ function fixture(version = 'v1', updatedAt = stamp) {
 }
 const catalogue = f => readUnderstandingCatalogue(f.renderer, f.bootstrap, scope)
 const basis = f => readUnderstandingBasis(catalogue(f), f.detail, 'customer-context', true)
-const mount = (f, overrides = {}) => {
-  calls.renderer.mockReturnValue({ data: f.renderer, refetch: vi.fn().mockResolvedValue({ data: f.renderer }) })
-  calls.bootstrap.mockReturnValue({ data: f.bootstrap, refetch: vi.fn().mockResolvedValue({ data: f.bootstrap }) })
+const mount = (f, overrides = {}, current = false) => {
+  calls.renderer.mockReturnValue({ data: f.renderer, ...(current ? { currentData: f.renderer } : {}), refetch: vi.fn().mockResolvedValue({ data: f.renderer }) })
+  calls.bootstrap.mockReturnValue({ data: f.bootstrap, ...(current ? { currentData: f.bootstrap } : {}), refetch: vi.fn().mockResolvedValue({ data: f.bootstrap }) })
   calls.section.mockReturnValue({ data: f.detail, refetch: vi.fn().mockResolvedValue({ data: f.detail }) })
   return render(<MemoryRouter><ScopedStructure scope={scope} session={getSessionRevision()} canUpdate search={new URLSearchParams('sectionView=understanding')} setSearch={vi.fn()} {...overrides} /></MemoryRouter>)
 }
 beforeEach(() => {
   vi.clearAllMocks(); calls.execute.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) })); calls.accept.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) }))
+})
+
+describe('selected revision continuity', () => {
+  it('partitions all Structure reads by session and requests a fresh mount read', () => {
+    mount(fixture())
+    for (const read of [calls.renderer, calls.bootstrap, calls.section]) {
+      expect(read.mock.calls.at(-1)[0]).toMatchObject({ runtimeInstanceId: scope.runtimeInstanceId,
+        customerId: scope.customerId, tenantId: scope.tenantId, sessionRevision: getSessionRevision() })
+      expect(read.mock.calls.at(-1)[1]).toMatchObject({ refetchOnMountOrArgChange: true })
+    }
+  })
+  const revisionFixture = () => {
+    const f = fixture()
+    f.renderer.revision = { ...f.renderer.revision, contractVersion: 'runtime-revision.v1', parentRuntimeId: null,
+      parentRuntimeInstanceKey: '', createRevision: { existingChildRuntimeId: 'child-id', existingChildRuntimeInstanceKey: 'child-r2' },
+      lineage: [{ relationship: 'CURRENT', runtimeInstanceId: 'id-1', runtimeInstanceKey: scope.runtimeInstanceId, revisionNumber: 1 },
+        { relationship: 'CHILD', runtimeInstanceId: 'child-id', runtimeInstanceKey: 'child-r2', revisionNumber: 2 }] }
+    f.renderer.lock = { state: 'LOCKED', locked: true }; f.renderer.publish = { state: 'PUBLISHED', published: true }
+    f.renderer.readiness = { state: 'LOCKED', ready: true }
+    return f
+  }
+  it('shows a locked predecessor and a separate successor link without inferring child readiness', () => {
+    mount(revisionFixture(), {}, true)
+    const region = screen.getByRole('region', { name: 'Revision continuity' })
+    expect(region).toHaveTextContent('R1 · Locked revision')
+    expect(region).toHaveTextContent('Locked — inspection only')
+    expect(within(region).getByRole('link', { name: 'Open successor R2' })).toHaveAttribute('href', '/app/workspace-structure?runtimeInstanceId=root-1&revisionId=child-r2')
+    expect(region).toHaveTextContent('that state is not inferred from this predecessor')
+    expect(region).not.toHaveTextContent('Ready according')
+  })
+  it('does not reuse old same-scope continuity while the new session reads are pending', () => {
+    const f = revisionFixture(), view = mount(f, {}, true), prior = getSessionRevision()
+    act(() => clearTokens())
+    expect(getSessionRevision()).not.toBe(prior)
+    calls.renderer.mockReturnValue({ data: f.renderer, currentData: undefined, isFetching: true })
+    calls.bootstrap.mockReturnValue({ data: f.bootstrap, currentData: undefined, isFetching: true })
+    view.rerender(<MemoryRouter><ScopedStructure scope={scope} session={getSessionRevision()} canUpdate search={new URLSearchParams()} setSearch={vi.fn()} /></MemoryRouter>)
+    expect(screen.queryByRole('link', { name: 'Open successor R2' })).not.toBeInTheDocument()
+    expect(calls.renderer.mock.calls.at(-1)[0].sessionRevision).toBe(getSessionRevision())
+    calls.renderer.mockReturnValue({ currentData: f.renderer })
+    calls.bootstrap.mockReturnValue({ currentData: f.bootstrap })
+    view.rerender(<MemoryRouter><ScopedStructure scope={scope} session={getSessionRevision()} canUpdate search={new URLSearchParams()} setSearch={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: 'Open successor R2' })).toBeInTheDocument()
+  })
+  it('reads the successor own draft/not-ready/unpublished state and preserves predecessor navigation', () => {
+    const f = revisionFixture()
+    f.renderer.revision = { ...f.renderer.revision, revisionNumber: 2, parentRuntimeId: 'parent-id', parentRuntimeInstanceKey: 'parent-r1',
+      createRevision: {}, lineage: [{ relationship: 'CURRENT', runtimeInstanceId: 'id-1', runtimeInstanceKey: scope.runtimeInstanceId, revisionNumber: 2 },
+        { relationship: 'PARENT', runtimeInstanceId: 'parent-id', runtimeInstanceKey: 'parent-r1', revisionNumber: 1 }] }
+    f.renderer.lock = { state: 'UNLOCKED', locked: false }; f.renderer.publish = { state: 'UNPUBLISHED', published: false }
+    f.renderer.readiness = { state: 'NOT_READY', ready: false }
+    mount(f, {}, true)
+    const region = screen.getByRole('region', { name: 'Revision continuity' })
+    expect(region).toHaveTextContent('R2 · DRAFT'); expect(region).toHaveTextContent('Not ready'); expect(region).toHaveTextContent('Not published')
+    expect(within(region).getByRole('link', { name: 'Inspect predecessor R1' })).toHaveAttribute('href', '/app/workspace-structure?runtimeInstanceId=root-1&revisionId=parent-r1')
+  })
+  it.each(['cached', 'fetching', 'failed', 'mismatched'])('does not show relationships or readiness from %s data', mode => {
+    const f = revisionFixture()
+    if (mode === 'mismatched') f.renderer.revision.lineage[1].runtimeInstanceKey = 'other-child'
+    mount(f, {}, mode !== 'cached')
+    if (mode === 'fetching' || mode === 'failed') {
+      calls.renderer.mockReturnValue({ data: f.renderer, currentData: f.renderer, ...(mode === 'fetching' ? { isFetching: true } : { error: { status: 503 } }), refetch: vi.fn() })
+      render(<MemoryRouter><ScopedStructure scope={scope} session={getSessionRevision()} canUpdate search={new URLSearchParams()} setSearch={vi.fn()} /></MemoryRouter>)
+      expect(screen.getAllByRole('region', { name: 'Revision continuity' }).at(-1)).not.toHaveTextContent('R1 · Locked revision')
+    } else expect(screen.getByRole('region', { name: 'Revision continuity' })).not.toHaveTextContent('R1 · Locked revision')
+  })
+  it('refreshes only revision reads and does not invoke a lifecycle or evidence mutation', async () => {
+    mount(revisionFixture(), {}, true)
+    const renderer = calls.renderer.mock.results.at(-1).value, bootstrap = calls.bootstrap.mock.results.at(-1).value
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh revision status' }))
+    expect(renderer.refetch).toHaveBeenCalledOnce(); expect(bootstrap.refetch).toHaveBeenCalledOnce()
+    for (const mutation of [calls.execute, calls.accept, calls.mutate, calls.upload, calls.review]) expect(mutation).not.toHaveBeenCalled()
+  })
+  it('rejects an inconsistent current revision identity', () => {
+    const f = revisionFixture(); f.renderer.revision.lineage[0].runtimeInstanceId = 'other-id'
+    expect(readRevisionContinuity({ renderer: f.renderer })).toBeNull()
+  })
 })
 
 describe('Modern individual section evidence review', () => {
@@ -364,7 +442,8 @@ describe('Exact modern Understanding bindings', () => {
   })
   it('reads the native declared-path key and preserves package identity for generation', async () => {
     const f = fixture(); mount(f)
-    expect(calls.section).toHaveBeenCalledWith({ runtimeInstanceId: scope.runtimeInstanceId, customerId: scope.customerId, tenantId: scope.tenantId, sectionKey: 'customer_context' }, { skip: false })
+    expect(calls.section).toHaveBeenCalledWith({ runtimeInstanceId: scope.runtimeInstanceId, customerId: scope.customerId, tenantId: scope.tenantId,
+      sessionRevision: getSessionRevision(), sectionKey: 'customer_context' }, { skip: false, refetchOnMountOrArgChange: true })
     await userEvent.click(screen.getByRole('button', { name: 'Generate section', exact: true }))
     expect(calls.execute).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Confirm generation' }))
@@ -535,4 +614,27 @@ describe('Section command currentness', () => {
     expect(calls.upload).not.toHaveBeenCalled()
     expect(calls.review).not.toHaveBeenCalled()
   })
+})
+it('does not let the catalogue data fallback authorize post-lock availability', () => {
+  const f = fixture()
+  f.renderer.lock.state = 'LOCKED'
+  mount(f)
+  const props = calls.availability.mock.calls.at(-1)[0]
+  expect(props.canRead).toBe(false)
+  expect(props.renderer).toBeUndefined()
+  expect(calls.execute).not.toHaveBeenCalled()
+})
+
+it('uses only the matching current renderer and bootstrap for locked availability', () => {
+  const f = fixture()
+  f.renderer.lock.state = 'LOCKED'
+  mount(f, {}, true)
+  const props = calls.availability.mock.calls.at(-1)[0]
+  expect(props.canRead).toBe(true)
+  expect(props.renderer).toBe(f.renderer)
+  expect(props.scope).toEqual(scope)
+  expect(props.route).toBe('sectionView=understanding')
+  expect(calls.execute).not.toHaveBeenCalled()
+  expect(calls.mutate).not.toHaveBeenCalled()
+  expect(calls.upload).not.toHaveBeenCalled()
 })

@@ -4,9 +4,13 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearTokens, setTokens } from '../../utils/tokenStorage.js'
 import ContextAcquisitionView from './ContextAcquisitionView.jsx'
-const calls = vi.hoisted(() => ({ execute: vi.fn(), update: vi.fn() }))
+const calls = vi.hoisted(() => ({ execute: vi.fn(), update: vi.fn(), availability: vi.fn(), history: vi.fn() }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({ useExecuteRuntimeActionMutation: () => [calls.execute], useUpdateRuntimeDiscoveryInputsMutation: () => [calls.update] }))
-vi.mock('./AcquisitionRunHistory.jsx', () => ({ default: () => <p>Run history test boundary</p> }))
+vi.mock('./PostLockSubmissionPanel.jsx', () => ({ default: props => {
+  calls.availability(props)
+  return props.active && props.locked ? <form aria-label="Post-lock submission test boundary"><p>Availability read boundary</p></form> : null
+} }))
+vi.mock('./AcquisitionRunHistory.jsx', () => ({ default: props => { calls.history(props); return <p>Run history test boundary</p> } }))
 const stamp = '2026-10-04T10:00:00.000Z'
 const inputValues = { companyName: 'Controlled fixture', marketRegion: 'Test market', targetOffer: 'Synthetic service', companyWebsite: 'https://example.org', websiteSources: ['https://example.org'], notes: '' }
 const base = () => ({ discovery: { inputValues, acquisitionProfile: 'STANDARD', evidenceReady: false }, renderer: { runtimeInstance: { updatedAt: stamp }, actions: [] }, authority: { canAcquire: true, runtimeUpdatedAt: stamp }, runtimeInstanceId: 'revision-1', customerId: 'customer-1', tenantId: 'tenant-1', contextKey: 'scope-1', workbenchHref: '/app/runtime', refresh: vi.fn().mockResolvedValue(true), onSelectView: vi.fn(), evidenceStatusCounts: {} })
@@ -14,7 +18,10 @@ const mount = props => {
   const result = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
   const edit = screen.queryByRole('button', {name:'Edit evidence gathering brief'})
   if (edit && !edit.disabled) fireEvent.click(edit)
-  for (const name of ['Connected websites','File limits']) fireEvent.click(screen.getByText(name,{exact:true}))
+  for (const name of ['Connected websites','File limits']) {
+    const disclosure = screen.queryByText(name, { exact: true })
+    if (disclosure) fireEvent.click(disclosure)
+  }
   return result
 }
 const receiptFor = (requestKey, overrides = {}) => ({ contractVersion: 'acquisition-run.v1', runId: '12345678-1234-4123-8123-123456789abc', requestKey,
@@ -74,7 +81,7 @@ describe('document-only Context acquisition', () => {
     expect(calls.execute).not.toHaveBeenCalled()
   })
 })
-beforeEach(() => { vi.restoreAllMocks(); calls.execute.mockReset(); calls.update.mockReset();
+beforeEach(() => { vi.restoreAllMocks(); calls.execute.mockReset(); calls.update.mockReset(); calls.availability.mockReset();
   const respond = args => ({ unwrap: () => Promise.resolve({ acquisitionRun: receiptFor(args.body.requestKey) }) })
   calls.execute.mockImplementation(respond); calls.update.mockImplementation(respond)
 })
@@ -86,6 +93,12 @@ describe('Context governed acquisition', () => {
     if (kind === 'read-only') props.authority = { canAcquire: false }
     if (kind === 'missing brief') props.discovery = {}
     render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    if (kind === 'locked') {
+      expect(screen.queryByRole('checkbox', { name: 'Research public information' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Acquire new evidence' })).toBeDisabled()
+      expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+      return
+    }
     const checkbox = screen.getByRole('checkbox', { name: 'Research public information' })
     expect(checkbox).toBeDisabled()
     expect(checkbox).not.toBeChecked()
@@ -218,14 +231,20 @@ describe('Context governed acquisition', () => {
     expect(screen.getByText(/local.txt.*Staged locally/)).toBeVisible()
     expect(calls.update).not.toHaveBeenCalled();expect(calls.execute).not.toHaveBeenCalled()
   })
-  it('keeps missing fields and locked acquisition boundaries visible with compact inspection', () => {
+  it('puts separate evidence first and keeps locked acquisition disabled with keyboard-accessible explanation', async () => {
     const props = base()
     props.locked = true
     props.discovery.inputValues = { ...inputValues, companyName: '' }
     render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
-    expect(screen.getByText('Missing',{exact:true})).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent('locked')
-    expect(screen.getByRole('button',{name:'Edit evidence gathering brief'})).toBeDisabled()
+    expect(screen.getByText('Availability read boundary').compareDocumentPosition(screen.getByRole('heading', { name: 'Context acquisition' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Acquire new evidence' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Select evidence files' })).toBeDisabled()
+    const why = screen.getByRole('button', { name: 'Why separate?' })
+    why.focus(); await userEvent.keyboard('{Enter}')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Neither action changes the locked understanding.')
+    await userEvent.click(screen.getByRole('button', { name: 'Back to Context' }))
+    await waitFor(() => expect(why).toHaveFocus())
     expect(calls.update).not.toHaveBeenCalled()
   })
   it('adds further batches, suppresses exact duplicates and submits only individually retained files', async () => {
@@ -299,10 +318,12 @@ describe('Context governed acquisition', () => {
       : state === 'denied' ? { authority: { canAcquire: false } }
         : { renderer: { ...props.renderer, runtimeInstance: { updatedAt: '2026-10-05T10:00:00.000Z' } } }
     view.rerender(<MemoryRouter><ContextAcquisitionView {...props} {...blockedProps} /></MemoryRouter>)
-    expect(screen.getByRole('button', { name: 'Remove staged document 1: kept.txt' })).toBeDisabled()
+    if (state === 'locked') expect(screen.queryByRole('button', { name: 'Remove staged document 1: kept.txt' })).not.toBeInTheDocument()
+    else expect(screen.getByRole('button', { name: 'Remove staged document 1: kept.txt' })).toBeDisabled()
     fireEvent.change(picker, { target: { files: [new File(['new'], 'blocked.txt', { type: 'text/plain' })] } })
     expect(screen.queryByText(/blocked.txt.*Staged locally/)).not.toBeInTheDocument()
-    expect(screen.getByText(/kept.txt.*Staged locally/)).toBeVisible()
+    if (state === 'locked') expect(screen.queryByText(/kept.txt.*Staged locally/)).not.toBeInTheDocument()
+    else expect(screen.getByText(/kept.txt.*Staged locally/)).toBeVisible()
     expect(calls.update).not.toHaveBeenCalled()
   })
   it('ignores overlapping file selections while the first preparation is in flight', async () => {
@@ -640,4 +661,42 @@ describe('Context governed acquisition', () => {
     const props=base();props.refresh.mockResolvedValue(false);mount(props);await userEvent.click(screen.getByRole('button',{name:'Acquire new evidence'}))
     expect(await screen.findByText(/Acquisition recorded, but current reads/)).toBeVisible();expect(screen.getByRole('button',{name:'Acquire new evidence'})).toBeDisabled();expect(calls.update).toHaveBeenCalledOnce()
   })
+})
+
+it('passes the locked selected scope and current read authority to availability without unlocking acquisition', () => {
+  const selected = base()
+  mount({ ...selected, locked: true, availabilityReadAllowed: true, availabilityLoading: false,
+    availabilityRoute: 'view=context', availabilityError: undefined })
+  const props = calls.availability.mock.calls.at(-1)[0]
+  expect(props.scope).toEqual({ runtimeInstanceId: selected.runtimeInstanceId, customerId: selected.customerId, tenantId: selected.tenantId })
+  expect(props.renderer).toBe(selected.renderer)
+  expect(props.canRead).toBe(true)
+  expect(props.route).toBe('view=context')
+  expect(screen.getByRole('button', { name: 'Acquire new evidence', exact: true })).toBeDisabled()
+  expect(calls.execute).not.toHaveBeenCalled()
+  expect(calls.update).not.toHaveBeenCalled()
+})
+
+it('retains read-only acquisition Run history in the locked Context without enabling retry', async () => {
+  const selected = base()
+  mount({ ...selected, locked: true })
+  await userEvent.click(screen.getByRole('button', { name: 'Runs and processing history' }))
+  expect(screen.getByRole('dialog')).toHaveTextContent('Run history test boundary')
+  expect(calls.history.mock.calls.at(-1)[0]).toMatchObject({ locked: true, canAcquire: false, active: true,
+    scope: { runtimeInstanceId: selected.runtimeInstanceId, customerId: selected.customerId, tenantId: selected.tenantId } })
+  expect(calls.history.mock.calls.at(-1)[0].onRetry).toBeUndefined()
+  expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+})
+
+it('keeps the submission owner mounted but inactive when leaving Context', () => {
+  mount({ ...base(), locked: true, active: false, availabilityReadAllowed: true })
+  expect(calls.availability.mock.calls.at(-1)[0]).toMatchObject({ active: false, locked: true })
+  expect(screen.queryByRole('form', { name: 'Post-lock submission test boundary' })).not.toBeInTheDocument()
+})
+
+it('places the separate submission form outside the existing acquisition form', () => {
+  mount({ ...base(), locked: true })
+  const form = screen.getByRole('form', { name: 'Post-lock submission test boundary' })
+  expect(form.parentElement.closest('form')).toBeNull()
+  expect(document.querySelectorAll('form form')).toHaveLength(0)
 })
