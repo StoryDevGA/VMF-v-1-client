@@ -988,6 +988,48 @@ describe('Intelligence Hub', () => {
     expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-3', reviewStatus: '', page: 1 }), expect.anything())
   })
 
+  it.each(['Source details', 'Inspect recorded lineage · Customer website'].flatMap(opener =>
+    ['renderer refresh', 'state version', 'scope', 'error', 'loading', 'missing'].map(departure => [opener, departure])))(
+    'permanently dismisses %s after its Sources %s departure', async (opener, departure) => {
+    sourcePageFixture = sourceFixture()
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources'
+    const tree = <MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>
+    const mounted = render(tree)
+    await userEvent.click(screen.getByRole('button', { name: opener }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    if (departure === 'renderer refresh') rendererRefreshing = true
+    if (departure === 'state version') readinessFields = { runtimeInstance: { ...renderer.runtimeInstance, stateVersion: 'version-3' } }
+    if (departure === 'scope') staleOverviewDetails = true
+    if (departure === 'error') sourcePageError = true
+    if (departure === 'loading') sourceCurrentPending = true
+    if (departure === 'missing') sourcePageMissing = true
+    mounted.rerender(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    rendererRefreshing = false; readinessFields = {}; staleOverviewDetails = false
+    sourcePageError = false; sourceCurrentPending = false; sourcePageMissing = false
+    mounted.rerender(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: opener }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('keeps search-result lineage available and dismisses it when the Sources route changes', async () => {
+    sourcePageFixture = sourceFixture()
+    const search = '?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources&sourceContext=workspace-1%3Arevision-2%3Acustomer-1%3Atenant-1&sourceQuery=observability'
+    render(<MemoryRouter initialEntries={[`/app/intelligence${search}`]}><Routes><Route path="/app/intelligence" element={<><IntelligenceHub /><GraphHistoryProof /></>} /></Routes></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect recorded lineage · Customer website' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Website discusses observability.')
+    await userEvent.click(screen.getByRole('button', { name: 'Back to Sources' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Open exact source and evidence' })[0])
+    await userEvent.click(screen.getByRole('button', { name: 'Source details' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'History back' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect recorded lineage · Customer website' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
   // Sources scoped query, paging, stale/error, exact provenance and history cases now live
   it('lets an exact Review item override prior search and restores that search on Return', async () => {
     sourcePageFixture = sourceFixture()

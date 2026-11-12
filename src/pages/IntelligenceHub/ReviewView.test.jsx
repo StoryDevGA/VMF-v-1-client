@@ -169,3 +169,63 @@ it('isolates real nested history Escape from its parent inspection and restores 
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(document.activeElement).toBe(parentTrigger)
 })
+
+const recordedCapture = {
+  "contractVersion": "source-capture.v1",
+  "sourceId": "source-1",
+  "originalContentHash": "sha256:7f89c175b0da167969061551865ee67ad42b793283e61aecaec9f84aadc35777",
+  "captureTextHash": "sha256:f242dd6378a58a934eada9e4ee2434ca5c44b17b649c7a34c3238402ac26a1fe",
+  "textLength": 3623,
+  "coordinateSystem": "UTF16_CODE_UNIT",
+  "captureScope": "NORMALIZED_EXTRACTED_TEXT_ONLY",
+  "adapter": "controlled-html-replay-v1",
+  "extractionMethod": "DECODED_HTML_STRIPPED_TEXT",
+  "capturedAt": "2026-11-11T12:29:20.906Z",
+  "captureReceipt": {
+    "contractVersion": "source-capture-receipt.v1",
+    "operation": "CONTROLLED_HTML_REPLAY_CAPTURE",
+    "status": "SUCCEEDED",
+    "runId": "edae7bde-d527-4a60-a05a-16ff36ee3192",
+    "attemptId": "f0dc1413-1d49-44e3-ac67-0089981cb134",
+    "inputIndex": 0
+  }
+}
+const recordedSupport = {
+  "contractVersion": "evidence-support.v1",
+  "sourceId": "source-1",
+  "originalContentHash": "sha256:7f89c175b0da167969061551865ee67ad42b793283e61aecaec9f84aadc35777",
+  "captureTextHash": "sha256:f242dd6378a58a934eada9e4ee2434ca5c44b17b649c7a34c3238402ac26a1fe",
+  "coordinateSystem": "UTF16_CODE_UNIT",
+  "start": 3,
+  "end": 40,
+  "exactExcerpt": "Controlled synthetic workflow profile",
+  "excerptHash": "sha256:aa47e2bc71a0f83e0551a3dc8c5037b782020d0c785f0bcaa4c75c4b24a8d135",
+  "statementOrigin": "DETERMINISTIC_EXTRACTOR_NORMALIZATION",
+  "epistemicType": "SOURCE_ASSERTION",
+  "supportStatus": "EXACT_CAPTURE_SPAN_VERIFIED",
+  "restrictions": [
+    "EXTRACTED_TEXT_COORDINATES_ONLY",
+    "SOURCE_ASSERTION_NOT_INDEPENDENTLY_VERIFIED"
+  ]
+}
+
+it('presents the recorded provider-free receipt and exact excerpt in existing Review inspections without enabling decisions', async () => {
+  const source = {sourceId: 'source-1', label: 'Controlled source', contentHash: recordedCapture.originalContentHash,
+    stateVersion: base.stateVersion, sourceStateVersion: base.stateVersion, sourceCaptureAvailability: 'RECORDED', sourceCapture: recordedCapture}
+  const item = {...evidence, stateVersion: base.stateVersion, sourceStateVersion: base.stateVersion,
+    evidenceSupportAvailability: 'RECORDED', evidenceSupport: recordedSupport}
+  show({evidencePage: {evidenceObjects: [item], sourceRegistry: [source]}, findings: [], actions: {canReviewEvidence: false}})
+  const user = userEvent.setup()
+  expect(screen.getByText(/Extracted-text UTF-16 span/)).toBeInTheDocument()
+  await user.click(screen.getByRole('button', {name: 'Supporting evidence'}))
+  const dialog = screen.getByRole('dialog', {name: 'Supporting evidence and provenance'})
+  expect(within(dialog).getByText(recordedCapture.captureReceipt.runId)).toBeInTheDocument()
+  expect(within(dialog).getByText(recordedCapture.captureReceipt.attemptId)).toBeInTheDocument()
+  expect(within(dialog).getByText(recordedSupport.exactExcerpt)).toBeInTheDocument()
+  expect(within(dialog).getByText(/end exclusive/)).toHaveTextContent('[3, 40)')
+  expect(within(dialog).getByText(/not original HTML or PDF/)).toBeInTheDocument()
+  await user.click(within(dialog).getByRole('button', {name: 'Return to Review'}))
+  expect(screen.getByRole('button', {name: 'Supporting evidence'})).toHaveFocus()
+  expect(screen.getByRole('button', {name: 'Accept evidence'})).toBeDisabled()
+  expect(calls.decide).not.toHaveBeenCalled()
+})

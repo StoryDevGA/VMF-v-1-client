@@ -32,7 +32,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeStateSourcesQuery: (query, options) => {
     calls.sources(query, options)
     if (options.skip) return { refetch: calls.retry }
-    const selectedSource = { ...source, label: state.longName || source.label, evidenceObjectCount: state.empty ? 0 : state.unknownCount ? null : source.evidenceObjectCount, evidenceCountCapped: Boolean(state.cappedCount) }
+    const selectedSource = { ...source, ...state.recordedSource, label: state.longName || source.label, evidenceObjectCount: state.empty ? 0 : state.unknownCount ? null : source.evidenceObjectCount, evidenceCountCapped: Boolean(state.cappedCount) }
     const rows = query.sourceId ? [selectedSource] : query.search ? [] : [selectedSource]
     const data = { control: state.wrongScope ? { ...control, tenantId: 'another-tenant' } : control,
       sourceRegistry: rows, total: query.sourceId ? 1 : query.search ? 0 : 61, totalPages: 3,
@@ -45,8 +45,8 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
     calls.evidence(query, options)
     if (options.skip) return { refetch: calls.retry }
     const data = { control: state.wrongScope ? { ...control, tenantId: 'another-tenant' } : state.wrongVersion ? { ...control, stateVersion: 'rsv2:other' } : control,
-      evidenceObjects: state.empty ? [] : state.stableEvidence && !state.wrongPair ? [object] : [{ ...object, title: state.title, sourceId: state.wrongPair ? 'wrong-source' : object.sourceId }],
-      sourceRegistry: [source], total: state.empty ? 0 : query.evidenceObjectId || query.search ? 1 : 853,
+      evidenceObjects: state.empty ? [] : state.stableEvidence && !state.wrongPair ? [object] : [{ ...object, ...state.recordedEvidence, title: state.title, sourceId: state.wrongPair ? 'wrong-source' : object.sourceId }],
+      sourceRegistry: [{...source, ...state.recordedSource}], total: state.empty ? 0 : query.evidenceObjectId || query.search ? 1 : 853,
       totalPages: query.evidenceObjectId || query.search ? 1 : 35, pageSize: 25 }
     return { currentData: state.missing ? undefined : { data }, data: { data }, refetch: calls.retry, isFetching: state.pending, error: state.error }
   },
@@ -461,6 +461,30 @@ it('withholds View basis from multi-source search results', () => {
   ready.mock.calls.at(-1)[0].open(document.body)
   expect(calls.open).not.toHaveBeenCalled()
 })
+it.each(['error', 'fetching', 'permission', 'version', 'session'])('invalidates Sources inspection ownership permanently through %s recovery', key => {
+  const ready = vi.fn()
+  const tree = props => <MemoryRouter initialEntries={[base]}><Harness onBasisInspectionReady={ready} {...props} /></MemoryRouter>
+  const mounted = render(tree({}))
+  const [originalRegistration, , , originalToken] = ready.mock.calls.at(-1)
+  originalRegistration.open(document.body)
+  expect(calls.open.mock.calls.at(-1)[0].sourceInspectionToken).toBe(originalToken)
+  if (key === 'error') state.error = {status: 503}
+  if (key === 'fetching') state.pending = true
+  if (key === 'session') calls.session++
+  mounted.rerender(tree(key === 'permission' ? {canRead: false} : key === 'version' ? {stateVersion: 'other'} : {}))
+  expect(ready.mock.calls.at(-1)[3]).not.toBe(originalToken)
+  calls.open.mockClear()
+  originalRegistration.open(document.body)
+  expect(calls.open).not.toHaveBeenCalled()
+  state.error = undefined; state.pending = false; calls.session = 1
+  mounted.rerender(tree({}))
+  const [currentRegistration, , , currentToken] = ready.mock.calls.at(-1)
+  expect(currentToken).not.toBe(originalToken)
+  originalRegistration.open(document.body)
+  expect(calls.open).not.toHaveBeenCalled()
+  currentRegistration.open(document.body)
+  expect(calls.open.mock.calls.at(-1)[0].sourceInspectionToken).toBe(currentToken)
+})
 it('uses the latest guarded workspace refresh from Source technical basis', () => {
   const refresh = vi.fn(), nextRefresh = vi.fn()
   const tree = props => <MemoryRouter initialEntries={[base]}><Harness onRefreshWorkspace={refresh} {...props} /></MemoryRouter>
@@ -480,4 +504,63 @@ it('uses the latest guarded workspace refresh from Source technical basis', () =
   captured()
   expect(nextRefresh).toHaveBeenCalledOnce()
   inspector.unmount()
+})
+
+const recordedCapture = {
+  "contractVersion": "source-capture.v1",
+  "sourceId": "source-off-page",
+  "originalContentHash": "sha256:7f89c175b0da167969061551865ee67ad42b793283e61aecaec9f84aadc35777",
+  "captureTextHash": "sha256:f242dd6378a58a934eada9e4ee2434ca5c44b17b649c7a34c3238402ac26a1fe",
+  "textLength": 3623,
+  "coordinateSystem": "UTF16_CODE_UNIT",
+  "captureScope": "NORMALIZED_EXTRACTED_TEXT_ONLY",
+  "adapter": "controlled-html-replay-v1",
+  "extractionMethod": "DECODED_HTML_STRIPPED_TEXT",
+  "capturedAt": "2026-11-11T12:29:20.906Z",
+  "captureReceipt": {
+    "contractVersion": "source-capture-receipt.v1",
+    "operation": "CONTROLLED_HTML_REPLAY_CAPTURE",
+    "status": "SUCCEEDED",
+    "runId": "edae7bde-d527-4a60-a05a-16ff36ee3192",
+    "attemptId": "f0dc1413-1d49-44e3-ac67-0089981cb134",
+    "inputIndex": 0
+  }
+}
+const recordedSupport = {
+  "contractVersion": "evidence-support.v1",
+  "sourceId": "source-off-page",
+  "originalContentHash": "sha256:7f89c175b0da167969061551865ee67ad42b793283e61aecaec9f84aadc35777",
+  "captureTextHash": "sha256:f242dd6378a58a934eada9e4ee2434ca5c44b17b649c7a34c3238402ac26a1fe",
+  "coordinateSystem": "UTF16_CODE_UNIT",
+  "start": 3,
+  "end": 40,
+  "exactExcerpt": "Controlled synthetic workflow profile",
+  "excerptHash": "sha256:aa47e2bc71a0f83e0551a3dc8c5037b782020d0c785f0bcaa4c75c4b24a8d135",
+  "statementOrigin": "DETERMINISTIC_EXTRACTOR_NORMALIZATION",
+  "epistemicType": "SOURCE_ASSERTION",
+  "supportStatus": "EXACT_CAPTURE_SPAN_VERIFIED",
+  "restrictions": [
+    "EXTRACTED_TEXT_COORDINATES_ONLY",
+    "SOURCE_ASSERTION_NOT_INDEPENDENTLY_VERIFIED"
+  ]
+}
+
+it('shows recorded capture separately from unavailable document processing and includes bound support in source evidence inspection', async () => {
+  state.recordedSource = {contentHash: recordedCapture.originalContentHash, stateVersion: control.stateVersion,
+    sourceStateVersion: control.stateVersion, sourceCaptureAvailability: 'RECORDED', sourceCapture: recordedCapture}
+  state.recordedEvidence = {stateVersion: control.stateVersion, sourceStateVersion: control.stateVersion,
+    evidenceSupportAvailability: 'RECORDED', evidenceSupport: recordedSupport}
+  show()
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', {name: 'Source details'}))
+  const sourceInspection = render(calls.open.mock.calls.at(-1)[0].body)
+  expect(within(sourceInspection.container).getByText(recordedCapture.captureReceipt.runId)).toBeInTheDocument()
+  expect(within(sourceInspection.container).getByText('Current processing receipt').nextElementSibling).toHaveTextContent('Not supplied')
+  expect(within(sourceInspection.container).getByText(/provider-free fixture/)).toBeInTheDocument()
+  sourceInspection.unmount()
+  await user.click(screen.getByRole('button', {name: /Inspect recorded lineage/}))
+  const evidenceInspection = render(calls.open.mock.calls.at(-1)[0].body)
+  expect(within(evidenceInspection.container).getByText(recordedSupport.exactExcerpt)).toBeInTheDocument()
+  expect(within(evidenceInspection.container).getByText(/end exclusive/)).toHaveTextContent('[3, 40)')
+  expect(calls.record).not.toHaveBeenCalled()
 })

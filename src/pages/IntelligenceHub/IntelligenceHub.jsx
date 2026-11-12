@@ -413,9 +413,13 @@ function SessionIntelligenceHub({ quality = false, sessionRevision }) {
   const [sourceRefresh, setSourceRefresh] = useState(0)
   const sourceBasis = useRef(null)
   const [sourceBasisAvailable, setSourceBasisAvailable] = useState(false)
-  const registerSourceBasis = useCallback((registration, available, departing = false) => {
+  const sourceInspectionFrame = useRef(null)
+  const [sourceInspectionToken, setSourceInspectionToken] = useState(null)
+  const registerSourceBasis = useCallback((registration, available, departing = false, inspectionToken = null) => {
     if (departing && sourceBasis.current !== registration) return
     sourceBasis.current = departing ? null : registration
+    sourceInspectionFrame.current = departing ? null : inspectionToken
+    setSourceInspectionToken(departing ? null : inspectionToken)
     setSourceBasisAvailable(Boolean(!departing && available))
   }, [])
   const openSourceBasis = trigger => {
@@ -861,12 +865,18 @@ function SessionIntelligenceHub({ quality = false, sessionRevision }) {
     overviewBasisFrame.current = frame
     return () => { overviewBasisFrame.current = null }
   }, [overviewBasisOwner, overviewBasisAvailable, overviewBasisToken])
-  const displayedInfo = visibleInfo?.overviewBasisOwner && (visibleInfo.overviewBasisOwner !== overviewBasisOwner || visibleInfo.overviewBasisToken !== overviewBasisToken || !overviewBasisAvailable) ? null : visibleInfo
+  const sourceInspectionCurrent = view === 'Sources' && canReadDetail && !rendererFetching && !rendererError
+    && visibleInfo?.sourceInspectionToken === sourceInspectionToken && sourceInspectionToken !== null
+  const displayedInfo = visibleInfo?.sourceInspectionToken && !sourceInspectionCurrent ? null
+    : visibleInfo?.overviewBasisOwner && (visibleInfo.overviewBasisOwner !== overviewBasisOwner || visibleInfo.overviewBasisToken !== overviewBasisToken || !overviewBasisAvailable) ? null : visibleInfo
+  if (info?.sourceInspectionToken && !sourceInspectionCurrent) setInfo(null)
   const isOverviewBasisCurrent = () => overviewBasisFrame.current?.owner === overviewBasisOwner && overviewBasisFrame.current?.token === overviewBasisToken && overviewBasisFrame.current?.available
     && getSessionRevision() === sessionRevision
   const openInfo = (nextInfo, opener) => {
     const overviewInspection = view === 'Overview' && nextInfo.kind === 'summary-inspection'
     if (overviewInspection && !isOverviewBasisCurrent()) return
+    if (view === 'Sources' && nextInfo.kind === 'summary-inspection'
+      && (!nextInfo.sourceInspectionToken || nextInfo.sourceInspectionToken !== sourceInspectionFrame.current)) return
     openerRef.current = opener
     setInfo({ ...nextInfo, contextKey, sessionRevision,
       ...(overviewInspection ? { overviewBasisOwner, overviewBasisToken } : {}) })
