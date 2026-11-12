@@ -118,6 +118,7 @@ vi.mock('../../hooks/useTenantContext.js', () => ({
 }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => {
 const queries = {
+  useGetResearchConfigurationQuery: args => ({ data: { data: { contractVersion: 'public-research-configuration-read.v1', scope: { customerId: args.customerId, tenantId: args.tenantId, runtimeInstanceKey: args.runtimeInstanceId, runtimeInstanceId: args.runtimeInstanceId }, basis: { stateVersion: renderer.runtimeInstance.stateVersion, updatedAt: renderer.runtimeInstance.updatedAt }, editable: true, currency: 'NOT_RECORDED', configuration: null } } }),
   useGetRuntimePostLockOperationalCapabilityQuery: (args, options) => {
     calls.operational(args, options)
     return { data: options.skip ? undefined : { data: operationalFixture || operationalBody(), meta: { version: 'v1' } },
@@ -226,7 +227,7 @@ const queries = {
     } } }, isLoading: false }
   },
   }
-  return { useExecuteRuntimeActionMutation: () => [calls.execute],
+  return { useCancelAcquisitionRunMutation: () => [vi.fn()], useSaveResearchConfigurationMutation: () => [vi.fn()], useExecuteRuntimeActionMutation: () => [calls.execute],
   useAcceptRuntimeDiscoveryMutation: () => [vi.fn()],
   useGetAcquisitionRunsQuery: () => ({ refetch: vi.fn() }),
   useGetAcquisitionRunQuery: () => ({}),

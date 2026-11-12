@@ -1,22 +1,24 @@
+import { useSearchParams } from 'react-router-dom'
 import { selectAcquisitionAction } from '../../utils/discoveryAcquisition.js'
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, ButtonGroup } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
 import { Dialog } from '../../components/Dialog'
-import { Tickbox } from '../../components/Tickbox'
 import { FiArrowLeft, FiArrowRight, FiArrowUpRight, FiLock, FiPlus } from 'react-icons/fi'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Textarea } from '../../components/Textarea'
 import { DISCOVERY_ACQUISITION_PROFILE_OPTIONS, DISCOVERY_ACQUISITION_PROFILE_GUIDANCE } from '../../constants/discoveryAcquisitionProfiles.js'
 import { buildEmptyDiscoveryDraftInputs, normalizeWebsiteSourceDrafts, buildDiscoveryInputsPayload, buildDiscoveryContextReadiness, buildDiscoveryDocumentSource, DISCOVERY_DOCUMENT_ACCEPT, DISCOVERY_DOCUMENT_MAX_COUNT, DISCOVERY_WEBSITE_SOURCE_MAX_COUNT, DOCUMENT_EXTRACTION_HELPER_TEXT, DOCUMENT_EXTRACTION_STORAGE_NOTE, formatDocumentSize, formatIntelligenceHubEvidenceError } from '../../utils/discoveryAcquisition.js'
-import { useExecuteRuntimeActionMutation, useUpdateRuntimeDiscoveryInputsMutation } from '../../store/api/runtimeInstanceApi.js'
+import { useExecuteRuntimeActionMutation, useUpdateRuntimeDiscoveryInputsMutation, useGetResearchConfigurationQuery, useSaveResearchConfigurationMutation, useGetAcquisitionRunsQuery } from '../../store/api/runtimeInstanceApi.js'
+import { readSavedResearchConfiguration, readResearchAvailability, RESEARCH_AVAILABILITY_MESSAGES, researchContextSnapshot, readFixtureStart, buildFixtureStartPayload } from './publicResearchConfiguration.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import AcquisitionRunHistory from './AcquisitionRunHistory.jsx'
+import PublicResearchConfiguration from './PublicResearchConfiguration.jsx'
 import PostLockSubmissionPanel from './PostLockSubmissionPanel.jsx'
 import { sourceProcessingLabel, sourceProcessingExplanation } from './sourceSummaryModel.js'
-import { acquisitionRunFromResponse, acquisitionRunFromError, acquisitionRunLabel } from './acquisitionRunContract.js'
+import { acquisitionRunFromResponse, acquisitionRunFromError, acquisitionRunLabel, readAcquisitionRun, isAcquisitionRunId, isControlledAcquisitionRun } from './acquisitionRunContract.js'
 
 const draftFrom = (discovery) => ({ ...buildEmptyDiscoveryDraftInputs(), ...discovery?.inputValues, websiteSources: normalizeWebsiteSourceDrafts(discovery?.inputValues || {}) })
 
@@ -27,12 +29,19 @@ export default function ContextAcquisitionView(props) {
 }
 
 function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, authority, loading, locked, runtimeInstanceId, customerId, tenantId, contextKey, refresh, onSelectView, evidenceStatusCounts, countsLoading, sourceSummary, sourceSummaryLoading, active = true, availabilityReadAllowed = false, availabilityLoading = false, availabilityError, availabilityRoute = '' }) {
+  const [params, setParams] = useSearchParams()
+  const researchKeys = params.getAll('researchRequestKey')
+  const researchKey = researchKeys.length === 1 && isAcquisitionRunId(researchKeys[0]) ? researchKeys[0] : null
+  const [researchSubmitting, setResearchSubmitting] = useState(false), [researchFeedback, setResearchFeedback] = useState('')
+  const researchRoute = useRef(researchKey)
+  const latestParams = useRef(params)
+  useLayoutEffect(() => { researchRoute.current = researchKey; latestParams.current = params }, [researchKey, params])
   const [execute] = useExecuteRuntimeActionMutation()
   const [updateInputs] = useUpdateRuntimeDiscoveryInputsMutation()
   const [draft, setDraft] = useState(() => draftFrom(discovery))
   const [editor, setEditor] = useState(null)
   const [websiteAddress, setWebsiteAddress] = useState('')
-  const [inspection, setInspection] = useState(null)
+  const [inspection, setInspection] = useState(() => researchKeys.length || params.has('acquisitionRunId') ? 'Evidence intake and processing history' : null)
   const researchDescriptionId = useId()
   const briefHeader = useRef(null)
   const restoreEditorFocus = useRef(false)
@@ -68,8 +77,111 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
   const preparation = useRef(0)
   const mounted = useRef(true)
   const isCurrent = () => mounted.current && getSessionRevision() === sessionRevision
+  const researchCommandFrame = useRef(null)
+  const researchCommandToken = Symbol('research-command-frame')
+  useLayoutEffect(() => {
+    researchCommandFrame.current = researchCommandToken
+    return () => { if (researchCommandFrame.current === researchCommandToken) researchCommandFrame.current = null }
+  })
+  const ownsResearchCommand = () => researchCommandFrame.current === researchCommandToken && isCurrent()
   const fileInput = useRef(null)
   const status = useRef(null)
+  const [saveConfiguration] = useSaveResearchConfigurationMutation()
+  const [configurationSaving, setConfigurationSaving] = useState(false)
+  const [configurationSaveError, setConfigurationSaveError] = useState('')
+  const configurationRead = useGetResearchConfigurationQuery({ ...scope, sessionRevision }, {
+    skip: !active || Boolean(loading) || locked || !runtimeInstanceId || !customerId || !tenantId,
+  })
+  const configurationData = !configurationRead.error ? readSavedResearchConfiguration(configurationRead.currentData, scope, renderer?.runtimeInstance?.stateVersion) : null
+  const configurationReady = !loading && !configurationRead.isFetching && Boolean(configurationData)
+    && configurationData.basis.updatedAt === renderer?.runtimeInstance?.updatedAt
+  const latestConfiguration = useRef(null)
+  latestConfiguration.current = configurationReady ? configurationData : null
+  const savedConfiguration = configurationData?.configuration || null
+  const savedBriefCurrent = savedConfiguration && profile === savedConfiguration.coverage
+    && Object.entries(researchContextSnapshot(draft)).every(([key, value]) => savedConfiguration.context[key] === value)
+  const researchAvailability = configurationReady && (!dirty || savedBriefCurrent) ? readResearchAvailability(configurationData) : null
+  const fixtureStart = researchAvailability ? readFixtureStart(configurationData) : null
+  const retryOwner = JSON.stringify([configurationReady, active, fixtureStart?.selector, fixtureStart?.bindingDigest, authority?.canAcquire, locked])
+  const [researchRetryState, setResearchRetryState] = useState({ owner: retryOwner, run: null })
+  if (researchRetryState.owner !== retryOwner) setResearchRetryState({ owner: retryOwner, run: null })
+  const canRetryResearch = run => Boolean(fixtureStart && isControlledAcquisitionRun(run) && run.status === 'FAILED' && run.canonicalSaved === false
+    && isAcquisitionRunId(run.executionAttemptId) && run.actorUserId === fixtureStart.actorUserId
+    && run.basisStateVersion === configurationData.basis.stateVersion && run.basisUpdatedAt === configurationData.basis.updatedAt
+    && run.researchConfiguration?.configurationVersion === fixtureStart.selector.configurationVersion
+    && run.researchConfiguration?.configurationHash === fixtureStart.selector.configurationHash
+    && run.controlledReplayProvenance?.provenance?.bindingDigest === fixtureStart.bindingDigest
+    && readAcquisitionRun(run, scope) && active && !locked && authority?.canAcquire === true)
+  const researchRetry = researchRetryState.owner === retryOwner && canRetryResearch(researchRetryState.run) ? researchRetryState.run : null
+  const researchLookup = useGetAcquisitionRunsQuery({ ...scope, sessionRevision, requestKey: researchKey }, { skip: !active || !researchKey })
+  const requestPage = !researchLookup.error && !researchLookup.isFetching ? researchLookup.currentData?.data : null
+  const requestPageCurrent = researchKey && requestPage?.requestedRequestKey === researchKey && requestPage.scope?.customerId === customerId
+    && requestPage.scope?.tenantId === tenantId && (requestPage.scope?.runtimeInstanceKey === runtimeInstanceId || requestPage.scope?.runtimeInstanceId === runtimeInstanceId)
+    && requestPage.hasMore === false && Array.isArray(requestPage.items) && requestPage.items.length <= 1
+  const requestCandidate = requestPageCurrent && requestPage.items.length ? readAcquisitionRun(requestPage.items[0], scope, researchKey) : null
+  const requestRun = isControlledAcquisitionRun(requestCandidate) && requestCandidate.researchConfiguration ? requestCandidate : null
+  const startResearch = async () => {
+    if (!ownsResearchCommand() || !currentActive.current || !configurationReady || latestConfiguration.current !== configurationData
+      || !fixtureStart || !researchAvailability || researchKeys.length && !researchRetry || authority?.canAcquire !== true || inFlight.current
+      || !renderer?.actions?.some(item => String(item.governedAction || item.actionKey).toUpperCase() === 'BUILD_EVIDENCE_PACK' && item.enabled === true)) return
+    const requestKey = crypto.randomUUID(), body = buildFixtureStartPayload(configurationData, requestKey)
+    if (!body) return
+    if (researchRetry) { body.predecessorRunId = researchRetry.runId; body.predecessorExecutionAttemptId = researchRetry.executionAttemptId }
+    const operationGeneration = generation.current
+    setResearchRetryState({owner:retryOwner,run:null})
+    inFlight.current = true; setResearchSubmitting(true); setResearchFeedback('Start request submitted. Waiting for a saved Run receipt; this is not recorded progress.')
+    researchRoute.current = requestKey
+    setParams(previous => { const next = new URLSearchParams(previous); next.set('researchRequestKey', requestKey); next.delete('acquisitionRunId'); next.delete('closedAcquisitionRunId'); return next })
+    setInspection('Evidence intake and processing history')
+    const currentRequest = () => isCurrent() && currentActive.current && generation.current === operationGeneration && researchRoute.current === requestKey
+    const selectReceipt = receipt => {
+      if (!isControlledAcquisitionRun(receipt) || receipt.researchConfiguration?.configurationVersion !== fixtureStart.selector.configurationVersion
+        || receipt.researchConfiguration?.configurationHash !== fixtureStart.selector.configurationHash) return false
+      const current = latestParams.current
+      if (current.get('researchRequestKey') !== requestKey || current.get('acquisitionRunId') && current.get('acquisitionRunId') !== receipt.runId) return false
+      const next = new URLSearchParams(current); next.set('acquisitionRunId', receipt.runId); setParams(next)
+      setResearchFeedback('The original request has a saved Run. Read or refresh its exact receipt below.')
+      return true
+    }
+    try {
+      const response = await execute({ ...scope, sessionRevision, actionKey: 'BUILD_EVIDENCE_PACK', body }).unwrap()
+      if (!currentRequest()) return
+      if (!selectReceipt(acquisitionRunFromResponse(response, scope, requestKey)))
+        setResearchFeedback('The Start outcome is unconfirmed. Refresh the original request; no new request will be submitted automatically.')
+    } catch (error) {
+      if (currentRequest() && !selectReceipt(acquisitionRunFromError(error, scope, requestKey)))
+        setResearchFeedback('The Start outcome could not be verified. Refresh the original request before any further action; do not start another Run.')
+    } finally { inFlight.current = false; if (isCurrent()) setResearchSubmitting(false) }
+  }
+  const researchBrief = !dirty && savedConfiguration ? savedConfiguration.context : draft
+  const researchProfile = !dirty && savedConfiguration ? savedConfiguration.coverage : profile
+  const saveResearch = async settings => {
+    if (!ownsResearchCommand() || !currentActive.current || !configurationReady || latestConfiguration.current !== configurationData
+      || !configurationData.editable || authority?.canAcquire !== true || inFlight.current || configurationSaving) return
+    const operationGeneration = generation.current
+    inFlight.current = true; setConfigurationSaving(true); setConfigurationSaveError('')
+    try {
+      const response = await saveConfiguration({ ...scope, sessionRevision, body: {
+        expectedUpdatedAt: configurationData.basis.updatedAt, expectedStateVersion: configurationData.basis.stateVersion,
+        expectedConfigurationVersion: savedConfiguration?.configurationVersion || null,
+        context: researchContextSnapshot(researchBrief), coverage: researchProfile,
+        settings: { ...settings, startingUrls: settings.startingUrls.split(/\r?\n/).map(value => value.trim()).filter(Boolean) },
+      } }).unwrap()
+      if (!isCurrent() || !currentActive.current || generation.current !== operationGeneration) return
+      const saved = readSavedResearchConfiguration(response, scope, renderer?.runtimeInstance?.stateVersion)
+      if (!saved?.configuration) throw new Error('Save response could not be verified. Reload before saving again.')
+      const readback = await configurationRead.refetch().unwrap()
+      if (!isCurrent() || !currentActive.current || generation.current !== operationGeneration) return
+      const verified = readSavedResearchConfiguration(readback, scope, renderer?.runtimeInstance?.stateVersion)
+      if (verified?.configuration?.configurationVersion !== saved.configuration.configurationVersion) {
+        throw new Error('Settings may have saved, but read-back could not be verified. Reload before saving again.')
+      }
+    } catch (error) {
+      if (isCurrent() && currentActive.current && generation.current === operationGeneration) {
+        setConfigurationSaveError(error?.data?.error?.message || error.message || 'Settings could not be saved. Reload before saving again.')
+      }
+    } finally { inFlight.current = false; if (isCurrent()) setConfigurationSaving(false) }
+  }
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; inspectionTrigger.current = null; preparation.current += 1 } }, [contextKey])
   useEffect(() => {
     if (!active) {
@@ -127,7 +239,7 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
             : blocked ? 'Refresh and inspect the current sources before retrying acquisition.'
               : websiteAddress.trim() ? 'Stage or clear the website address before acquiring.'
                 : fileError || (action && action.enabled !== true ? action.disabledReason || 'The delivered acquisition action is unavailable.' : readiness.reason)
-  const controlsDisabled = !editable || busy || preparing || stale || blocked
+  const controlsDisabled = !editable || busy || preparing || stale || blocked || researchSubmitting
   const change = (key, value) => { setDirty(true); setDraft(previous => ({ ...previous, [key]: value })) }
   const clearFiles = () => { preparation.current += 1; setDocuments([]); setFileError(''); if (fileInput.current) fileInput.current.value = '' }
   const chooseFiles = async (event) => {
@@ -275,10 +387,15 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
         <div className="intelligence-hub__context-controls"><Button size="sm" variant="outline" disabled={controlsDisabled} onClick={() => setEditor(null)}>Apply brief</Button><Button size="sm" variant="outline" disabled={busy || preparing} onClick={cancelEditing}>Cancel</Button></div>
       </div>}{dirty ? <p>Brief edits are staged locally. Acquisition has not been submitted.</p> : null}</> : <p>Brief details unavailable for this revision.</p>}
     </section>
-    <section className="intelligence-hub__research-availability" aria-label="Public research availability">
-      <div><Tickbox label="Research public information" checked={false} disabled readOnly aria-describedby={researchDescriptionId} /><p id={researchDescriptionId}>Unavailable. Live public research and controlled replay remain on hold.</p></div>
-      <Button type="button" size="sm" variant="outline" onClick={event => openInspection('Research availability', event.currentTarget)}>Research availability<FiArrowUpRight size={14} aria-hidden="true" /></Button>
-    </section>
+    {researchRetry ? <p role="status">Explicit fixture retry prepared for Run {researchRetry.runId}, Attempt {researchRetry.executionAttemptId}. Start creates a new Run and Attempt; preparing does not submit.</p> : null}
+    <PublicResearchConfiguration key={JSON.stringify([contextKey, sessionRevision, basis, profile, draft, active, controlsDisabled])}
+      brief={researchBrief} profile={researchProfile} canPrepare={active && !controlsDisabled && ['STANDARD', 'ENHANCED'].includes(researchProfile) && Boolean(researchBrief.companyName?.trim())}
+      savedConfiguration={savedConfiguration} currency={configurationData?.currency} availability={researchAvailability} onSave={saveResearch}
+      saveAvailable={configurationReady && configurationData.editable && !controlsDisabled}
+      saving={configurationSaving} saveError={configurationSaveError} onStart={startResearch} starting={researchSubmitting}
+      startAvailable={Boolean(fixtureStart && (!researchKeys.length || researchRetry) && !controlsDisabled && renderer?.actions?.some(item => String(item.governedAction || item.actionKey).toUpperCase() === 'BUILD_EVIDENCE_PACK' && item.enabled === true))}
+      readLoading={configurationRead.isFetching} readUnavailable={!configurationReady && !configurationRead.isFetching}
+      onInspectAvailability={event => openInspection('Research availability', event.currentTarget)} />
     <div className="intelligence-hub__context-intake">
       <section><h2>Websites</h2>
         <div className="intelligence-hub__website-stage"><Input type="url" aria-label="Website address" placeholder="https://example.com" size="sm" fullWidth maxLength={500} value={websiteAddress} disabled={controlsDisabled} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); stageWebsite() } }} onChange={event => setWebsiteAddress(event.target.value)} /><Button size="sm" variant="outline" aria-label="Stage website" disabled={controlsDisabled || !validWebsite || draft.websiteSources.filter(Boolean).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT} onClick={stageWebsite}><FiPlus size={16} aria-hidden="true" /></Button></div>
@@ -312,7 +429,12 @@ function ScopedContextAcquisitionView({ sessionRevision, discovery, renderer, au
     <footer className="intelligence-hub__context-footer"><Button size="sm" variant="outline" onClick={()=>onSelectView('Overview')}><FiArrowLeft size={14} aria-hidden="true" />Overview</Button><small>Navigation does not approve evidence or change the revision.</small><Button size="sm" variant="outline" onClick={()=>onSelectView('Sources')}>Sources<FiArrowRight size={14} aria-hidden="true" /></Button></footer>
     {inspection && active ? <Dialog open onClose={closeInspection} size="lg" className="intelligence-hub__inspection-dialog" aria-label={inspection||'Context inspection'}><Dialog.Header><h2>{inspection}</h2></Dialog.Header><Dialog.Body>
       {inspection!=='Research availability' ? <Select size="sm" label="Record" className="intelligence-hub__inspection-record" value={inspection||''} options={[{value:inspection||'',label:inspection||''}]} onChange={()=>{}} /> : null}
-      {inspection==='Research availability'?<><p>Public research is not available in this workspace. Research settings cannot be saved and no research run can start.</p><p>Live research requires approved provider and registry access, licensing, retention, regional and operating limits, budget and spend ownership.</p><p>Controlled replay also remains disabled. No controlled replay can be started from this workspace.</p><p>Continue using the existing website and document intake where authorised. Acquisition places candidates in Sources and Review; it does not accept evidence, recompute understanding or change a locked revision.</p></>:inspection==='Publication and lock record'?<><dl className="intelligence-hub__inspection-facts"><div><dt>Selected revision</dt><dd>{renderer?.runtimeInstance?.name||'Selected workspace'} · {renderer?.revision?.revisionNumber?`R${renderer.revision.revisionNumber}`:'Revision unavailable'}</dd></div><div><dt>Lock state</dt><dd>{locked?'Locked':'Not locked'}</dd></div><div><dt>Frozen evidence membership and versions</dt><dd>Not supplied</dd></div><div><dt>Snapshot integrity</dt><dd>Not independently verified</dd></div></dl><p>Only an explicit authorised successor can change a locked revision. Acquisition and evidence acceptance remain separate.</p></>:<><p>Acquisition is separate from recomputation and source inspection. Recorded executions are inspected through their existing scoped receipts.</p><AcquisitionRunHistory scope={scope} active={active && Boolean(inspection) && isCurrent()} locked={locked} canAcquire={authority?.canAcquire===true} busy={busy||preparing||pendingRequest} onRetry={run=>{setRetryFrom(run.runId);setBlocked(true);setFeedback({message:`Retry prepared for Run ${run.runId}. Refresh current acquisition data, inspect inputs and staged documents, then submit a new explicit operation.`});closeInspection()}} /><p>Sources connected: {sourceSummaryLoading?'Loading…':sourceSummary?.uniqueSourceCount??'Unavailable'} · Documents processed: {sourceProcessingLabel(sourceSummary,sourceSummaryLoading)}</p><p>{sourceProcessingExplanation(sourceSummary)}</p><p>Snapshot continuity receipt unavailable. Recorded evidence and decisions remain attached to their revision.</p><p>Accepted evidence: {countsLoading?'Loading…':evidenceStatusCounts?.accepted??'Unavailable'} · Evidence awaiting review: {countsLoading?'Loading…':evidenceStatusCounts?.pending??'Unavailable'}</p></>}
+      {inspection==='Research availability'?<><p>{researchAvailability ? RESEARCH_AVAILABILITY_MESSAGES[researchAvailability.reason] : configurationRead.isFetching ? 'Checking research availability…' : 'Research availability is unavailable for these settings. Reload or save the current settings before checking again.'}</p><p>Research settings can be saved separately when this revision is editable. Live research cannot start.</p><p>Live research requires approved provider and registry access, licensing, retention, regional and operating limits, budget and spend ownership.</p><p>{fixtureStart ? 'A verified provider-free fixture is available for this saved configuration. Start remains explicit and subject to the current action permission.' : 'Controlled replay also remains disabled. No controlled replay can be started from this workspace.'}</p><p>Continue using the existing website and document intake where authorised. Acquisition places candidates in Sources and Review; it does not accept evidence, recompute understanding or change a locked revision.</p></>:inspection==='Publication and lock record'?<><dl className="intelligence-hub__inspection-facts"><div><dt>Selected revision</dt><dd>{renderer?.runtimeInstance?.name||'Selected workspace'} · {renderer?.revision?.revisionNumber?`R${renderer.revision.revisionNumber}`:'Revision unavailable'}</dd></div><div><dt>Lock state</dt><dd>{locked?'Locked':'Not locked'}</dd></div><div><dt>Frozen evidence membership and versions</dt><dd>Not supplied</dd></div><div><dt>Snapshot integrity</dt><dd>Not independently verified</dd></div></dl><p>Only an explicit authorised successor can change a locked revision. Acquisition and evidence acceptance remain separate.</p></>:<><p>Acquisition is separate from recomputation and source inspection. Recorded executions are inspected through their existing scoped receipts.</p>
+      {researchKeys.length ? <section aria-label="Original research request">
+        <p>{researchFeedback}</p>
+        <p>{!researchKey ? 'The original request reference is invalid. No request is submitted by opening this view.' : researchLookup.isFetching ? 'Reading the original saved request…' : requestRun ? 'Recorded request preview: ' + requestRun.status + '. Verify its exact Run receipt below.' : requestPageCurrent ? 'No saved Run was found for this original request yet. Refresh; do not submit another Start.' : 'The original request could not be verified. Refresh; no request will be resubmitted.'}</p>
+        <Button type="button" variant="outline" disabled={!researchKey || researchLookup.isFetching || !active} onClick={() => researchLookup.refetch()}>Refresh original research request</Button>
+      </section> : null}<AcquisitionRunHistory scope={scope} requestedRunId={requestRun?.runId} active={active && Boolean(inspection) && isCurrent()} locked={locked} canAcquire={authority?.canAcquire===true} busy={busy||preparing||pendingRequest} canRetryResearch={canRetryResearch} onRetry={run=>{if (isControlledAcquisitionRun(run)) { if (canRetryResearch(run)) { setResearchRetryState({owner:retryOwner,run}); setResearchFeedback("Fixture retry prepared locally. Open Configure research, inspect the saved settings, then explicitly Start. The original request is preserved until that click."); closeInspection() } return } setRetryFrom(run.runId);setBlocked(true);setFeedback({message:`Retry prepared for Run ${run.runId}. Refresh current acquisition data, inspect inputs and staged documents, then submit a new explicit operation.`});closeInspection()}} /><p>Sources connected: {sourceSummaryLoading?'Loading…':sourceSummary?.uniqueSourceCount??'Unavailable'} · Documents processed: {sourceProcessingLabel(sourceSummary,sourceSummaryLoading)}</p><p>{sourceProcessingExplanation(sourceSummary)}</p><p>Snapshot continuity receipt unavailable. Recorded evidence and decisions remain attached to their revision.</p><p>Accepted evidence: {countsLoading?'Loading…':evidenceStatusCounts?.accepted??'Unavailable'} · Evidence awaiting review: {countsLoading?'Loading…':evidenceStatusCounts?.pending??'Unavailable'}</p></>}
     </Dialog.Body><Dialog.Footer><Button size="sm" variant="outline" onClick={closeInspection}>Back to Context</Button></Dialog.Footer></Dialog> : null}
   </form><PostLockSubmissionPanel scope={{ runtimeInstanceId, customerId, tenantId }} renderer={renderer}
     contextKey={contextKey} route={availabilityRoute} canRead={availabilityReadAllowed} loading={availabilityLoading}

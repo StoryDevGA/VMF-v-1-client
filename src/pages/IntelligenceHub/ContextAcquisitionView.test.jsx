@@ -1,11 +1,12 @@
+import { readResearchAvailability } from './publicResearchConfiguration.js'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearTokens, setTokens } from '../../utils/tokenStorage.js'
 import ContextAcquisitionView from './ContextAcquisitionView.jsx'
-const calls = vi.hoisted(() => ({ execute: vi.fn(), update: vi.fn(), availability: vi.fn(), history: vi.fn() }))
-vi.mock('../../store/api/runtimeInstanceApi.js', () => ({ useExecuteRuntimeActionMutation: () => [calls.execute], useUpdateRuntimeDiscoveryInputsMutation: () => [calls.update] }))
+const calls = vi.hoisted(() => ({ execute: vi.fn(), update: vi.fn(), availability: vi.fn(), history: vi.fn(), saveConfig: vi.fn(), configRead: {}, configRefetch: vi.fn(), lookupRead: {}, lookupRefetch: vi.fn(), lookupArgs: vi.fn() }))
+vi.mock('../../store/api/runtimeInstanceApi.js', () => ({ useGetAcquisitionRunsQuery: (...args) => { calls.lookupArgs(...args); return calls.lookupRead }, useGetResearchConfigurationQuery: () => calls.configRead, useSaveResearchConfigurationMutation: () => [calls.saveConfig], useExecuteRuntimeActionMutation: () => [calls.execute], useUpdateRuntimeDiscoveryInputsMutation: () => [calls.update] }))
 vi.mock('./PostLockSubmissionPanel.jsx', () => ({ default: props => {
   calls.availability(props)
   return props.active && props.locked ? <form aria-label="Post-lock submission test boundary"><p>Availability read boundary</p></form> : null
@@ -13,7 +14,7 @@ vi.mock('./PostLockSubmissionPanel.jsx', () => ({ default: props => {
 vi.mock('./AcquisitionRunHistory.jsx', () => ({ default: props => { calls.history(props); return <p>Run history test boundary</p> } }))
 const stamp = '2026-10-04T10:00:00.000Z'
 const inputValues = { companyName: 'Controlled fixture', marketRegion: 'Test market', targetOffer: 'Synthetic service', companyWebsite: 'https://example.org', websiteSources: ['https://example.org'], notes: '' }
-const base = () => ({ discovery: { inputValues, acquisitionProfile: 'STANDARD', evidenceReady: false }, renderer: { runtimeInstance: { updatedAt: stamp }, actions: [] }, authority: { canAcquire: true, runtimeUpdatedAt: stamp }, runtimeInstanceId: 'revision-1', customerId: 'customer-1', tenantId: 'tenant-1', contextKey: 'scope-1', workbenchHref: '/app/runtime', refresh: vi.fn().mockResolvedValue(true), onSelectView: vi.fn(), evidenceStatusCounts: {} })
+const base = () => ({ discovery: { inputValues, acquisitionProfile: 'STANDARD', evidenceReady: false }, renderer: { runtimeInstance: { updatedAt: stamp, stateVersion: 'rsv2:basis' }, actions: [] }, authority: { canAcquire: true, runtimeUpdatedAt: stamp }, runtimeInstanceId: 'revision-1', customerId: 'customer-1', tenantId: 'tenant-1', contextKey: 'scope-1', workbenchHref: '/app/runtime', refresh: vi.fn().mockResolvedValue(true), onSelectView: vi.fn(), evidenceStatusCounts: {} })
 const mount = props => {
   const result = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
   const edit = screen.queryByRole('button', {name:'Edit evidence gathering brief'})
@@ -81,12 +82,12 @@ describe('document-only Context acquisition', () => {
     expect(calls.execute).not.toHaveBeenCalled()
   })
 })
-beforeEach(() => { vi.restoreAllMocks(); calls.execute.mockReset(); calls.update.mockReset(); calls.availability.mockReset();
+beforeEach(() => { calls.lookupRead = { refetch: calls.lookupRefetch }; calls.lookupRefetch.mockReset(); calls.lookupArgs.mockReset(); calls.configRead = { currentData: configurationFixture(), refetch: calls.configRefetch }; calls.saveConfig.mockReset(); calls.configRefetch.mockReset(); vi.restoreAllMocks(); calls.execute.mockReset(); calls.update.mockReset(); calls.availability.mockReset();
   const respond = args => ({ unwrap: () => Promise.resolve({ acquisitionRun: receiptFor(args.body.requestKey) }) })
   calls.execute.mockImplementation(respond); calls.update.mockImplementation(respond)
 })
 describe('Context governed acquisition', () => {
-  it.each(['eligible', 'locked', 'loading', 'read-only', 'missing brief'])('keeps Research disabled and explains availability without acquisition for %s', async kind => {
+  it.each(['eligible', 'locked', 'loading', 'read-only', 'missing brief'])('gates research preparation and explains execution availability without acquisition for %s', async kind => {
     const user = userEvent.setup(), props = base()
     if (kind === 'locked') props.locked = true
     if (kind === 'loading') props.loading = true
@@ -100,13 +101,14 @@ describe('Context governed acquisition', () => {
       return
     }
     const checkbox = screen.getByRole('checkbox', { name: 'Research public information' })
-    expect(checkbox).toBeDisabled()
+    if (kind === 'eligible') expect(checkbox).toBeEnabled()
+    else expect(checkbox).toBeDisabled()
     expect(checkbox).not.toBeChecked()
-    expect(checkbox).toHaveAccessibleDescription('Unavailable. Live public research and controlled replay remain on hold.')
+    expect(checkbox).toHaveAccessibleDescription('Prepare source choices from this brief. Live research remains unavailable; selecting or configuring settings does not start a run.')
     await user.click(checkbox)
     await user.click(screen.getByRole('button', { name: 'Research availability' }))
     const dialog = screen.getByRole('dialog', { name: 'Research availability' })
-    expect(within(dialog).getByText(/Research settings cannot be saved/)).toBeVisible()
+    expect(within(dialog).getByText(/Research settings can be saved separately/)).toBeVisible()
     expect(within(dialog).getByText(/licensing, retention, regional and operating limits/)).toBeVisible()
     expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument()
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
@@ -699,4 +701,300 @@ it('places the separate submission form outside the existing acquisition form', 
   const form = screen.getByRole('form', { name: 'Post-lock submission test boundary' })
   expect(form.parentElement.closest('form')).toBeNull()
   expect(document.querySelectorAll('form form')).toHaveLength(0)
+})
+
+it.each(['departure', 'loading', 'authority', 'scope', 'brief', 'session'])('discards research preparation dialog on %s without resurrection or acquisition', async kind => {
+  const user = userEvent.setup(), props = base()
+  const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+  await user.click(screen.getByRole('checkbox', { name: 'Research public information' }))
+  await user.click(screen.getByRole('button', { name: 'Configure research' }))
+  expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
+  const changed = { ...props }
+  if (kind === 'departure') changed.active = false
+  if (kind === 'loading') changed.loading = true
+  if (kind === 'authority') changed.authority = { canAcquire: false }
+  if (kind === 'scope') changed.contextKey = 'other-scope'
+  if (kind === 'brief') {
+    const updatedAt = '2026-10-04T11:00:00.000Z'
+    changed.renderer = { ...props.renderer, runtimeInstance: { updatedAt } }
+    changed.authority = { canAcquire: true, runtimeUpdatedAt: updatedAt }
+    changed.discovery = { ...props.discovery, inputValues: { ...inputValues, companyName: 'Changed brief' } }
+  }
+  if (kind === 'session') act(() => clearTokens())
+  else view.rerender(<MemoryRouter><ContextAcquisitionView {...changed} /></MemoryRouter>)
+  expect(screen.queryByRole('dialog', { name: 'Configure research' })).not.toBeInTheDocument()
+  view.rerender(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+  expect(screen.queryByRole('dialog', { name: 'Configure research' })).not.toBeInTheDocument()
+  expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+})
+
+const configurationFixture = (saved = false) => {
+ const scope = { customerId: 'customer-1', tenantId: 'tenant-1', runtimeInstanceId: '123456789012345678901234', runtimeInstanceKey: 'revision-1' }
+ const context = { companyName: 'Saved fixture', marketRegion: 'Test market', targetOffer: 'Synthetic service', notes: '' }
+ return { data: { contractVersion: 'public-research-configuration-read.v1', scope, basis: { stateVersion: 'rsv2:basis', updatedAt: stamp }, editable: true,
+ currency: saved ? 'CURRENT_BASIS' : 'NOT_RECORDED', configuration: saved ? { contractVersion: 'public-research-configuration.v1', configurationVersion: '12345678-1234-4123-8123-123456789abc', scope,
+ basisStateVersion: 'rsv2:basis', basisUpdatedAt: stamp, contextSource: 'USER_PREPARED_CONTEXT_BRIEF', context, coverage: 'STANDARD',
+ purpose: 'Company: Saved fixture\nMarket / region: Test market\nProduct or service: Synthetic service', savedAt: stamp, savedBy: '123456789012345678901234', configurationHash: 'sha256:' + 'a'.repeat(64), saveAuditId: '123456789012345678901235',
+ settings: { startingUrls: ['https://fixture.example'], legalEntity: '', countryCode: '', entityIdentifier: '', entityConfirmed: false, ukSubsidiary: false, sources: ['WEBSITE'], instructions: 'Retain qualification.' } } : null } }
+}
+describe('server-saved research configuration', () => {
+ const openConfiguration = async () => { await userEvent.click(screen.getByRole('checkbox', { name: 'Research public information' })); await userEvent.click(screen.getByRole('button', { name: 'Configure research' })) }
+ it('saves explicit intent, verifies scoped read-back and restores after remount without acquisition', async () => {
+   const response = configurationFixture(true)
+   calls.configRead = { currentData: configurationFixture(), refetch: calls.configRefetch }
+   calls.saveConfig.mockReturnValue({ unwrap: () => Promise.resolve(response) })
+   calls.configRefetch.mockImplementation(() => { calls.configRead = { currentData: response, refetch: calls.configRefetch }; return { unwrap: () => Promise.resolve(response) } })
+   const props = base(), view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+   await openConfiguration(); await userEvent.click(screen.getByRole('button', { name: 'Save research configuration' }))
+   await waitFor(() => expect(calls.configRefetch).toHaveBeenCalledTimes(1))
+   expect(calls.saveConfig.mock.calls[0][0]).toMatchObject({ runtimeInstanceId: 'revision-1', customerId: 'customer-1', tenantId: 'tenant-1', body: { expectedStateVersion: 'rsv2:basis', expectedUpdatedAt: stamp, expectedConfigurationVersion: null, context: { companyName: 'Controlled fixture' } } })
+   view.unmount()
+   render(<MemoryRouter><ContextAcquisitionView {...props} discovery={{ inputValues: {}, acquisitionProfile: 'STANDARD' }} /></MemoryRouter>)
+   expect(screen.getByText(/Saved research configuration ·/)).toBeVisible()
+   await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+   expect(screen.getByText('Saved fixture', { exact: true })).toBeVisible()
+   expect(screen.getByLabelText('Optional narrowing instructions')).toHaveValue('Retain qualification.')
+   expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
+   expect(calls.update).not.toHaveBeenCalled(); expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it.each(['save failure', 'read-back mismatch', 'late session'])('does not claim saved settings after %s', async kind => {
+   const response = configurationFixture(true); let finish
+   calls.configRead = { currentData: configurationFixture(), refetch: calls.configRefetch }
+   calls.configRefetch.mockReturnValue({ unwrap: () => Promise.resolve(configurationFixture()) })
+   calls.saveConfig.mockReturnValue({ unwrap: () => kind === 'save failure' ? Promise.reject({ data: { error: { message: 'Configuration changed; reload.' } } }) : kind === 'late session' ? new Promise(resolve => { finish = resolve }) : Promise.resolve(response) })
+   render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+   await openConfiguration(); await userEvent.click(screen.getByRole('button', { name: 'Save research configuration' }))
+   if (kind === 'late session') { act(() => clearTokens()); await act(async () => finish(response)); expect(calls.configRefetch).not.toHaveBeenCalled() }
+   else await screen.findByText(kind === 'save failure' ? /Configuration changed; reload/ : /read-back could not be verified/)
+   expect(screen.queryByText(/Saved research configuration ·/)).not.toBeInTheDocument()
+   expect(calls.update).not.toHaveBeenCalled(); expect(calls.execute).not.toHaveBeenCalled()
+ })
+})
+
+it('keeps saving unavailable when the server configuration read fails', async () => {
+ calls.configRead = { currentData: configurationFixture(), error: { status: 503 } }
+ render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+ expect(screen.getByText(/Saved configuration is unavailable/)).toBeVisible()
+ await userEvent.click(screen.getByRole('checkbox', { name: 'Research public information' }))
+ await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+ expect(screen.getByRole('button', { name: 'Save research configuration' })).toBeDisabled()
+ expect(calls.saveConfig).not.toHaveBeenCalled()
+})
+
+const availabilityFixture = () => {
+ const response = configurationFixture(true), data = response.data, record = data.configuration
+ data.availability = { contractVersion: 'public-research-availability.v1', canStart: false, executionEnabled: false, reason: 'OPERATING_APPROVAL_NOT_RECORDED',
+ configurationVersion: record.configurationVersion, configurationHash: record.configurationHash,
+ categories: ['WEBSITE', 'SEARCH', 'REGISTRY', 'GITHUB', 'LINKEDIN', 'SOCIAL', 'NEWS', 'REVIEWS', 'INDUSTRY'].map(key => ({ key, selected: key === 'WEBSITE', status: key === 'WEBSITE' ? 'GATED' : 'NOT_SELECTED', reason: key === 'WEBSITE' ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' })),
+ requestMapping: { contractVersion: 'public-research-request-mapping.v1', configurationVersion: record.configurationVersion, configurationHash: record.configurationHash,
+ saveAuditId: record.saveAuditId, scope: data.scope, basis: data.basis, contextSource: record.contextSource, inputs: record.context, purpose: record.purpose,
+ acquisitionProfile: record.coverage, settings: record.settings } }
+ return response
+}
+describe('server-owned research availability', () => {
+ it('shows the server-bound saved request without dispatching or claiming configuration cannot be saved', async () => {
+  calls.configRead = { currentData: availabilityFixture() }
+  render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+  await userEvent.click(screen.getByRole('button', { name: 'Research availability' }))
+  expect(within(screen.getByRole('dialog')).getByText('Provider/registry operating approval is not recorded. No retrieval will run.')).toBeVisible()
+  expect(screen.queryByText(/Research settings cannot be saved/)).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Back to Context' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+  expect(screen.getByText(/Saved request mapped · Standard coverage · 1 selected categories/)).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
+  expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled(); expect(calls.saveConfig).not.toHaveBeenCalled()
+ })
+ it.each(['brief edit', 'fetching', 'failed read', 'root stamp'])('withholds authoritative availability after %s', async kind => {
+  const props = base(); calls.configRead = { currentData: availabilityFixture() }
+  const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+  if (kind === 'brief edit') {
+   await userEvent.click(screen.getByRole('button', { name: 'Edit evidence gathering brief' }))
+   await userEvent.type(screen.getByLabelText('Company name'), ' changed')
+   await userEvent.click(screen.getByRole('button', { name: 'Apply brief' }))
+  } else {
+   if (kind === 'fetching') calls.configRead.isFetching = true
+   if (kind === 'failed read') calls.configRead.error = { status: 503 }
+   if (kind === 'root stamp') props.renderer = { runtimeInstance: { stateVersion: 'rsv2:basis', updatedAt: '2026-11-12T13:00:00Z' } }
+   view.rerender(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+  }
+  await userEvent.click(screen.getByRole('button', { name: 'Research availability' }))
+  expect(screen.queryByText('Provider/registry operating approval is not recorded. No retrieval will run.')).not.toBeInTheDocument()
+  expect(screen.queryByText(/Saved request mapped/)).not.toBeInTheDocument()
+  expect(calls.execute).not.toHaveBeenCalled(); expect(calls.saveConfig).not.toHaveBeenCalled()
+ })
+ it.each(['binding', 'basis', 'source identity', 'duplicate category', 'execution flag', 'mapping contents'])('rejects invalid %s while preserving readable settings', kind => {
+  const data = availabilityFixture().data
+  expect(readResearchAvailability(data)).not.toBeNull()
+  if (kind === 'binding') data.availability.configurationHash = 'sha256:' + '0'.repeat(64)
+  if (kind === 'basis') data.availability.requestMapping.basis = { ...data.basis, stateVersion: 'foreign' }
+  if (kind === 'source identity') data.availability.categories[0].key = 'PRIVATE_WEB'
+  if (kind === 'duplicate category') data.availability.categories[1] = data.availability.categories[0]
+  if (kind === 'execution flag') data.availability.executionEnabled = true
+  if (kind === 'mapping contents') data.availability.requestMapping = { ...data.availability.requestMapping, inputs: { ...data.configuration.context, companyName: 'foreign' } }
+  expect(readResearchAvailability(data)).toBeNull()
+  expect(data.configuration.context.companyName).toBe('Saved fixture')
+ })
+})
+
+const fixtureStartConfiguration = () => {
+ const response = availabilityFixture(), data = response.data, record = data.configuration
+ data.scope.customerId = "123456789012345678901231"; data.scope.tenantId = "123456789012345678901232"
+ data.availability.fixtureStart = { contractVersion: 'controlled-fixture-start.v1', eligible: true, classification: 'CONTROLLED_SYNTHETIC_REPLAY', actorUserId: record.savedBy,
+  scope: data.scope, basis: data.basis, bindingId: 'fixture.1', bindingDigest: 'sha256:' + 'b'.repeat(64),
+  fixture: { fixtureId: 'fixture-html', fixtureVersion: 1, fixtureFileSha256: 'a'.repeat(64), htmlSha256: 'b'.repeat(64), sourceUrl: record.settings.startingUrls[0] },
+  selector: { configurationVersion: record.configurationVersion, configurationHash: record.configurationHash, basisStateVersion: data.basis.stateVersion } }
+ return response
+}
+const researchRunFor = (requestKey, status = 'SUCCEEDED') => {
+ const config = fixtureStartConfiguration().data, active = ['QUEUED', 'RUNNING'].includes(status)
+ const binding = { contractVersion: 'controlled-replay-binding.v1', classification: 'CONTROLLED_SYNTHETIC_REPLAY', environment: 'DEVELOPMENT_TEST',
+  bindingId: 'fixture.1', bindingVersion: 1, scope: { customerId: config.scope.customerId, tenantId: config.scope.tenantId, runtimeInstanceId: config.scope.runtimeInstanceId },
+  actorUserId: config.configuration.savedBy, revisionId: config.scope.runtimeInstanceKey, basisStateVersion: config.basis.stateVersion, fixture: config.availability.fixtureStart.fixture }
+ return { contractVersion: 'controlled-acquisition-run.v1', runId: '12345678-1234-4123-8123-123456789abb', executionAttemptId: '12345678-1234-4123-8123-123456789acd', requestKey, scope: config.scope,
+  actorUserId: binding.actorUserId, actionKey: 'BUILD_EVIDENCE_PACK', basisStateVersion: config.basis.stateVersion, basisUpdatedAt: config.basis.updatedAt,
+  researchConfiguration: config.configuration, status, currency: active ? 'ACTIVE' : 'CURRENT_OUTPUT',
+  controlledReplayProvenance: { binding, provenance: { contractVersion: 'controlled-replay-provenance.v1', classification: binding.classification,
+   operation: 'CONTROLLED_HTML_REPLAY_CAPTURE', adapter: 'controlled-html-replay-v1', bindingId: binding.bindingId, bindingVersion: 1,
+   bindingDigest: 'sha256:' + 'b'.repeat(64), ...binding.fixture } },
+  ...(active ? { recovery: 'Recorded active Run. Refresh its exact receipt.' } : { canonicalSaved: true, outputStateVersion: 'rsv2:recorded',
+   outcomes: [{ kind: 'CONTROLLED', inputIndex: 0, status: 'SUCCEEDED', sourceId: 'fixture_original', evidenceObjectCount: 4 }],
+   audit: { admissionId: 'a', startId: 'b', terminalId: 'c', saveId: 's' } }) }
+}
+const researchPage = (key, rows) => ({ data: { contractVersion: 'acquisition-run.v1', requestedRequestKey: key,
+ scope: fixtureStartConfiguration().data.scope, items: rows, hasMore: false } })
+const ResearchLocation = () => <p data-testid="research-location">{useLocation().search}</p>
+const researchView = (props, route) => <MemoryRouter initialEntries={[route]}><ContextAcquisitionView {...props} /><ResearchLocation /></MemoryRouter>
+const researchProps = () => { const props = base(); props.customerId = "123456789012345678901231"; props.tenantId = "123456789012345678901232"; props.renderer.actions = [{ actionKey: 'BUILD_EVIDENCE_PACK', enabled: true }]; return props }
+describe('explicit provider-free Start and recorded progress', () => {
+ it.each(['Start research', 'Save research configuration'].flatMap(action =>
+  ['authority', 'locked', 'loading', 'configuration', 'departure and return', 'session', 'unmount'].map(departure => [action, departure])))(
+  'never dispatches retained %s after %s', async (action, departure) => {
+   calls.configRead = { currentData: fixtureStartConfiguration() }
+   const props = researchProps(), route = '/app/intelligence?view=context'
+   const view = render(researchView(props, route))
+   await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+   const button = screen.getByRole('button', { name: action })
+   expect(button).toBeEnabled()
+   const retained = button[Object.keys(button).find(key => key.startsWith('__reactProps'))].onClick
+   if (departure === 'unmount') view.unmount()
+   else if (departure === 'session') act(() => clearTokens())
+   else {
+    if (departure === 'configuration') calls.configRead = { currentData: fixtureStartConfiguration() }
+    view.rerender(researchView({ ...props, ...(departure === 'authority' ? {authority: {canAcquire: false}}
+     : departure === 'locked' ? {locked: true} : departure === 'loading' ? {loading: true}
+     : departure === 'departure and return' ? {active: false} : {}) }, route))
+   }
+   act(() => retained())
+   expect(calls.execute).not.toHaveBeenCalled(); expect(calls.saveConfig).not.toHaveBeenCalled()
+   if (!['session', 'unmount'].includes(departure)) {
+    view.rerender(researchView(props, route))
+    act(() => retained())
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.saveConfig).not.toHaveBeenCalled()
+   }
+  })
+ it('prepares a failed fixture locally and only an explicit Start submits its new predecessor-linked request', async () => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = researchRunFor(key)
+  row.status = 'FAILED'; row.canonicalSaved = false; row.currency = 'HISTORICAL_OUTPUT'; delete row.outputStateVersion; delete row.audit.saveId
+  row.outcomes = [{ kind: 'CONTROLLED', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 }]
+  calls.configRead = { currentData: fixtureStartConfiguration() }
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key + '&acquisitionRunId=' + row.runId))
+  const history = calls.history.mock.calls.at(-1)[0]
+  expect(history.canRetryResearch(row)).toBe(true)
+  act(() => history.onRetry(row))
+  expect(calls.execute).not.toHaveBeenCalled(); expect(screen.getByTestId('research-location')).toHaveTextContent(key)
+  expect(screen.getByText(/Explicit fixture retry prepared for Run/)).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' })); await userEvent.click(screen.getByRole('button', { name: 'Start research' }))
+  const payload = calls.execute.mock.calls[0][0].body
+  expect(payload.requestKey).not.toBe(key)
+  expect(payload).toMatchObject({ predecessorRunId: row.runId, predecessorExecutionAttemptId: row.executionAttemptId })
+  expect(calls.execute).toHaveBeenCalledOnce()
+ })
+ it.each(['saved', 'active', 'cancelled', 'wrong actor', 'stale snapshot'])('does not prepare a %s controlled retry', kind => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = researchRunFor(key)
+  row.status = 'FAILED'; row.canonicalSaved = false; row.currency = 'HISTORICAL_OUTPUT'; delete row.outputStateVersion; delete row.audit.saveId
+  row.outcomes = [{ kind: 'CONTROLLED', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 }]
+  if (kind === 'saved') row.canonicalSaved = true
+  if (kind === 'active') row.status = 'RUNNING'
+  if (kind === 'cancelled') row.status = 'CANCELLED'
+  if (kind === 'wrong actor') row.actorUserId = 'a'.repeat(24)
+  if (kind === 'stale snapshot') row.researchConfiguration = { ...row.researchConfiguration, configurationHash: 'sha256:' + 'f'.repeat(64) }
+  calls.configRead = { currentData: fixtureStartConfiguration() }
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  expect(calls.history.mock.calls.at(-1)[0].canRetryResearch(row)).toBe(false); expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it.each(['reload', 'configuration read failed', 'session replaced'])('invalidates prepared retry after %s without redispatch', kind => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = researchRunFor(key)
+  row.status = 'FAILED'; row.canonicalSaved = false; row.currency = 'HISTORICAL_OUTPUT'; delete row.outputStateVersion; delete row.audit.saveId
+  row.outcomes = [{ kind: 'CONTROLLED', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 }]
+  calls.configRead = { currentData: fixtureStartConfiguration() }
+  const props = researchProps(), route = '/app/intelligence?view=context&researchRequestKey=' + key
+  const view = render(researchView(props, route))
+  act(() => calls.history.mock.calls.at(-1)[0].onRetry(row))
+  expect(screen.getByText(/Explicit fixture retry prepared for Run/)).toBeVisible()
+  if (kind === 'session replaced') act(() => clearTokens())
+  else if (kind === 'reload') { view.unmount(); render(researchView(props, route)) }
+  else { calls.configRead = { error: { status: 503 } }; view.rerender(researchView(props, route)); calls.configRead = { currentData: fixtureStartConfiguration() }; view.rerender(researchView(props, route)) }
+  expect(screen.queryByText(/Explicit fixture retry prepared for Run/)).not.toBeInTheDocument(); expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it('allocates one request only on Start and routes its verified receipt to existing history', async () => {
+  calls.configRead = { currentData: fixtureStartConfiguration() }; let finish
+  calls.execute.mockImplementation(args => ({ unwrap: () => new Promise(resolve => { finish = () => resolve({ data: { acquisitionRun: researchRunFor(args.body.requestKey) } }) }) }))
+  render(researchView(researchProps(), '/app/intelligence?view=context'))
+  expect(calls.execute).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+  expect(screen.getByRole('button', { name: 'Start research' })).toBeEnabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Start research' }))
+  expect(calls.execute).toHaveBeenCalledOnce()
+  const operation = calls.execute.mock.calls[0][0], key = operation.body.requestKey
+  expect(operation).toMatchObject({ actionKey: 'BUILD_EVIDENCE_PACK', runtimeInstanceId: 'revision-1', body: {
+   expectedUpdatedAt: stamp, acquisitionProfile: 'STANDARD', controlledReplay: { bindingId: 'fixture.1' }, researchConfiguration: fixtureStartConfiguration().data.availability.fixtureStart.selector } })
+  expect(operation.body).not.toHaveProperty('inputs'); expect(operation.body).not.toHaveProperty('documentSources')
+  expect(screen.getByTestId('research-location')).toHaveTextContent('researchRequestKey=' + key)
+  expect(screen.getByText(/this is not recorded progress/)).toBeVisible()
+  await act(async () => finish())
+  expect(screen.getByTestId('research-location')).toHaveTextContent('acquisitionRunId=12345678-1234-4123-8123-123456789abb')
+  expect(calls.saveConfig).not.toHaveBeenCalled(); expect(calls.execute).toHaveBeenCalledOnce()
+ })
+ it.each(['QUEUED', 'RUNNING', 'SUCCEEDED'])('reload reads exact persisted %s progress without a POST', status => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = researchRunFor(key, status)
+  calls.configRead = { currentData: fixtureStartConfiguration() }; calls.lookupRead = { currentData: researchPage(key, [row]), refetch: calls.lookupRefetch }
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  expect(screen.getByText('Recorded request preview: ' + status + '. Verify its exact Run receipt below.')).toBeVisible()
+  expect(screen.queryByText(/No research run has started/i)).not.toBeInTheDocument()
+  expect(screen.getByText(/Saving settings does not start a research run/)).toBeVisible()
+  expect(calls.history).toHaveBeenLastCalledWith(expect.objectContaining({ requestedRunId: row.runId, active: true }))
+  expect(calls.lookupArgs).toHaveBeenLastCalledWith(expect.objectContaining({ requestKey: key, runtimeInstanceId: 'revision-1' }), { skip: false })
+  expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it.each(['missing', 'failed', 'other request', 'other scope'])('keeps %s request outcomes unknown and never redispatches', async kind => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = researchRunFor(key, 'RUNNING')
+  calls.configRead = { currentData: fixtureStartConfiguration() }
+  calls.lookupRead = { currentData: researchPage(key, kind === 'missing' ? [] : [row]), refetch: calls.lookupRefetch }
+  if (kind === 'failed') calls.lookupRead.error = { status: 503 }
+  if (kind === 'other request') calls.lookupRead.currentData.data.requestedRequestKey = '12345678-1234-4123-8123-123456789acc'
+  if (kind === 'other scope') calls.lookupRead.currentData.data.scope = { ...row.scope, tenantId: 'foreign' }
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  expect(screen.queryByText(/Recorded request preview/)).not.toBeInTheDocument()
+  expect(calls.history).toHaveBeenLastCalledWith(expect.objectContaining({ requestedRunId: undefined }))
+  await userEvent.click(screen.getByRole('button', { name: 'Refresh original research request' }))
+  expect(calls.lookupRefetch).toHaveBeenCalledOnce(); expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it('retains an uncertain original request across reload without another Start', async () => {
+  calls.configRead = { currentData: fixtureStartConfiguration() }
+  calls.execute.mockReturnValue({ unwrap: () => Promise.reject(new Error('Unknown transport result')) })
+  const props = researchProps(), view = render(researchView(props, '/app/intelligence?view=context'))
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' })); await userEvent.click(screen.getByRole('button', { name: 'Start research' }))
+  await screen.findByText(/Start outcome could not be verified/)
+  const route = '/app/intelligence' + screen.getByTestId('research-location').textContent
+  view.unmount(); render(researchView(props, route))
+  expect(calls.execute).toHaveBeenCalledOnce(); expect(screen.getByRole('button', { name: 'Refresh original research request' })).toBeVisible()
+ })
+ it('does not reinterpret a late Start response after session replacement', async () => {
+  let finish; calls.configRead = { currentData: fixtureStartConfiguration() }
+  calls.execute.mockImplementation(args => ({ unwrap: () => new Promise(resolve => { finish = () => resolve({ data: { acquisitionRun: researchRunFor(args.body.requestKey) } }) }) }))
+  render(researchView(researchProps(), '/app/intelligence?view=context'))
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' })); await userEvent.click(screen.getByRole('button', { name: 'Start research' }))
+  act(() => clearTokens()); await act(async () => finish())
+  expect(screen.getByTestId('research-location').textContent).not.toContain('acquisitionRunId=')
+ })
 })

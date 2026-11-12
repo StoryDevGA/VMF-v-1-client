@@ -139,6 +139,21 @@ const appendRuntimeStateScope = (url, scope) => {
   const query = buildRuntimeStateScopeParams(scope).toString()
   return `${url}${query ? `?${query}` : ''}`
 }
+export const buildResearchConfigurationQuery = scope => appendRuntimeStateScope(
+  `/runtime-instances/${encodeURIComponent(scope.runtimeInstanceId)}/research-configuration`, scope)
+export const buildAcquisitionRunsQuery = ({ runtimeInstanceId, customerId, tenantId, cursor, requestKey }) => {
+  const params = new URLSearchParams()
+  appendParam(params, 'customerId', customerId); appendParam(params, 'tenantId', tenantId)
+  appendParam(params, 'cursor', cursor); appendParam(params, 'requestKey', requestKey)
+  return '/runtime-instances/' + encodeURIComponent(runtimeInstanceId) + '/acquisition-runs?' + params
+}
+export const buildCancelAcquisitionRunQuery = ({ runtimeInstanceId, customerId, tenantId, runId, body }) => ({
+  url: '/runtime-instances/' + encodeURIComponent(runtimeInstanceId) + '/acquisition-runs/' + encodeURIComponent(runId)
+    + '/cancel?' + new URLSearchParams({ customerId, tenantId }), method: 'POST', body,
+})
+export const buildSaveResearchConfigurationQuery = ({ body, ...scope }) => ({
+  url: buildResearchConfigurationQuery(scope), method: 'PUT', body,
+})
 
 export const buildRuntimeStateBootstrapQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
   const params = buildRuntimeStateScopeParams({ customerId, tenantId })
@@ -1107,14 +1122,21 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     }),
 
     getAcquisitionRuns: build.query({
-      query: ({ runtimeInstanceId, customerId, tenantId, cursor }) => {
-        const params = new URLSearchParams()
-        appendParam(params, 'customerId', customerId); appendParam(params, 'tenantId', tenantId); appendParam(params, 'cursor', cursor)
-        return `/runtime-instances/${encodeURIComponent(runtimeInstanceId)}/acquisition-runs?${params}`
-      },
+      query: buildAcquisitionRunsQuery,
       providesTags: getRuntimeRendererTags,
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
+    getResearchConfiguration: build.query({
+      query: buildResearchConfigurationQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+    saveResearchConfiguration: build.mutation({
+      query: buildSaveResearchConfigurationQuery,
+      // Save never invalidates evidence or dispatches a Run. Read back this
+      // exact settings scope explicitly before showing a saved result.
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+    cancelAcquisitionRun: build.mutation({ query: buildCancelAcquisitionRunQuery, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
     getAcquisitionRun: build.query({
       query: ({ runtimeInstanceId, customerId, tenantId, runId }) => {
         const params = new URLSearchParams()
@@ -1177,6 +1199,9 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 
 export const {
   useGetAcquisitionRunsQuery,
+  useGetResearchConfigurationQuery,
+  useSaveResearchConfigurationMutation,
+  useCancelAcquisitionRunMutation,
   useGetAcquisitionRunQuery,
   usePlanRuntimeOutcomeRequestMutation,
   useConfirmRuntimeOutcomeRequestPlanMutation,

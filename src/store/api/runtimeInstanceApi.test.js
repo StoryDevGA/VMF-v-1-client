@@ -1,10 +1,13 @@
+import { buildAcquisitionRunsQuery } from './runtimeInstanceApi.js'
+import { buildCancelAcquisitionRunQuery } from './runtimeInstanceApi.js'
+import { buildResearchConfigurationQuery, buildSaveResearchConfigurationQuery } from './runtimeInstanceApi.js'
 import { describe, expect, it } from 'vitest'
 import { buildSubmitRuntimePostLockEvidenceQuery, buildRuntimePostLockEvidenceQuery,
   useSubmitRuntimePostLockEvidenceMutation, useLazyGetRuntimePostLockEvidenceQuery } from './runtimeInstanceApi.js'
 import { configureStore } from '@reduxjs/toolkit'
 
 describe('Structure session cache ownership', () => {
-  it.each(['getRuntimeRenderer', 'getRuntimeStateBootstrap', 'getRuntimeStateSectionSummary'])('%s isolates a same-scope new session and late old fulfillment', async endpoint => {
+  it.each(['getRuntimeRenderer', 'getRuntimeStateBootstrap', 'getRuntimeStateSectionSummary', 'getResearchConfiguration'])('%s isolates a same-scope new session and late old fulfillment', async endpoint => {
     const store = configureStore({ reducer: { [runtimeInstanceApi.reducerPath]: runtimeInstanceApi.reducer },
       middleware: getDefaultMiddleware => getDefaultMiddleware().concat(runtimeInstanceApi.middleware) })
     const scope = { runtimeInstanceId: 'same-runtime', customerId: 'shared-customer', tenantId: 'same-tenant', sectionKey: 'customer_context' }
@@ -1386,4 +1389,23 @@ describe('SS-042 canonical provenance query contracts', () => {
     expect(evidence.searchParams.get('tenantId')).toBe('tenant-1')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateSources')
   })
+})
+
+it('scopes configuration reads and saves without transmitting cache session identity', () => {
+ const scope = { runtimeInstanceId: 'revision/3', customerId: 'customer & one', tenantId: 'tenant/one', sessionRevision: 8 }
+ const url = '/runtime-instances/revision%2F3/research-configuration?customerId=customer+%26+one&tenantId=tenant%2Fone'
+ expect(buildResearchConfigurationQuery(scope)).toBe(url)
+ const body = { expectedConfigurationVersion: null, settings: { sources: ['WEBSITE'] } }
+ expect(buildSaveResearchConfigurationQuery({ ...scope, body })).toEqual({ url, method: 'PUT', body })
+})
+
+it('scopes explicit cancellation without sending session identity or adding retry instructions', () => {
+ const body = { executionAttemptId: '12345678-1234-4123-8123-123456789abc' }
+ expect(buildCancelAcquisitionRunQuery({ runtimeInstanceId: 'revision/3', customerId: 'customer & one', tenantId: 'tenant/one', runId: 'run/?', sessionRevision: 8, body }))
+  .toEqual({ url: '/runtime-instances/revision%2F3/acquisition-runs/run%2F%3F/cancel?customerId=customer+%26+one&tenantId=tenant%2Fone', method: 'POST', body })
+})
+
+it('looks up one original request with scope and keeps session identity cache-only', () => {
+ expect(buildAcquisitionRunsQuery({ runtimeInstanceId: 'revision/3', customerId: 'customer', tenantId: 'tenant', requestKey: 'request/key', sessionRevision: 8 }))
+  .toBe('/runtime-instances/revision%2F3/acquisition-runs?customerId=customer&tenantId=tenant&requestKey=request%2Fkey')
 })
