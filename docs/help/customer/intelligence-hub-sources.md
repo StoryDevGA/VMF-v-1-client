@@ -22,6 +22,14 @@ Exact source and evidence identities are kept in the link so Back and reload can
 
 Source and evidence reads must match the current selected revision version and session before record inspection or Review handoff. During a failed or refreshing read, previous records are withheld. Invalid or repeated query fields offer Reset Sources query; an old selection cannot navigate after the revision, session or read basis changes. Search and Retry source reads remain available for recovery within the current verified scope.
 
+## Recorded capture and exact support
+
+Source details shows a recorded capture receipt when it is supplied and consistent with the current read. Recorded text and Review opens the selected evidence object's supporting excerpt and provenance. Inspect the source identity, capture time, extraction method and any recorded Capture Run and Capture Attempt. A non-run capture can have no Run or Attempt recorded; do not infer another execution identity from that absence. Capture receipts and document-processing receipts describe different operations.
+
+Original content hash identifies the recorded input version. For website captures, it is calculated from the complete decoded response text; it does not identify the original transferred bytes. Extracted-text hash identifies the normalized text used for the supporting excerpt. Its span uses UTF-16 code units with an exclusive end: [start, end) includes the start and stops before the end. These coordinates are not original HTML positions, PDF pages or original-file locations. The exact recorded excerpt, excerpt hash and source binding keep support attached to its own source, even when another source contains the same words.
+
+Recorded capture and support do not establish source authenticity, independent verification, evidence acceptance or frozen membership. Source assertions remain qualified statements awaiting their separate review decisions. If a receipt or supporting span is missing, stale or inconsistent with the selected source and revision, inspection explains that it is unavailable; it does not invent a location or substitute another source. A changed or unavailable read closes the previous inspection rather than keeping old details current.
+
 ## Partial, stale and unavailable reads
 
 A bounded read can be partial or capped. An unknown total is unavailable, not zero. Refresh the selected scope when currency is uncertain. Do not treat an empty visible page as proof that the whole revision has no evidence.

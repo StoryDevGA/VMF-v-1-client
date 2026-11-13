@@ -6,6 +6,10 @@ Review is the entry point for outstanding evidence and Quality decisions in the 
 
 Inspect the exact evidence statement and source before choosing Accept or Reject. Both are review decisions. Needs Review describes evidence awaiting a decision; completion does not require every item to be Accepted.
 
+Supporting evidence and Detailed inspection show any current recorded capture receipt and exact extracted-text support for the selected evidence. Check its source, Capture Run and Capture Attempt where recorded, original-content and extracted-text hashes, excerpt hash and end-exclusive UTF-16 span. The coordinates refer to normalized extracted text, not original HTML or PDF locations. Missing or inconsistent support remains unavailable. [Sources](intelligence-hub-sources.md) explains these provenance fields and their limits.
+
+Successful capture and exact support preserve what the source asserts; they do not independently verify it or accept the evidence. A pending source assertion stays pending until a separate authorised evidence decision. An inspection does not establish frozen snapshot membership, complete review, resolve a finding or authorise downstream publication. If the selected revision, session or read basis changes, reopen a current inspection before acting.
+
 The action requires current authority and an editable revision. A denied or stale write is rejected by the server. After a successful decision, the current scoped reads are refreshed. If recalculation or refresh fails, the failure remains visible and readiness is not assumed.
 
 ## Resolve a finding

@@ -68,16 +68,17 @@ describe('Workflow Help articles', () => {
   })
 
   it('keeps exact workflow context across related article links and fixed return', () => {
-    show('?article=intelligence-hub-context&runtimeInstanceId=root-1&revisionId=revision-3&customerId=customer-1&tenantId=tenant-1&view=context&sourceId=s1&evidenceId=e1&findingId=f1&sourceSearch=proof&returnView=graph&helpReturnRoute=hub&helpReturnView=context')
+    show('?article=intelligence-hub-context&runtimeInstanceId=root-1&revisionId=revision-3&customerId=customer-1&tenantId=tenant-1&view=context&sourceId=s1&evidenceId=e1&findingId=f1&sourceSearch=proof&returnView=graph&researchRequestKey=123e4567-e89b-42d3-a456-426614174000&acquisitionRunId=123e4567-e89b-42d3-a456-426614174001&closedAcquisitionRunId=123e4567-e89b-42d3-a456-426614174001&helpReturnRoute=hub&helpReturnView=context')
     const returnLink = screen.getByRole('link', { name: 'Return to Intelligence Hub' })
     const url = new URL(returnLink.getAttribute('href'), 'http://localhost')
     expect(url.pathname).toBe('/app/intelligence')
-    expect(Object.fromEntries(url.searchParams)).toEqual({ runtimeInstanceId:'root-1', revisionId:'revision-3', customerId:'customer-1', tenantId:'tenant-1', view:'context', sourceId:'s1', evidenceId:'e1', findingId:'f1', sourceSearch:'proof', returnView:'graph' })
+    expect(Object.fromEntries(url.searchParams)).toEqual({ runtimeInstanceId:'root-1', revisionId:'revision-3', customerId:'customer-1', tenantId:'tenant-1', view:'context', sourceId:'s1', evidenceId:'e1', findingId:'f1', sourceSearch:'proof', returnView:'graph', researchRequestKey:'123e4567-e89b-42d3-a456-426614174000', acquisitionRunId:'123e4567-e89b-42d3-a456-426614174001', closedAcquisitionRunId:'123e4567-e89b-42d3-a456-426614174001' })
     const related = screen.getByRole('link', { name: 'Inspect Sources' })
     const relatedUrl = new URL(related.getAttribute('href'), 'http://localhost')
     expect(relatedUrl.searchParams.get('article')).toBe('intelligence-hub-sources')
     expect(relatedUrl.searchParams.get('findingId')).toBe('f1')
     expect(relatedUrl.searchParams.get('helpReturnView')).toBe('context')
+    for (const key of ['researchRequestKey', 'acquisitionRunId', 'closedAcquisitionRunId']) expect(relatedUrl.searchParams.get(key)).toBe(url.searchParams.get(key))
     expect(screen.getByRole('img', { name: /Synthetic Context brief/ })).toHaveAttribute('src', expect.stringContaining('intelligence-hub-context.jpg'))
   })
 

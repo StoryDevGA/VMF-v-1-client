@@ -18,6 +18,8 @@ The lock-basis inspector checks recorded lock metadata and any matching replay a
 
 Check the selected workspace, revision and recorded lock before interpreting new material. The recorded snapshot identifies the protected basis; upload time, current source inventory and graph records cannot replace exact frozen membership and evidence versions.
 
+Capture receipts and extracted-text spans in Sources or Review describe their recorded source material; they are not frozen-membership receipts. Original-content, extracted-text and excerpt hashes do not by themselves establish that material belongs to the locked snapshot. Missing or inconsistent membership remains a blocker; a current capture does not repair or replace it.
+
 Missing membership and failed verification are different conditions. A revision with no recorded frozen membership cannot claim that basis. Conflicting or unverifiable recorded material requires investigation, rather than treating it as an empty history. Loading and failed refreshes do not establish a current result.
 
 An availability check describes what the server verified at that time. It does not grant permission or promise that a later request will succeed. The server checks the current rules again when an explicit submission is made. A missing policy, insufficient update permission or an incomplete required check keeps new recording blocked.
@@ -60,3 +62,5 @@ If the selected basis changes, refresh the exact workspace and item, then inspec
 If a submission outcome is unconfirmed, use **Check saved submission** in Context while its original request is retained. This reads the original result; it does not send another submission. For an uncertain decision or admission, use the original-result check offered by that panel and inspect the recorded history. Do not automatically retry or start a fresh request while the original outcome remains uncertain. Reusing a request key with changed material is a conflict, not an update. A failed or unavailable read does not prove that nothing was saved. If the original request is no longer available, retain its references and ask for support before another operation.
 
 Use [Sources](intelligence-hub-sources.md) for available provenance inspection and [Readiness & publish](intelligence-hub-readiness-publish.md) for the separate publication conditions. Public Research acquisition and provider availability remain separate from this generic post-lock process.
+
+Saved Public Research settings do not enable acquisition on a locked revision. A registered provider-free test fixture does not grant post-lock intake, impact-review or successor-admission authority. The existing server checks, policy, permissions and explicit actions above still apply; missing requirements stay blocked. No research result is automatically submitted, accepted or added to frozen evidence.
