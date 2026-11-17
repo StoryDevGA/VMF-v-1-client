@@ -43,11 +43,16 @@ export const getRecordedSourceCapture = (source, stateVersion) => {
     || typeof capture.adapter !== 'string' || !capture.adapter || typeof capture.extractionMethod !== 'string' || !capture.extractionMethod
     || receipt?.contractVersion !== 'source-capture-receipt.v1' || receipt.status !== 'SUCCEEDED'
     || !['CONTROLLED_HTML_REPLAY_CAPTURE', 'DOCUMENT_TEXT_CAPTURE', 'WEBSITE_DECODED_TEXT_CAPTURE'].includes(receipt.operation)
-    || !Number.isSafeInteger(receipt.inputIndex) || receipt.inputIndex < 0 || receipt.inputIndex > 4) return null
+    || !Number.isSafeInteger(receipt.inputIndex) || receipt.inputIndex < 0
+    || receipt.inputIndex > (receipt.operation === 'WEBSITE_DECODED_TEXT_CAPTURE' ? 9 : 4)) return null
+  const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value)
   if (receipt.operation === 'CONTROLLED_HTML_REPLAY_CAPTURE') {
-    const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value)
     if (!uuid(receipt.runId) || !uuid(receipt.attemptId) || receipt.inputIndex !== 0
       || capture.adapter !== 'controlled-html-replay-v1' || capture.extractionMethod !== 'DECODED_HTML_STRIPPED_TEXT') return null
+  } else if (receipt.operation === 'WEBSITE_DECODED_TEXT_CAPTURE') {
+    if (capture.adapter !== 'website-html-fetch-v1' || capture.extractionMethod !== 'DECODED_HTML_STRIPPED_TEXT'
+      || !(receipt.runId === null && receipt.attemptId === null)
+        && !(uuid(receipt.runId) && uuid(receipt.attemptId))) return null
   } else if (receipt.runId !== null || receipt.attemptId !== null) return null
   return capture
 }

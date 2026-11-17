@@ -36,6 +36,7 @@ function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false,
   useEffect(() => { if (feedback) feedbackRef.current?.focus() }, [feedback])
   const value = !error && !isFetching && !isLoading ? readCompletion(currentData, scope) : null
   const receipt = value?.latestReceipt
+  const membership = receipt?.membershipStatus === 'VERIFIED' ? receipt.membership : null
   const eligible = !readOnly && !locked && value?.canComplete === true && value.population.complete === true
   const inspectionOwner = JSON.stringify([scope, sessionRevision, locked, value?.stateVersion, value?.population.hash])
   const visibleInspection = compact && inspection?.owner === inspectionOwner && getSessionRevision() === sessionRevision ? inspection : null
@@ -109,10 +110,42 @@ function ScopedReviewCompletionPanel({ scope, sessionRevision, readOnly = false,
     {isLoading || isFetching ? <p role="status">Checking the complete review population…</p>
       : !value ? <p role="alert">{error?.data?.error?.message || 'The complete review population is unavailable.'} Refresh to retry.</p>
         : <><p>{value.population.pendingEvidence} evidence decisions and {value.population.pendingFindings} finding decisions outstanding across {value.population.decisionCount} decisions in this revision.</p>
+          <p>{Number.isSafeInteger(value.population.evidenceCount) && Number.isSafeInteger(value.population.sourceCount)
+            ? `Complete inventory: ${value.population.evidenceCount} evidence objects and ${value.population.sourceCount} sources.`
+            : 'Evidence and source totals are not supplied by this read.'} Policy: evidence and maintained contradiction decisions. Other Quality finding types are outside this completion policy.</p>
           {value.population.reason === 'EVIDENCE_REFRESH_REQUIRED' ? <p>Evidence refresh is required in Context before completion.</p> : null}
           {value.population.confirmedReadinessBlockers > 0 ? <p>{value.population.confirmedReadinessBlockers} confirmed contradiction(s) remain independent readiness blockers.</p> : null}
           <p>{receipt ? <>Recorded review: <strong>{receipt.currency === 'CURRENT' ? 'Current' : 'Stale — reassessment required'}</strong> · {new Date(receipt.completedAt).toLocaleString()}</> : 'No Review Completion receipt is recorded.'}</p>
-          {receipt ? <details><summary>Inspect recorded completion</summary><p>{receipt.rationale}</p><p>Reviewer: {receipt.actorUserId}</p><p>Receipt: {receipt.receiptId}</p><p>Audit: {receipt.auditId}</p></details> : null}</>}
+          {receipt ? <details><summary>Inspect recorded completion</summary><p>{receipt.rationale}</p><p>Reviewer: {receipt.actorUserId}</p><p>Receipt: {receipt.receiptId}</p><p>Audit: {receipt.auditId}</p>
+            {membership ? <>
+              <p>Signed Review population verified. This immutable receipt does not lock or publish the workspace.</p>
+              <dl className="intelligence-hub__inspection-facts">
+                <div><dt>Runtime / revision</dt><dd>{membership.runtimeInstanceKey} / {membership.revisionNumber ?? 'Not recorded'}</dd></div>
+                <div><dt>Recorded state version</dt><dd>{membership.observedStateVersion}</dd></div>
+                <div><dt>Membership hash</dt><dd>{membership.membershipHash}</dd></div>
+                <div><dt>Recorded membership</dt><dd>{membership.evidence.length} evidence objects · {membership.sources.length} sources · {membership.contradictions.length} contradiction decisions</dd></div>
+              </dl>
+              {membership.sources.map(source => <details key={source.id}><summary>Source · {source.id}</summary>
+                <dl className="intelligence-hub__inspection-facts">
+                  <div><dt>Source URL or locator</dt><dd>{source.sourceRef ?? 'Not recorded'}</dd></div>
+                  <div><dt>Source basis hash</dt><dd>{source.basisHash}</dd></div>
+                  <div><dt>Original content hash</dt><dd>{source.capture?.originalContentHash ?? source.contentHash ?? 'Not recorded'}</dd></div>
+                  <div><dt>Extracted-text hash</dt><dd>{source.capture?.captureTextHash ?? 'Not recorded'}</dd></div>
+                  <div><dt>Captured at</dt><dd>{source.capture?.capturedAt ?? 'Not recorded'}</dd></div>
+                </dl>
+              </details>)}
+              {membership.evidence.map(item => <details key={item.id}><summary>{item.id} · {item.status}</summary>
+                <dl className="intelligence-hub__inspection-facts">
+                  <div><dt>Source ID</dt><dd>{item.sourceId}</dd></div>
+                  <div><dt>Decision basis hash</dt><dd>{item.basisHash}</dd></div>
+                  <div><dt>Recorded reviewer / time</dt><dd>{item.decision.reviewerId} / {item.decision.reviewedAt}</dd></div>
+                  <div><dt>Decision rationale</dt><dd>{item.decision.rationale ?? 'Not recorded'}</dd></div>
+                  <div><dt>Recorded support span</dt><dd>{item.support ? `UTF-16 [${item.support.start}, ${item.support.end})` : 'Not recorded'}</dd></div>
+                  <div><dt>Excerpt hash</dt><dd>{item.support?.excerptHash ?? 'Not recorded'}</dd></div>
+                </dl>
+              </details>)}
+            </> : <p>Detailed membership was not recorded in this older receipt.</p>}
+          </details> : null}</>}
     {!readOnly && (!compact || visibleInspection?.kind === 'confirm') ? <form onSubmit={submit}>
       <Textarea label="Review Completion rationale" value={rationale} maxLength={2000} rows={3} fullWidth
         disabled={!eligible || busy} onChange={event => setRationale(event.target.value)} />

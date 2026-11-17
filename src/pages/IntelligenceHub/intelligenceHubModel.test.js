@@ -168,3 +168,58 @@ it('preserves absent legacy support and non-run document capture semantics', () 
   Object.assign(source.sourceCapture.captureReceipt, { operation: 'DOCUMENT_TEXT_CAPTURE', runId: null, attemptId: null })
   expect(getRecordedSourceCapture(source, recordedVersion)?.captureReceipt.runId).toBeNull()
 })
+
+
+const ordinaryWebsiteSource = () => {
+  const source = structuredClone(recordedSource)
+  source.sourceCapture.adapter = 'website-html-fetch-v1'
+  source.sourceCapture.captureReceipt.operation = 'WEBSITE_DECODED_TEXT_CAPTURE'
+  return source
+}
+
+it.each([true, false])('reads exact WEBSITE capture/support with linked owner IDs: %s', linked => {
+  const source = ordinaryWebsiteSource()
+  if (!linked) Object.assign(source.sourceCapture.captureReceipt, {runId: null, attemptId: null})
+  expect(getRecordedSourceCapture(source, recordedVersion)).toEqual(source.sourceCapture)
+  expect(getRecordedEvidenceSupport(recordedItem, source, recordedVersion)).toEqual(recordedSupport)
+})
+
+it.each([5, 9])('reads the existing ordinary WEBSITE index%s with exact support', inputIndex => {
+  const source = ordinaryWebsiteSource()
+  source.sourceCapture.captureReceipt.inputIndex = inputIndex
+  expect(getRecordedSourceCapture(source, recordedVersion)).toEqual(source.sourceCapture)
+  expect(getRecordedEvidenceSupport(recordedItem, source, recordedVersion)).toEqual(recordedSupport)
+})
+
+it.each([
+  ['WEBSITE_DECODED_TEXT_CAPTURE', 10], ['DOCUMENT_TEXT_CAPTURE', 5], ['CONTROLLED_HTML_REPLAY_CAPTURE', 1],
+])('refuses capture index overflow for %s', (operation, inputIndex) => {
+  const source = ordinaryWebsiteSource()
+  Object.assign(source.sourceCapture.captureReceipt, { operation, inputIndex })
+  if (operation === 'DOCUMENT_TEXT_CAPTURE') Object.assign(source.sourceCapture.captureReceipt, { runId: null, attemptId: null })
+  if (operation === 'CONTROLLED_HTML_REPLAY_CAPTURE') source.sourceCapture.adapter = 'controlled-html-replay-v1'
+  expect(getRecordedSourceCapture(source, recordedVersion)).toBeNull()
+  expect(getRecordedEvidenceSupport(recordedItem, source, recordedVersion)).toBeNull()
+})
+
+it.each([
+  source => { source.sourceCapture.captureReceipt.runId = null },
+  source => { source.sourceCapture.captureReceipt.attemptId = null },
+  source => { source.sourceCapture.captureReceipt.runId = 'unverified' },
+  source => { source.sourceCapture.captureReceipt.attemptId = 'unverified' },
+  source => { source.sourceCapture.adapter = 'controlled-html-replay-v1' },
+  source => { source.sourceCapture.extractionMethod = 'UNKNOWN' },
+  source => { source.sourceStateVersion = 'different-basis' },
+  source => { source.contentHash = 'sha256:' + '0'.repeat(64) },
+])('refuses malformed or mismatched WEBSITE receipt without exposing capture or support %#', mutate => {
+  const source = ordinaryWebsiteSource()
+  mutate(source)
+  expect(getRecordedSourceCapture(source, recordedVersion)).toBeNull()
+  expect(getRecordedEvidenceSupport(recordedItem, source, recordedVersion)).toBeNull()
+})
+
+it('continues to refuse document capture owner IDs rather than extending the website exception', () => {
+  const source = ordinaryWebsiteSource()
+  source.sourceCapture.captureReceipt.operation = 'DOCUMENT_TEXT_CAPTURE'
+  expect(getRecordedSourceCapture(source, recordedVersion)).toBeNull()
+})

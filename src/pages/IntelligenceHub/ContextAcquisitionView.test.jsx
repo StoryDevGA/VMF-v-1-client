@@ -1,4 +1,4 @@
-import { readResearchAvailability } from './publicResearchConfiguration.js'
+import { readResearchAvailability, readFixtureStart, buildFixtureStartPayload } from './publicResearchConfiguration.js'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
@@ -997,4 +997,298 @@ describe('explicit provider-free Start and recorded progress', () => {
   act(() => clearTokens()); await act(async () => finish())
   expect(screen.getByTestId('research-location').textContent).not.toContain('acquisitionRunId=')
  })
+})
+
+const searchStartConfiguration = () => {
+ const response = fixtureStartConfiguration(), data = response.data, record = data.configuration
+ record.settings.sources = ['SEARCH']; record.settings.startingUrls = ['https://www.trilogywebsolutions.co.uk/clients/']
+ data.availability.categories = data.availability.categories.map(item => ({ ...item, selected: item.key === 'SEARCH',
+  status: item.key === 'SEARCH' ? 'GATED' : 'NOT_SELECTED', reason: item.key === 'SEARCH' ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' }))
+ data.availability.fixtureStart = { contractVersion: 'provider-free-search-start.v1', eligible: true,
+  classification: 'LOCAL_SYNTHETIC_RECEIPT_ONLY', provider: 'TAVILY_SEARCH', actorUserId: record.savedBy,
+  scope: data.scope, basis: data.basis, selector: { configurationVersion: record.configurationVersion,
+   configurationHash: record.configurationHash, basisStateVersion: data.basis.stateVersion },
+  fixture: { fixtureId: 'trilogy-clients-search.v1', fixtureVersion: 1, fixtureFileSha256: 'd'.repeat(64),
+   targetUrl: record.settings.startingUrls[0], provider: 'TAVILY_SEARCH' }, receiptOnly: true, liveExecutionEnabled: false }
+ return response
+}
+const searchRunFor = (key, status = 'SUCCEEDED') => {
+ const value = researchRunFor(key), config = searchStartConfiguration().data.configuration, failed = status === 'FAILED'
+ delete value.controlledReplayProvenance; delete value.outputStateVersion; delete value.audit.saveId
+ value.contractVersion = 'provider-free-search-run.v1'; value.status = status; value.canonicalSaved = false
+ value.currency = 'HISTORICAL_OUTPUT'; value.receiptRecorded = true; value.authority = 'VMF_UPDATE'; value.acquisitionProfile = 'STANDARD'
+ value.researchConfiguration = { configurationVersion: config.configurationVersion, configurationHash: config.configurationHash, saveAuditId: config.saveAuditId }
+ value.outcomes = [{ kind: 'SEARCH', inputIndex: 0, status: failed ? 'FAILED' : 'SUCCEEDED', evidenceObjectCount: 0 }]
+ value.providerFreeSearch = { classification: 'LOCAL_SYNTHETIC_RECEIPT_ONLY', purpose: 'TAVILY_DISCOVERY_RECEIPT',
+  authorityRef: 'ss049-provider-free-search-receipt.2026-11-13.v1', provider: 'TAVILY_SEARCH',
+  recordHash: 'sha256:' + 'a'.repeat(64), rawResponseHash: 'sha256:' + 'b'.repeat(64),
+  descriptorHash: 'sha256:' + 'c'.repeat(64), mappedResponseHash: 'sha256:' + 'd'.repeat(64),
+  adaptationStatus: 'VALID', providerRequestId: failed ? null : 'synthetic-tavily-1',
+  transportOutcome: status === 'PARTIALLY_SUCCEEDED' ? 'PARTIAL' : 'COMPLETE', httpStatus: failed ? 429 : 200,
+  configuration: { configurationVersion: config.configurationVersion, configurationHash: config.configurationHash, basisStateVersion: value.basisStateVersion },
+  discoveryItemCount: failed ? 0 : 1, liveExecutionEnabled: false, evidenceObjectCount: 0 }
+ return value
+}
+describe('provider-free Trilogy search Start connection', () => {
+ it('builds only the approved fixture selector and dispatches once from explicit Start', async () => {
+  const config = searchStartConfiguration(); calls.configRead = { currentData: config }
+  calls.execute.mockImplementation(({body}) => ({ unwrap: async () => ({ data: { acquisitionRun: searchRunFor(body.requestKey) } }) }))
+  render(researchView(researchProps(), '/app/intelligence?view=context'))
+  expect(calls.execute).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+  expect(screen.getByText(/Start records only the registered provider-free search fixture receipt/)).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Start research' }))
+  await waitFor(() => expect(screen.getByTestId('research-location')).toHaveTextContent('acquisitionRunId='))
+  const body = calls.execute.mock.calls[0][0].body
+  expect(body).toEqual({ requestKey: expect.any(String), expectedUpdatedAt: stamp,
+   researchConfiguration: config.data.availability.fixtureStart.selector,
+   providerFreeSearch: { fixtureId: 'trilogy-clients-search.v1', fixtureVersion: 1, fixtureFileSha256: 'd'.repeat(64) } })
+  expect(body).not.toHaveProperty('fixture'); expect(body).not.toHaveProperty('responseText'); expect(body).not.toHaveProperty('controlledReplay')
+  expect(calls.execute).toHaveBeenCalledOnce(); expect(calls.update).not.toHaveBeenCalled(); expect(calls.saveConfig).not.toHaveBeenCalled()
+ })
+ it.each(['provider', 'URL', 'hash', 'scope', 'actor', 'selector', 'mixed', 'live', 'category'])(
+  'refuses a mismatched search capability: %s', kind => {
+   const data = searchStartConfiguration().data, descriptor = data.availability.fixtureStart
+   if (kind === 'provider') descriptor.provider = 'BRAVE_SEARCH'
+   if (kind === 'URL') descriptor.fixture.targetUrl = 'https://foreign.example/'
+   if (kind === 'hash') descriptor.fixture.fixtureFileSha256 = 'invalid'
+   if (kind === 'scope') descriptor.scope = { ...descriptor.scope, tenantId: 'f'.repeat(24) }
+   if (kind === 'actor') descriptor.actorUserId = 'f'.repeat(24)
+   if (kind === 'selector') descriptor.selector.configurationHash = 'sha256:' + 'f'.repeat(64)
+   if (kind === 'mixed') descriptor.bindingId = 'controlled.1'
+   if (kind === 'live') descriptor.liveExecutionEnabled = true
+   if (kind === 'category') data.configuration.settings.sources = ['WEBSITE', 'SEARCH']
+   expect(readFixtureStart(data)).toBeNull()
+   expect(buildFixtureStartPayload(data, '12345678-1234-4123-8123-123456789aba')).toBeNull()
+  })
+ it.each(['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED'])('reload reads the saved %s receipt without submitting another request', status => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = searchRunFor(key, status)
+  calls.configRead = { currentData: searchStartConfiguration() }; calls.lookupRead = { currentData: researchPage(key, [row]) }
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  expect(screen.getByText('Recorded request preview: ' + status + '. Verify its exact Run receipt below.')).toBeVisible()
+  expect(calls.history.mock.calls.at(-1)[0].requestedRunId).toBe(row.runId)
+  expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it.each(['FAILED', 'PARTIALLY_SUCCEEDED'])('prepares %s retry locally then sends the exact predecessor pair only on Start', async status => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = searchRunFor(key, status)
+  calls.configRead = { currentData: searchStartConfiguration() }
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  const history = calls.history.mock.calls.at(-1)[0]
+  expect(history.canRetryResearch(row)).toBe(true)
+  act(() => history.onRetry(row)); expect(calls.execute).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Start research' }))
+  const body = calls.execute.mock.calls[0][0].body
+  expect(body).toMatchObject({ predecessorRunId: row.runId, predecessorExecutionAttemptId: row.executionAttemptId })
+  expect(body.requestKey).not.toBe(key); expect(body.providerFreeSearch.fixtureId).toBe('trilogy-clients-search.v1')
+  expect(calls.execute).toHaveBeenCalledOnce()
+ })
+ it.each(['authority', 'locked', 'loading', 'configuration', 'departure and return', 'session', 'unmount'])(
+  'refuses retained search Start after %s', async departure => {
+   calls.configRead = { currentData: searchStartConfiguration() }
+   const props = researchProps(), route = '/app/intelligence?view=context', view = render(researchView(props, route))
+   await userEvent.click(screen.getByRole('button', { name: 'Configure research' }))
+   const button = screen.getByRole('button', { name: 'Start research' })
+   expect(button).toBeEnabled()
+   const retained = button[Object.keys(button).find(key => key.startsWith('__reactProps'))].onClick
+   if (departure === 'unmount') view.unmount()
+   else if (departure === 'session') act(() => clearTokens())
+   else {
+    if (departure === 'configuration') calls.configRead = { currentData: searchStartConfiguration() }
+    view.rerender(researchView({ ...props, ...(departure === 'authority' ? { authority: { canAcquire: false } }
+     : departure === 'locked' ? { locked: true } : departure === 'loading' ? { loading: true }
+      : departure === 'departure and return' ? { active: false } : {}) }, route))
+   }
+   act(() => retained()); expect(calls.execute).not.toHaveBeenCalled()
+   if (!['unmount', 'session'].includes(departure)) { view.rerender(researchView(props, route)); act(() => retained()); expect(calls.execute).not.toHaveBeenCalled() }
+  })
+ it('does not expose a late search response after the session changes or submit a retry', async () => {
+  let finish
+  calls.configRead = { currentData: searchStartConfiguration() }
+  calls.execute.mockImplementation(({body}) => ({ unwrap: () => new Promise(resolve => { finish = () => resolve({ data: { acquisitionRun: searchRunFor(body.requestKey) } }) }) }))
+  render(researchView(researchProps(), '/app/intelligence?view=context'))
+  await userEvent.click(screen.getByRole('button', { name: 'Configure research' })); await userEvent.click(screen.getByRole('button', { name: 'Start research' }))
+  act(() => clearTokens()); await act(async () => finish())
+  expect(screen.getByTestId('research-location')).not.toHaveTextContent('acquisitionRunId=')
+  expect(calls.execute).toHaveBeenCalledOnce()
+ })
+})
+
+const publicStartConfiguration = (mode = 'OFFLINE') => {
+ const response = fixtureStartConfiguration(), data = response.data, record = data.configuration
+ Object.assign(record.settings, {sources: ['SEARCH', 'WEBSITE', 'REGISTRY'], startingUrls: ['https://controlled-context.example/case-study'],
+  legalEntity: 'Synthetic Child Limited', countryCode: 'GB', entityIdentifier: '00123456', entityConfirmed: true})
+ data.availability.categories = data.availability.categories.map(item => ({...item, selected: record.settings.sources.includes(item.key),
+  status: record.settings.sources.includes(item.key) ? 'GATED' : 'NOT_SELECTED',
+  reason: record.settings.sources.includes(item.key) ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED'}))
+ data.availability.researchStart = {contractVersion: 'public-research-start.v1', eligible: true, mode,
+  classification: mode === 'OFFLINE' ? 'CONTROLLED_PROVIDER_FREE_RESEARCH' : 'NATIVE_PUBLIC_RESEARCH', liveExecutionEnabled: mode === 'LIVE',
+  actorUserId: record.savedBy, scope: data.scope, basis: data.basis,
+  selector: {configurationVersion: record.configurationVersion, configurationHash: record.configurationHash, basisStateVersion: data.basis.stateVersion},
+  requestKey: mode === 'OFFLINE' ? null : '12345678-1234-4123-8123-123456789ac1',
+  ...(mode === 'OFFLINE' ? {fixture: {fixtureId: 'controlled-public-research.v1', fixtureVersion: 1, fixtureFileSha256: 'e'.repeat(64), controlledBindingId: 'local-public-research.1'}} : {})}
+ return response
+}
+const publicRunFor = (key, status = 'SUCCEEDED', mode = 'OFFLINE') => {
+ const value = searchRunFor(key), stamp = '2026-11-16T10:00:00.000Z'
+ delete value.providerFreeSearch; delete value.receiptRecorded
+ Object.assign(value, {contractVersion: 'public-research-run.v1', plannerVersion: 'public-research-planner.v1', status,
+  createdAt: stamp, startedAt: stamp, completedAt: stamp, canonicalSaved: true, outputStateVersion: 'rsv2:public-output', currency: 'CURRENT_OUTPUT',
+  cancellation: {eligible: false, executionAttemptId: value.executionAttemptId},
+  outcomes: ['SEARCH', 'REGISTRY', mode === 'OFFLINE' ? 'CONTROLLED' : 'WEBSITE'].map(kind => ({kind, inputIndex: 0, status: 'SUCCEEDED',
+   evidenceObjectCount: ['SEARCH', 'REGISTRY'].includes(kind) ? 0 : 1, ...(['SEARCH', 'REGISTRY'].includes(kind) ? {} : {sourceId: 'controlled_original'})})),
+  publicResearch: {mode, classification: mode === 'OFFLINE' ? 'CONTROLLED_PROVIDER_FREE_RESEARCH' : 'NATIVE_PUBLIC_RESEARCH', liveExecutionEnabled: mode === 'LIVE',
+   planHash: 'sha256:' + 'a'.repeat(64), policyHash: 'sha256:' + 'b'.repeat(64), receiptHash: 'sha256:' + 'c'.repeat(64), releaseId: key,
+   operationCount: 3, completedOperationCount: 3, bytesRead: 100, elapsedMsRecorded: 30, reservedCostMicros: 0, modelTokens: 0,
+   limits: {maxSearchRequests: 1, maxRegistryRequests: 1, maxPages: 1, maxPageBytes: 320000, maxJsonBytes: 16384, maxTotalBytes: 350000,
+    maxElapsedMs: 10000, maxRequestMs: 1000, maxCostMicros: 0, searchRequestCostMicros: 0, registryRequestCostMicros: 0, concurrency: 1, retries: 0, redirects: 0, modelTokens: 0},
+   categories: ['SEARCH', 'WEBSITE', 'REGISTRY'].map(category => ({key: category, status: 'SUCCEEDED', completedCount: 1, failedCount: 0, unknownCount: 0,
+    evidenceObjectCount: category === 'WEBSITE' ? 1 : 0})),
+   receipts: ['SEARCH', 'REGISTRY', 'WEBSITE'].map((category, ordinal) => ({ordinal, category, phase: 'RECORDED', inputIndex: 0,
+    requestHash: 'sha256:' + 'd'.repeat(64), responseTextHash: 'sha256:' + 'f'.repeat(64), httpStatus: 200, bytesRead: 10, elapsedMs: 10,
+    providerRequestId: null, sourceId: category === 'WEBSITE' ? 'controlled_original' : null, evidenceObjectCount: category === 'WEBSITE' ? 1 : 0})),
+   qualifications: ['Offline fixture material remains unverified.']}})
+ value.audit.saveId = 'public-save'
+ if (status !== 'SUCCEEDED') {
+  value.canonicalSaved = false; value.currency = 'HISTORICAL_OUTPUT'; delete value.outputStateVersion; delete value.audit.saveId
+  value.outcomes.forEach(item => {item.evidenceObjectCount = 0; delete item.sourceId})
+  value.publicResearch.categories.forEach(item => {item.evidenceObjectCount = 0; item.status = 'UNKNOWN'})
+  value.publicResearch.receipts.forEach(item => {item.evidenceObjectCount = 0; item.sourceId = null})
+ }
+ if (['QUEUED', 'RUNNING'].includes(status)) {
+  delete value.canonicalSaved; delete value.outcomes; delete value.audit; delete value.completedAt
+  if (status === 'QUEUED') delete value.startedAt
+  value.currency = 'ACTIVE'; value.cancellation.eligible = true
+  value.publicResearch.completedOperationCount = 0; value.publicResearch.receipts = []; value.publicResearch.operationCount = 0
+  value.publicResearch.categories.forEach(item => {item.status = 'PENDING'; item.completedCount = 0})
+ }
+ return value
+}
+describe('combined Public Research explicit Start and original request connection', () => {
+ it.each(['OFFLINE', 'LIVE'])('submits only the frozen %s selector with its correct request identity', async mode => {
+  const config = publicStartConfiguration(mode); calls.configRead = {currentData: config}
+  calls.execute.mockImplementation(({body}) => ({unwrap: async () => ({data: {acquisitionRun: publicRunFor(body.requestKey, 'SUCCEEDED', mode)}})}))
+  render(researchView(researchProps(), '/app/intelligence?view=context'))
+  await userEvent.click(screen.getByRole('button', {name: 'Configure research'}))
+  expect(calls.execute).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', {name: 'Start research'}))
+  await waitFor(() => expect(screen.getByTestId('research-location')).toHaveTextContent('acquisitionRunId='))
+  const body = calls.execute.mock.calls[0][0].body
+  expect(body).toEqual({researchConfiguration: config.data.availability.researchStart.selector, requestKey: mode === 'LIVE'
+   ? config.data.availability.researchStart.requestKey : expect.any(String), expectedUpdatedAt: stamp, acquisitionProfile: 'STANDARD',
+   publicResearch: mode === 'OFFLINE' ? {mode, fixture: {fixtureId: 'controlled-public-research.v1', fixtureVersion: 1, fixtureFileSha256: 'e'.repeat(64)}}
+    : {mode, releaseId: config.data.availability.researchStart.requestKey},
+   ...(mode === 'OFFLINE' ? {controlledReplay: {bindingId: 'local-public-research.1'}} : {})})
+  expect(body).not.toHaveProperty('responseText'); expect(body).not.toHaveProperty('settings'); expect(body).not.toHaveProperty('providerFreeSearch')
+  expect(calls.execute).toHaveBeenCalledOnce()
+ })
+ it('lets a present blocked LIVE capability suppress an otherwise eligible old fixture', async () => {
+  const config = fixtureStartConfiguration()
+  config.data.availability.researchStart = {contractVersion: 'public-research-start.v1', eligible: false, mode: 'LIVE', liveExecutionEnabled: false, reason: 'OPERATING_APPROVAL_NOT_RECORDED'}
+  calls.configRead = {currentData: config}
+  expect(readFixtureStart(config.data)).toBeNull()
+  render(researchView(researchProps(), '/app/intelligence?view=context'))
+  await userEvent.click(screen.getByRole('button', {name: 'Configure research'}))
+  expect(screen.getByRole('button', {name: 'Start research'})).toBeDisabled()
+  expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it.each(['classification', 'live flag', 'actor', 'scope', 'basis', 'selector', 'fixture', 'binding', 'raw witness', 'request key', 'category'])(
+  'refuses mismatched combined capability %s', kind => {
+   const data = publicStartConfiguration().data, descriptor = data.availability.researchStart
+   if (kind === 'classification') descriptor.classification = 'NATIVE_PUBLIC_RESEARCH'
+   if (kind === 'live flag') descriptor.liveExecutionEnabled = true
+   if (kind === 'actor') descriptor.actorUserId = 'f'.repeat(24)
+   if (kind === 'scope') descriptor.scope = {...descriptor.scope, runtimeInstanceKey: 'other-revision'}
+   if (kind === 'basis') descriptor.basis = {...descriptor.basis, stateVersion: 'other-basis'}
+   if (kind === 'selector') descriptor.selector.configurationHash = 'sha256:' + 'f'.repeat(64)
+   if (kind === 'fixture') descriptor.fixture.fixtureId = 'unregistered-fixture'
+   if (kind === 'binding') descriptor.fixture.controlledBindingId = 'unknown-binding'
+   if (kind === 'raw witness') descriptor.responseText = 'UNTRUSTED_RAW_BODY'
+   if (kind === 'request key') descriptor.requestKey = '12345678-1234-4123-8123-123456789ac1'
+   if (kind === 'category') data.configuration.settings.sources.push('NEWS')
+   expect(readFixtureStart(data)).toBeNull()
+   expect(buildFixtureStartPayload(data, '12345678-1234-4123-8123-123456789aba')).toBeNull()
+  })
+ it('never allocates a different key for an eligible LIVE release', () => {
+  const data = publicStartConfiguration('LIVE').data
+  expect(buildFixtureStartPayload(data, '12345678-1234-4123-8123-123456789aba')).toBeNull()
+  expect(buildFixtureStartPayload(data, data.availability.researchStart.requestKey).publicResearch.releaseId).toBe(data.availability.researchStart.requestKey)
+ })
+ it.each(['QUEUED', 'RUNNING', 'SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED'])('reopens the original PUBLIC %s request using reads only', status => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = publicRunFor(key, status)
+  calls.configRead = {currentData: publicStartConfiguration()}; calls.lookupRead = {currentData: researchPage(key, [row])}
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  expect(screen.getByText('Recorded request preview: ' + status + '. Verify its exact Run receipt below.')).toBeVisible()
+  expect(calls.history.mock.calls.at(-1)[0].requestedRunId).toBe(row.runId)
+  expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it('prepares an offline failed predecessor without dispatch and links both identities on explicit new Start', async () => {
+  const key = '12345678-1234-4123-8123-123456789aba', row = publicRunFor(key, 'FAILED')
+  calls.configRead = {currentData: publicStartConfiguration()}
+  render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  const history = calls.history.mock.calls.at(-1)[0]
+  expect(history.canRetryResearch(row)).toBe(true)
+  act(() => history.onRetry(row)); expect(calls.execute).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', {name: 'Configure research'})); await userEvent.click(screen.getByRole('button', {name: 'Start research'}))
+  const body = calls.execute.mock.calls[0][0].body
+  expect(body.requestKey).not.toBe(key)
+  expect(body).toMatchObject({predecessorRunId: row.runId, predecessorExecutionAttemptId: row.executionAttemptId, publicResearch: {mode: 'OFFLINE'}})
+ })
+ it('requires a separate eligible LIVE identity before preparing a native predecessor retry', () => {
+  const config = publicStartConfiguration('LIVE'), key = config.data.availability.researchStart.requestKey, row = publicRunFor(key, 'FAILED', 'LIVE')
+  calls.configRead = {currentData: config}
+  const view = render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  expect(calls.history.mock.calls.at(-1)[0].canRetryResearch(row)).toBe(false)
+  config.data.availability.researchStart.requestKey = '12345678-1234-4123-8123-123456789ac2'
+  calls.configRead = {currentData: structuredClone(config)}
+  view.rerender(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+  expect(calls.history.mock.calls.at(-1)[0].canRetryResearch(row)).toBe(true)
+  expect(calls.execute).not.toHaveBeenCalled()
+ })
+ it.each(['permission', 'configuration', 'departure', 'session'])('does not dispatch a retained PUBLIC Start after %s', async kind => {
+  calls.configRead = {currentData: publicStartConfiguration()}
+  const props = researchProps(), route = '/app/intelligence?view=context', view = render(researchView(props, route))
+  await userEvent.click(screen.getByRole('button', {name: 'Configure research'}))
+  const button = screen.getByRole('button', {name: 'Start research'}), retained = button[Object.keys(button).find(key => key.startsWith('__reactProps'))].onClick
+  if (kind === 'session') act(() => clearTokens())
+  else {
+   if (kind === 'configuration') calls.configRead = {currentData: publicStartConfiguration()}
+   view.rerender(researchView({...props, ...(kind === 'permission' ? {authority: {canAcquire: false}} : kind === 'departure' ? {active: false} : {})}, route))
+  }
+  act(() => retained()); expect(calls.execute).not.toHaveBeenCalled()
+ })
+})
+
+it.each(['wrong actor', 'late session'])('does not select a PUBLIC Start response after %s', async kind => {
+ let finish
+ calls.configRead = {currentData: publicStartConfiguration()}
+ calls.execute.mockImplementation(({body}) => ({unwrap: () => new Promise(resolve => { finish = () => {
+  const value = publicRunFor(body.requestKey)
+  if (kind === 'wrong actor') value.actorUserId = 'f'.repeat(24)
+  resolve({data: {acquisitionRun: value}})
+ } })}))
+ render(researchView(researchProps(), '/app/intelligence?view=context'))
+ await userEvent.click(screen.getByRole('button', {name: 'Configure research'})); await userEvent.click(screen.getByRole('button', {name: 'Start research'}))
+ if (kind === 'late session') act(() => clearTokens())
+ await act(async () => finish())
+ expect(screen.getByTestId('research-location')).not.toHaveTextContent('acquisitionRunId=')
+ expect(calls.execute).toHaveBeenCalledOnce()
+})
+
+it.each(['OFFLINE', 'LIVE'])('describes PUBLIC %s availability and retry without mislabelling native work as a fixture', async mode => {
+ const config = publicStartConfiguration(mode), key = mode === 'LIVE' ? '12345678-1234-4123-8123-123456789aba' : '12345678-1234-4123-8123-123456789ac0'
+ calls.configRead = {currentData: config}
+ render(researchView(researchProps(), '/app/intelligence?view=context&researchRequestKey=' + key))
+ await userEvent.click(screen.getByRole('button', {name: 'Research availability'}))
+ expect(screen.getByText(mode === 'LIVE' ? /A server-issued research release is available/ : /A verified offline Public Research fixture is available/)).toBeVisible()
+ expect(screen.queryByText(/A verified provider-free fixture is available/)).not.toBeInTheDocument()
+ expect(screen.queryByText('Provider/registry operating approval is not recorded. No retrieval will run.')).not.toBeInTheDocument()
+ expect(screen.getByText(mode === 'LIVE' ? 'The current server-issued release controls this Public Research operation.' : 'Only the registered offline Public Research fixture is available. Live research remains unavailable.')).toBeVisible()
+ await userEvent.click(screen.getByRole('button', {name: 'Back to Context'}))
+ await userEvent.click(screen.getByRole('button', {name: 'Runs and processing history'}))
+ const row = publicRunFor(key, 'FAILED', mode)
+ act(() => calls.history.mock.calls.at(-1)[0].onRetry(row))
+ expect(screen.getByText(/Explicit research retry prepared for Run/)).toBeVisible()
+ expect(screen.queryByText(/Fixture retry prepared locally/)).not.toBeInTheDocument()
+ expect(calls.execute).not.toHaveBeenCalled()
 })

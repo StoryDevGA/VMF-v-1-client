@@ -43,12 +43,15 @@ export default function PublicResearchConfiguration({ brief, profile, canPrepare
   const jurisdiction = changes => setDraft(previous => changeResearchJurisdiction(previous, changes))
   const problem = researchConfigurationProblem(draft)
   const checkedAvailability = availability && researchDraftMatchesSaved(draft, savedConfiguration) ? availability : null
+  const startDescriptor = checkedAvailability && (Object.hasOwn(checkedAvailability, 'researchStart') ? checkedAvailability.researchStart : checkedAvailability.fixtureStart)
   return <section className="intelligence-hub__research-availability" aria-label="Public research availability">
     <div>
       <Tickbox label="Research public information" checked={selected} disabled={!canPrepare || saving}
         onKeyDown={event => { if (event.key === 'Enter') event.preventDefault() }}
         aria-describedby={descriptionId} onChange={event => { setSelected(event.target.checked); if (!event.target.checked) setOpen(false) }} />
-      <p id={descriptionId}>Prepare source choices from this brief. Live research remains unavailable; selecting or configuring settings does not start a run.</p>
+      <p id={descriptionId}>{startDescriptor?.contractVersion === 'public-research-start.v1' && startDescriptor.eligible && startDescriptor.mode === 'LIVE' && startAvailable
+        ? 'Prepare source choices from this brief. Start is limited to the server-issued research release; selecting or configuring settings does not start a run.'
+        : 'Prepare source choices from this brief. Live research remains unavailable; selecting or configuring settings does not start a run.'}</p>
     </div>
     <Button type="button" size="sm" variant="outline" disabled={!canPrepare || !selected || saving} onClick={configure}>Configure research</Button>
     <Button type="button" size="sm" variant="outline" onClick={onInspectAvailability}>Research availability</Button>
@@ -92,15 +95,21 @@ export default function PublicResearchConfiguration({ brief, profile, canPrepare
         <p>Instructions can narrow the task. They cannot override governed methods or authorise private/internal access.</p>
         {problem ? <p role="alert">{problem}</p> : null}
         {saveError ? <p role="alert">{saveError}</p> : null}
-        <p>{checkedAvailability ? RESEARCH_AVAILABILITY_MESSAGES[checkedAvailability.reason] : 'Save settings to check availability. Changes have not been checked by the server.'}</p>
+        <p>{checkedAvailability && Object.hasOwn(checkedAvailability, 'researchStart') ? startDescriptor?.eligible && startAvailable ? startDescriptor.mode === 'LIVE' ? 'This server-issued release is available only for the current saved configuration.' : 'Only the registered offline Public Research fixture is available. Live research remains unavailable.' : 'Public Research remains blocked or unavailable for the current saved configuration.' : checkedAvailability ? RESEARCH_AVAILABILITY_MESSAGES[checkedAvailability.reason] : 'Save settings to check availability. Changes have not been checked by the server.'}</p>
         {checkedAvailability?.requestMapping ? <p>Saved request mapped · {profile === 'ENHANCED' ? 'Enhanced' : 'Standard'} coverage · {checkedAvailability.requestMapping.settings.sources.length} selected categories. This does not start research.</p> : null}
-        <p>{checkedAvailability?.fixtureStart?.eligible && startAvailable ? 'Start runs only the registered provider-free fixture. No live provider or registry will run.' : 'Live research remains unavailable.'} Saving settings does not retrieve sources, spend money, accept evidence or create a Run.</p>
+        <p>{startDescriptor?.eligible && startAvailable ? startDescriptor.contractVersion === 'public-research-start.v1'
+          ? startDescriptor.mode === 'OFFLINE'
+            ? 'Start runs the registered offline search, registry and controlled-source fixture for the selected categories. Original captured assertions remain pending review; search discoveries and registry matches are not accepted evidence. No live provider will run.'
+            : 'Start uses only the server-issued single-run release and its limits. Results remain qualified and require separate review; no evidence is automatically accepted.'
+          : startDescriptor.contractVersion === 'provider-free-search-start.v1'
+          ? 'Start records only the registered provider-free search fixture receipt. No sources or evidence will be saved. No live provider or registry will run.'
+          : 'Start runs only the registered provider-free fixture. No live provider or registry will run.' : 'Live research remains unavailable.'} Saving settings does not retrieve sources, spend money, accept evidence or create a Run.</p>
       </Dialog.Body>
       <Dialog.Footer>
         <ButtonGroup stackOnMobile fullWidthOnMobile align="end" aria-label="Research configuration actions">
         <Button type="button" size="sm" variant="outline" disabled={saving} onClick={close}>Cancel configuration</Button>
         <Button type="button" size="sm" variant="outline" loading={saving} disabled={!canPrepare || !saveAvailable || Boolean(problem)} onClick={() => { if (canPrepare && saveAvailable && !saving && !problem) onSave?.(draft) }}>Save research configuration</Button>
-        <Button type="button" size="sm" loading={starting} disabled={!startAvailable || !checkedAvailability?.fixtureStart?.eligible || Boolean(problem) || saving || starting} onClick={() => { if (startAvailable && checkedAvailability?.fixtureStart?.eligible && !problem && !saving && !starting) { onStart?.(); setOpen(false) } }}>Start research</Button>
+        <Button type="button" size="sm" loading={starting} disabled={!startAvailable || !startDescriptor?.eligible || Boolean(problem) || saving || starting} onClick={() => { if (startAvailable && startDescriptor?.eligible && !problem && !saving && !starting) { onStart?.(); setOpen(false) } }}>Start research</Button>
         </ButtonGroup>
       </Dialog.Footer>
     </Dialog> : null}

@@ -126,3 +126,55 @@ it('does not infer that no run exists from an unavailable settings read', () => 
  expect(screen.getByRole('alert')).toHaveTextContent('Saved configuration is unavailable. Reload before saving again.')
  expect(screen.queryByText(/No research run has started/i)).not.toBeInTheDocument()
 })
+
+it('describes an eligible search fixture as receipt-only and keeps edits from starting it', async () => {
+ const user = userEvent.setup(), onStart = vi.fn(), saved = { configurationVersion: 'saved-search', savedAt: '2026-11-13T09:00:00Z',
+  settings: { ...initialResearchConfiguration(brief), sources: ['SEARCH'], startingUrls: ['https://www.trilogywebsolutions.co.uk/clients/'] } }
+ const availability = { reason: 'OPERATING_APPROVAL_NOT_RECORDED', categories: PUBLIC_RESEARCH_SOURCES.map(source => ({ key: source.key,
+  status: source.key === 'SEARCH' ? 'GATED' : 'NOT_SELECTED', reason: source.key === 'SEARCH' ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' })),
+  requestMapping: { settings: saved.settings }, fixtureStart: { contractVersion: 'provider-free-search-start.v1', eligible: true } }
+ render(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare savedConfiguration={saved} availability={availability} startAvailable onStart={onStart} />)
+ await user.click(screen.getByRole('button', { name: 'Configure research' }))
+ expect(screen.getByText(/Start records only the registered provider-free search fixture receipt. No sources or evidence will be saved/)).toBeVisible()
+ expect(onStart).not.toHaveBeenCalled()
+ await user.type(screen.getByLabelText('Optional narrowing instructions'), ' changed')
+ expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
+ expect(screen.queryByText(/Start records only the registered provider-free search fixture receipt/)).not.toBeInTheDocument()
+ expect(onStart).not.toHaveBeenCalled()
+})
+
+it.each(['OFFLINE', 'LIVE', 'BLOCKED'])('uses the current PUBLIC %s capability without falling back to an older fixture', async mode => {
+ const user = userEvent.setup(), onStart = vi.fn(), saved = {configurationVersion: 'public-saved', savedAt: '2026-11-16T10:00:00Z',
+  settings: {...initialResearchConfiguration(brief), sources: ['SEARCH', 'WEBSITE', 'REGISTRY'], startingUrls: ['https://controlled-context.example/case-study']}}
+ const researchStart = mode === 'BLOCKED' ? {contractVersion: 'public-research-start.v1', eligible: false, mode: 'LIVE', liveExecutionEnabled: false, reason: 'OPERATING_APPROVAL_NOT_RECORDED'}
+  : {contractVersion: 'public-research-start.v1', eligible: true, mode, liveExecutionEnabled: mode === 'LIVE'}
+ const availability = {reason: 'OPERATING_APPROVAL_NOT_RECORDED', categories: PUBLIC_RESEARCH_SOURCES.map(source => ({key: source.key, status: 'GATED', reason: 'OPERATING_APPROVAL_NOT_RECORDED'})),
+  requestMapping: {settings: saved.settings}, researchStart, fixtureStart: {eligible: true}}
+ render(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare savedConfiguration={saved} availability={availability} startAvailable onStart={onStart} />)
+ await user.click(screen.getByRole('button', {name: 'Configure research'}))
+ expect(onStart).not.toHaveBeenCalled()
+ if (mode === 'BLOCKED') {
+  expect(screen.getByRole('button', {name: 'Start research'})).toBeDisabled()
+  expect(screen.queryByText(/Start runs only the registered provider-free fixture/)).not.toBeInTheDocument()
+ } else {
+  expect(screen.getByText(mode === 'OFFLINE' ? /Start runs the registered offline search, registry and controlled-source fixture/
+   : /Start uses only the server-issued single-run release and its limits/)).toBeVisible()
+  expect(screen.queryByText('Provider/registry operating approval is not recorded. No retrieval will run.')).not.toBeInTheDocument()
+  expect(screen.getByText(mode === 'LIVE' ? 'This server-issued release is available only for the current saved configuration.' : 'Only the registered offline Public Research fixture is available. Live research remains unavailable.')).toBeVisible()
+  await user.click(screen.getByRole('button', {name: 'Start research'}))
+  expect(onStart).toHaveBeenCalledOnce()
+ }
+})
+
+it('withdraws PUBLIC Start when the prepared settings stop matching the saved capability', async () => {
+ const user = userEvent.setup(), onStart = vi.fn(), saved = {configurationVersion: 'public-saved', savedAt: '2026-11-16T10:00:00Z',
+  settings: {...initialResearchConfiguration(brief), startingUrls: ['https://controlled-context.example/case-study']}}
+ const availability = {reason: 'OPERATING_APPROVAL_NOT_RECORDED', categories: PUBLIC_RESEARCH_SOURCES.map(source => ({key: source.key, status: 'GATED', reason: 'OPERATING_APPROVAL_NOT_RECORDED'})),
+  requestMapping: {settings: saved.settings}, researchStart: {contractVersion: 'public-research-start.v1', eligible: true, mode: 'OFFLINE', liveExecutionEnabled: false}}
+ render(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare savedConfiguration={saved} availability={availability} startAvailable onStart={onStart} />)
+ await user.click(screen.getByRole('button', {name: 'Configure research'}))
+ expect(screen.getByRole('button', {name: 'Start research'})).toBeEnabled()
+ await user.type(screen.getByLabelText('Optional narrowing instructions'), ' changed')
+ expect(screen.getByRole('button', {name: 'Start research'})).toBeDisabled()
+ expect(onStart).not.toHaveBeenCalled()
+})

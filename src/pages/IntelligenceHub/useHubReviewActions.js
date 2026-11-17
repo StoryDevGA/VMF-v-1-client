@@ -42,7 +42,9 @@ export default function useHubReviewActions({ authority, runtimeInstanceId, cont
   }
   const decide = async (kind, item, decision, rationale = '') => {
     if (!owned() || frame.current.authority !== authority || frame.current.blocked || !enabled || inFlight.current || !item?.id
-      || kind === 'evidence' && (!authority.canReviewEvidence || !['ACCEPTED', 'REJECTED'].includes(decision))
+      || typeof rationale !== 'string'
+      || kind === 'evidence' && (!authority.canReviewEvidence || !['ACCEPTED', 'REJECTED'].includes(decision)
+        || rationale.trim().length < 10 || rationale.trim().length > 2000)
       || kind === 'finding' && (!authority.canReview || !['NOT_CONTRADICTORY', 'CONFIRMED', 'REOPENED'].includes(decision)
         || !/^sha256:[a-f0-9]{64}$/.test(item.evidencePairHash || '') || rationale.trim().length < 10 || rationale.trim().length > 2000)) return false
     inFlight.current = true
@@ -51,7 +53,7 @@ export default function useHubReviewActions({ authority, runtimeInstanceId, cont
       const body = { expectedUpdatedAt: authority.runtimeUpdatedAt }
       let receipt = null
       if (kind === 'evidence') {
-        await reviewEvidence({ runtimeInstanceId, evidenceObjectId: item.id, body: { ...body, reviewStatus: decision } }).unwrap()
+        await reviewEvidence({ runtimeInstanceId, evidenceObjectId: item.id, body: { ...body, reviewStatus: decision, rationale: rationale.trim() } }).unwrap()
       } else {
         const signature = JSON.stringify([contextKey, runtimeInstanceId, authority.control.id, sessionRevision, item.id, item.evidencePairHash, decision, rationale.trim()])
         if (attempt.current?.signature !== signature) attempt.current = { signature, id: item.id, runtimeId: authority.control.id, stateVersion: authority.control.stateVersion, body: {
@@ -84,6 +86,6 @@ export default function useHubReviewActions({ authority, runtimeInstanceId, cont
   }
   return { canReviewEvidence: enabled && authority.canReviewEvidence === true,
     canReviewFinding: enabled && authority.canReview === true, busy: Boolean(current?.busy), feedback: current,
-    resetAfterRefresh, decideEvidence: (id, decision) => decide('evidence', { id }, decision),
+    resetAfterRefresh, decideEvidence: (id, decision, rationale) => decide('evidence', { id }, decision, rationale),
     decideFinding: (candidate, decision, rationale) => decide('finding', candidate, decision, rationale) }
 }

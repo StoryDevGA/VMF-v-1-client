@@ -18,7 +18,7 @@ const scope = { runtimeInstanceId: 'revision-one', workspaceId: 'workspace-one',
 const make = (changes = {}) => ({ data: { contractVersion: 'intelligence-review-completion.v1',
   scope: { ...scope, runtimeInstanceKey: scope.runtimeInstanceId, rootRuntimeInstanceKey: scope.workspaceId },
   population: { completeness: 'COMPLETE', hash: 'a'.repeat(64), pendingEvidence: 0, pendingFindings: 0,
-    decisionCount: 2, complete: true, confirmedReadinessBlockers: 1 }, canComplete: true, ...changes } })
+    evidenceCount: 2, sourceCount: 1, decisionCount: 2, complete: true, confirmedReadinessBlockers: 1 }, canComplete: true, ...changes } })
 const receipt = { receiptId: 'record-one', currency: 'CURRENT', completedAt: '2026-10-05T09:00:00Z',
   rationale: 'Recorded human rationale.', actorUserId: 'reviewer-one', auditId: 'audit-one' }
 beforeEach(() => { vi.clearAllMocks(); state.buttons.clear(); state.query = { currentData: make() }; state.refetch.mockResolvedValue({ data: make() }) })
@@ -199,4 +199,62 @@ it('preserves local confirmation through ordinary token rotation in the same ses
   expect(getSessionRevision()).toBe(session)
   expect(screen.getByRole('checkbox')).toBeChecked()
   expect(screen.getByRole('textbox', { name: /Review Completion rationale/ })).toHaveValue('Explicit current-session review rationale.')
+})
+
+const verifiedReceipt = () => ({ ...receipt, populationHash: 'a'.repeat(64),
+  populationPolicy: 'revision-evidence-contradiction-decisions.v1', observedStateVersion: 'saved-state-one',
+  membershipStatus: 'VERIFIED', membership: {
+    contractVersion: 'review-population-membership.v1', ...make().data.scope,
+    policy: 'revision-evidence-contradiction-decisions.v1', revisionNumber: 1,
+    membershipHash: 'a'.repeat(64), observedStateVersion: 'saved-state-one', auditVerified: true, lockFrozen: false,
+    evidence: [{ id: 'original-object', sourceId: 'original-source', basisHash: 'b'.repeat(64), status: 'ACCEPTED',
+      decision: { status: 'ACCEPTED', reviewerId: 'a'.repeat(24), reviewedAt: '2026-11-17T17:00:00.000Z',
+        rationale: 'Accepted as a recorded first-party source assertion.' },
+      support: { sourceId: 'original-source', originalContentHash: 'sha256:' + 'c'.repeat(64),
+        captureTextHash: 'sha256:' + 'd'.repeat(64), excerptHash: 'sha256:' + 'e'.repeat(64),
+        coordinateSystem: 'UTF16_CODE_UNIT', start: 10, end: 30 } }],
+    sources: [{ id: 'original-source', basisHash: 'f'.repeat(64), sourceRef: 'https://example.com/',
+      contentHash: 'sha256:' + 'c'.repeat(64), capture: { sourceId: 'original-source',
+        originalContentHash: 'sha256:' + 'c'.repeat(64), captureTextHash: 'sha256:' + 'd'.repeat(64),
+        capturedAt: '2026-11-17T12:00:00.000Z' } }], contradictions: [],
+  } })
+
+it('reads stored signed membership and decision details without implying a workspace lock', async () => {
+  state.query.currentData = make({ latestReceipt: verifiedReceipt() })
+  render(<ReviewCompletionPanel scope={scope} compact />)
+  await userEvent.click(screen.getByRole('button', { name: 'Receipt and completion basis' }))
+  await userEvent.click(screen.getByText('Inspect recorded completion'))
+  expect(screen.getByText('Signed Review population verified. This immutable receipt does not lock or publish the workspace.')).toBeInTheDocument()
+  expect(screen.getByText('a'.repeat(64))).toBeInTheDocument()
+  await userEvent.click(screen.getByText('original-object · ACCEPTED'))
+  expect(screen.getByText('Accepted as a recorded first-party source assertion.')).toBeInTheDocument()
+  expect(screen.getByText('UTF-16 [10, 30)')).toBeInTheDocument()
+  expect(screen.getByText('sha256:' + 'e'.repeat(64))).toBeInTheDocument()
+  expect(state.mutate).not.toHaveBeenCalled()
+})
+
+it.each(['signature', 'hash', 'scope', 'duplicate', 'rationale', 'source-locator', 'span'])(
+  'refuses malformed recorded membership: %s', kind => {
+  const value = verifiedReceipt()
+  if (kind === 'signature') value.membership.auditVerified = false
+  if (kind === 'hash') value.membership.membershipHash = 'c'.repeat(64)
+  if (kind === 'scope') value.membership.tenantId = 'another-tenant'
+  if (kind === 'duplicate') value.membership.evidence.push(value.membership.evidence[0])
+  if (kind === 'rationale') value.membership.evidence[0].decision.rationale = {}
+  if (kind === 'source-locator') value.membership.sources[0].sourceRef = {}
+  if (kind === 'span') value.membership.evidence[0].support.end = 0
+  expect(readCompletion(make({ latestReceipt: value }), scope)).toBeNull()
+  state.query.currentData = make({ latestReceipt: value })
+  render(<ReviewCompletionPanel scope={scope} compact />)
+  expect(screen.getByText('Unavailable')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Confirm review completion' })).toBeDisabled()
+})
+
+it('keeps older receipt metadata readable without inventing recorded membership', async () => {
+  state.query.currentData = make({ latestReceipt: { ...receipt, membershipStatus: 'LEGACY_NOT_RECORDED' } })
+  render(<ReviewCompletionPanel scope={scope} compact readOnly />)
+  await userEvent.click(screen.getByRole('button', { name: 'Receipt and completion basis' }))
+  await userEvent.click(screen.getByText('Inspect recorded completion'))
+  expect(screen.getByText('Detailed membership was not recorded in this older receipt.')).toBeInTheDocument()
+  expect(screen.queryByText(/Signed Review population verified/)).not.toBeInTheDocument()
 })

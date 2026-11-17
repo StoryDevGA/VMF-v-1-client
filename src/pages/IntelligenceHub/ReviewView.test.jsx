@@ -22,6 +22,48 @@ const scope = { runtimeInstanceId: 'revision-1', customerId: 'customer-1', tenan
 const evidence = { evidenceObjectId: 'evidence-1', sourceId: 'source-1', extractedFact: 'The exact full recorded statement.', reviewStatus: 'ACCEPTED' }
 const finding = { id: 'contradiction-1', type: 'Contradiction', domain: 'Company', basis: 'Two recorded statements disagree.', status: 'UNREVIEWED', evidence: [evidence], evidencePairHash: `sha256:${'a'.repeat(64)}` }
 const base = { scope, stateVersion: 'current-version', canInspect: true, evidencePage: { evidenceObjects: [evidence], sourceRegistry: [{ sourceId: 'source-1', label: 'Customer interview' }] }, isLoading: false, evidenceStatusCounts: { accepted: 1, pending: 0 }, filter: 'All', page: 1, query: '', actions: { canReviewEvidence: true, decideEvidence: calls.decide }, findings: [finding], onSelectView: calls.navigate, onOpenSource: calls.source, onFilterChange: calls.filter, onSearch: calls.search, onRefresh: calls.refresh }
+
+it('requires a reason, retains the same-item cancelled draft and sends the exact reason once', async () => {
+  const pending = { ...evidence, reviewStatus: 'PENDING' }
+  show({ findings: [], evidencePage: { ...base.evidencePage, evidenceObjects: [pending] } })
+  fireEvent.click(screen.getByRole('button', { name: 'Accept evidence' }))
+  expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeDisabled()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Decision rationale' }), { target: { value: 'short' } })
+  expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeDisabled()
+  const rationale = 'Accepted as a supported first-party source assertion, not independent verification.'
+  fireEvent.change(screen.getByRole('textbox', { name: 'Decision rationale' }), { target: { value: rationale } })
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(calls.decide).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Accept evidence' }))
+  expect(screen.getByRole('textbox', { name: 'Decision rationale' })).toHaveValue(rationale)
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm acceptance' }))
+  expect(calls.decide).toHaveBeenCalledOnce()
+  expect(calls.decide).toHaveBeenCalledWith('evidence-1', 'ACCEPTED', rationale)
+})
+
+it('shows recorded current rationale and reviewer without inventing an evidence history receipt', () => {
+  const current = { ...evidence, reviewRationale: 'The exact original passage supports this source assertion.',
+    acceptedBy: '64b000000000000000000001', acceptanceTimestamp: '2026-11-17T16:00:00.000Z' }
+  show({ findings: [], evidencePage: { ...base.evidencePage, evidenceObjects: [current] } })
+  fireEvent.click(screen.getByRole('button', { name: 'Decision history' }))
+  const history = screen.getByRole('dialog', { name: 'Item decision history' })
+  expect(history).toHaveTextContent(current.reviewRationale)
+  expect(history).toHaveTextContent(current.acceptedBy)
+  expect(history).toHaveTextContent(current.acceptanceTimestamp)
+  expect(history).toHaveTextContent('A current status is not a history receipt.')
+})
+
+it('does not carry an earlier evidence rationale into another selected item', () => {
+  const first = { ...evidence, reviewStatus: 'PENDING' }, second = { ...first, evidenceObjectId: 'second', extractedFact: 'Another exact source assertion.' }
+  show({ findings: [], evidencePage: { ...base.evidencePage, evidenceObjects: [first, second] } })
+  fireEvent.click(screen.getByRole('button', { name: 'Accept evidence' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Decision rationale' }), { target: { value: 'Reason for the first original source assertion.' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  fireEvent.click(within(screen.getByRole('region', { name: 'Evidence candidate queue' })).getByRole('button', { name: /Another exact source assertion/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Accept evidence' }))
+  expect(screen.getByRole('textbox', { name: 'Decision rationale' })).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeDisabled()
+})
 beforeEach(() => { vi.clearAllMocks(); calls.session = 1; calls.realHistory=false; calls.handlers = {} })
 const show = changes => render(<ReviewView {...base} {...changes} />)
 
@@ -86,13 +128,15 @@ it.each(['version','scope','permission','session','unmount','loading','error'])(
 it('records only the existing evidence rejection and acceptance commands with current authority', () => {
   show();fireEvent.click(screen.getByRole('button',{name:'Reject evidence'}))
   expect(calls.decide).not.toHaveBeenCalled()
+  fireEvent.change(screen.getByRole('textbox',{name:'Decision rationale'}),{target:{value:'The original statement is unsupported.'}})
   fireEvent.click(screen.getByRole('button',{name:'Confirm rejection'}))
-  expect(calls.decide).toHaveBeenCalledWith('evidence-1','REJECTED')
+  expect(calls.decide).toHaveBeenCalledWith('evidence-1','REJECTED','The original statement is unsupported.')
   expect(screen.getByRole('button',{name:'Accept evidence'})).toBeDisabled()
   expect(screen.queryByRole('button',{name:'Unaccept evidence'})).not.toBeInTheDocument()
 })
 it.each(['permission','version','lock','busy','session','unmount'])('rejects captured evidence confirmation after %s departure', kind => {
   const view=show();fireEvent.click(screen.getByRole('button',{name:'Reject evidence'}))
+  fireEvent.change(screen.getByRole('textbox',{name:'Decision rationale'}),{target:{value:'The original statement is unsupported.'}})
   const confirm=calls.handlers['Confirm rejection']
   if(kind==='unmount')view.unmount()
   else {
@@ -103,6 +147,7 @@ it.each(['permission','version','lock','busy','session','unmount'])('rejects cap
 })
 it('never dispatches a captured evidence confirmation twice', () => {
   show();fireEvent.click(screen.getByRole('button',{name:'Reject evidence'}))
+  fireEvent.change(screen.getByRole('textbox',{name:'Decision rationale'}),{target:{value:'The original statement is unsupported.'}})
   const confirm=calls.handlers['Confirm rejection'];act(()=>{confirm();confirm()})
   expect(calls.decide).toHaveBeenCalledOnce()
 })
@@ -209,9 +254,12 @@ const recordedSupport = {
   ]
 }
 
-it('presents the recorded provider-free receipt and exact excerpt in existing Review inspections without enabling decisions', async () => {
+it.each(['CONTROLLED_HTML_REPLAY_CAPTURE', 'WEBSITE_DECODED_TEXT_CAPTURE'])('presents %s receipt and exact excerpt without enabling decisions', async operation => {
+  const capture = structuredClone(recordedCapture)
+  capture.captureReceipt.operation = operation
+  if (operation === 'WEBSITE_DECODED_TEXT_CAPTURE') capture.adapter = 'website-html-fetch-v1'
   const source = {sourceId: 'source-1', label: 'Controlled source', contentHash: recordedCapture.originalContentHash,
-    stateVersion: base.stateVersion, sourceStateVersion: base.stateVersion, sourceCaptureAvailability: 'RECORDED', sourceCapture: recordedCapture}
+    stateVersion: base.stateVersion, sourceStateVersion: base.stateVersion, sourceCaptureAvailability: 'RECORDED', sourceCapture: capture}
   const item = {...evidence, stateVersion: base.stateVersion, sourceStateVersion: base.stateVersion,
     evidenceSupportAvailability: 'RECORDED', evidenceSupport: recordedSupport}
   show({evidencePage: {evidenceObjects: [item], sourceRegistry: [source]}, findings: [], actions: {canReviewEvidence: false}})

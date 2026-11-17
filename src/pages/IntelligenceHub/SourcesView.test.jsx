@@ -545,9 +545,12 @@ const recordedSupport = {
   ]
 }
 
-it('shows recorded capture separately from unavailable document processing and includes bound support in source evidence inspection', async () => {
+it.each(['CONTROLLED_HTML_REPLAY_CAPTURE', 'WEBSITE_DECODED_TEXT_CAPTURE'])('shows %s capture separately from document processing with bound support', async operation => {
+  const capture = structuredClone(recordedCapture)
+  capture.captureReceipt.operation = operation
+  if (operation === 'WEBSITE_DECODED_TEXT_CAPTURE') capture.adapter = 'website-html-fetch-v1'
   state.recordedSource = {contentHash: recordedCapture.originalContentHash, stateVersion: control.stateVersion,
-    sourceStateVersion: control.stateVersion, sourceCaptureAvailability: 'RECORDED', sourceCapture: recordedCapture}
+    sourceStateVersion: control.stateVersion, sourceCaptureAvailability: 'RECORDED', sourceCapture: capture}
   state.recordedEvidence = {stateVersion: control.stateVersion, sourceStateVersion: control.stateVersion,
     evidenceSupportAvailability: 'RECORDED', evidenceSupport: recordedSupport}
   show()
@@ -556,7 +559,9 @@ it('shows recorded capture separately from unavailable document processing and i
   const sourceInspection = render(calls.open.mock.calls.at(-1)[0].body)
   expect(within(sourceInspection.container).getByText(recordedCapture.captureReceipt.runId)).toBeInTheDocument()
   expect(within(sourceInspection.container).getByText('Current processing receipt').nextElementSibling).toHaveTextContent('Not supplied')
-  expect(within(sourceInspection.container).getByText(/provider-free fixture/)).toBeInTheDocument()
+  expect(within(sourceInspection.container).getByText(capture.captureReceipt.attemptId)).toBeInTheDocument()
+  expect(within(sourceInspection.container).getByText(operation === 'CONTROLLED_HTML_REPLAY_CAPTURE'
+    ? /provider-free fixture/ : 'WEBSITE_DECODED_TEXT_CAPTURE')).toBeInTheDocument()
   sourceInspection.unmount()
   await user.click(screen.getByRole('button', {name: /Inspect recorded lineage/}))
   const evidenceInspection = render(calls.open.mock.calls.at(-1)[0].body)

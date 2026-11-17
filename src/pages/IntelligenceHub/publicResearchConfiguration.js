@@ -133,6 +133,53 @@ export const readResearchAvailability = value => {
 
 export const readFixtureStart = data => {
   const availability = readResearchAvailability(data), fixture = availability?.fixtureStart, record = data?.configuration
+  // A present Public Research capability owns this decision, including a hold.
+  // It must never fall through to an unrelated older fixture descriptor.
+  if (availability && Object.hasOwn(availability, 'researchStart')) {
+    const start = availability.researchStart
+    const keys = (value, expected) => value && !Array.isArray(value) && Object.keys(value).length === expected.length && expected.every(key => Object.hasOwn(value, key))
+    const offline = start?.mode === 'OFFLINE'
+    const fields = ['contractVersion', 'eligible', 'mode', 'liveExecutionEnabled', 'classification', 'actorUserId', 'scope', 'basis', 'selector', 'requestKey']
+    if (offline) fields.push('fixture')
+    if (!keys(start, fields) || start.contractVersion !== 'public-research-start.v1' || start.eligible !== true || !record
+      || !['OFFLINE', 'LIVE'].includes(start.mode) || start.liveExecutionEnabled !== !offline
+      || start.classification !== (offline ? 'CONTROLLED_PROVIDER_FREE_RESEARCH' : 'NATIVE_PUBLIC_RESEARCH')
+      || data.currency !== 'CURRENT_BASIS' || data.editable !== true || !availability.requestMapping
+      || start.actorUserId !== record.savedBy || !/^[a-f0-9]{24}$/.test(start.actorUserId)
+      || !keys(start.scope, ['customerId', 'tenantId', 'runtimeInstanceId', 'runtimeInstanceKey'])
+      || ['customerId', 'tenantId', 'runtimeInstanceId', 'runtimeInstanceKey'].some(key => start.scope[key] !== data.scope[key])
+      || !keys(start.basis, ['stateVersion', 'updatedAt']) || start.basis.stateVersion !== data.basis.stateVersion || start.basis.updatedAt !== data.basis.updatedAt
+      || !keys(start.selector, ['configurationVersion', 'configurationHash', 'basisStateVersion'])
+      || start.selector.configurationVersion !== record.configurationVersion || start.selector.configurationHash !== record.configurationHash
+      || start.selector.basisStateVersion !== data.basis.stateVersion
+      || record.settings.sources.some(key => !['SEARCH', 'WEBSITE', 'REGISTRY'].includes(key))) return null
+    if (offline) {
+      if (start.requestKey !== null || !keys(start.fixture, ['fixtureId', 'fixtureVersion', 'fixtureFileSha256', 'controlledBindingId'])
+        || start.fixture.fixtureId !== 'controlled-public-research.v1' || start.fixture.fixtureVersion !== 1
+        || !/^[a-f0-9]{64}$/.test(start.fixture.fixtureFileSha256) || start.fixture.controlledBindingId !== 'local-public-research.1'
+        || record.settings.startingUrls.length !== 1 || record.settings.startingUrls[0] !== 'https://controlled-context.example/case-study') return null
+    } else if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(start.requestKey)) return null
+    return start
+  }
+  if (fixture?.contractVersion === 'provider-free-search-start.v1') {
+    const keys = (value, expected) => value && Object.keys(value).length === expected.length && expected.every(key => Object.hasOwn(value, key))
+    return fixture.eligible === true && record && data.currency === 'CURRENT_BASIS' && data.editable === true && availability.requestMapping
+      && keys(fixture, ['contractVersion', 'eligible', 'classification', 'provider', 'actorUserId', 'scope', 'basis', 'selector', 'fixture', 'receiptOnly', 'liveExecutionEnabled'])
+      && fixture.classification === 'LOCAL_SYNTHETIC_RECEIPT_ONLY' && fixture.provider === 'TAVILY_SEARCH'
+      && fixture.receiptOnly === true && fixture.liveExecutionEnabled === false && fixture.actorUserId === record.savedBy
+      && /^[a-f0-9]{24}$/.test(fixture.actorUserId)
+      && ['customerId', 'tenantId', 'runtimeInstanceId', 'runtimeInstanceKey'].every(key => fixture.scope?.[key] === data.scope[key])
+      && fixture.basis?.stateVersion === data.basis.stateVersion && fixture.basis?.updatedAt === data.basis.updatedAt
+      && keys(fixture.selector, ['configurationVersion', 'configurationHash', 'basisStateVersion'])
+      && fixture.selector.configurationVersion === record.configurationVersion && fixture.selector.configurationHash === record.configurationHash
+      && fixture.selector.basisStateVersion === data.basis.stateVersion
+      && record.settings.sources.length === 1 && record.settings.sources[0] === 'SEARCH' && record.settings.startingUrls.length === 1
+      && keys(fixture.fixture, ['fixtureId', 'fixtureVersion', 'fixtureFileSha256', 'targetUrl', 'provider'])
+      && fixture.fixture.fixtureId === 'trilogy-clients-search.v1' && fixture.fixture.fixtureVersion === 1
+      && /^[a-f0-9]{64}$/.test(fixture.fixture.fixtureFileSha256) && fixture.fixture.provider === 'TAVILY_SEARCH'
+      && fixture.fixture.targetUrl === 'https://www.trilogywebsolutions.co.uk/clients/' && fixture.fixture.targetUrl === record.settings.startingUrls[0]
+      ? fixture : null
+  }
   if (fixture?.contractVersion !== 'controlled-fixture-start.v1' || fixture.eligible !== true || !record
     || data.currency !== 'CURRENT_BASIS' || data.editable !== true || !availability.requestMapping
     || fixture.classification !== 'CONTROLLED_SYNTHETIC_REPLAY' || !/^[a-f0-9]{24}$/.test(fixture.actorUserId)
@@ -151,6 +198,17 @@ export const readFixtureStart = data => {
 export const buildFixtureStartPayload = (data, requestKey) => {
   const fixture = readFixtureStart(data)
   if (!fixture || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(requestKey)) return null
+  if (fixture.contractVersion === 'public-research-start.v1') {
+    if (fixture.mode === 'LIVE' && requestKey !== fixture.requestKey) return null
+    return { requestKey, expectedUpdatedAt: data.basis.updatedAt, acquisitionProfile: data.configuration.coverage,
+      researchConfiguration: fixture.selector,
+      publicResearch: fixture.mode === 'OFFLINE' ? { mode: 'OFFLINE', fixture: { fixtureId: fixture.fixture.fixtureId,
+        fixtureVersion: fixture.fixture.fixtureVersion, fixtureFileSha256: fixture.fixture.fixtureFileSha256 } } : { mode: 'LIVE', releaseId: fixture.requestKey },
+      ...(fixture.mode === 'OFFLINE' ? { controlledReplay: { bindingId: fixture.fixture.controlledBindingId } } : {}) }
+  }
+  if (fixture.contractVersion === 'provider-free-search-start.v1') return { requestKey, expectedUpdatedAt: data.basis.updatedAt,
+    researchConfiguration: fixture.selector, providerFreeSearch: { fixtureId: fixture.fixture.fixtureId,
+      fixtureVersion: fixture.fixture.fixtureVersion, fixtureFileSha256: fixture.fixture.fixtureFileSha256 } }
   return { requestKey, expectedUpdatedAt: data.basis.updatedAt, acquisitionProfile: data.configuration.coverage,
     researchConfiguration: fixture.selector, controlledReplay: { bindingId: fixture.bindingId } }
 }

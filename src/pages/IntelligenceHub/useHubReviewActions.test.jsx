@@ -69,10 +69,15 @@ describe('governed decision wiring', () => {
   it('sends the existing evidence schema, then refreshes authoritative reads', async () => {
     const config = props()
     const { result } = renderHook(() => useHubReviewActions(config))
-    await act(async () => { expect(await result.current.decideEvidence('exact-item', 'REJECTED')).toBe(true) })
-    expect(mutations.evidence).toHaveBeenCalledWith({ runtimeInstanceId: 'revision-key', evidenceObjectId: 'exact-item', body: { expectedUpdatedAt: stamp, reviewStatus: 'REJECTED' } })
+    await act(async () => { expect(await result.current.decideEvidence('exact-item', 'REJECTED', 'A recorded human rationale.')).toBe(true) })
+    expect(mutations.evidence).toHaveBeenCalledWith({ runtimeInstanceId: 'revision-key', evidenceObjectId: 'exact-item', body: { expectedUpdatedAt: stamp, reviewStatus: 'REJECTED', rationale: 'A recorded human rationale.' } })
     expect(config.refresh).toHaveBeenCalledOnce()
     expect(result.current.feedback.message).toContain('Current reads refreshed')
+  })
+  it.each([undefined, '', 'short', 'x'.repeat(2001)])('refuses an absent or out-of-bounds evidence rationale', async rationale => {
+    const { result } = renderHook(() => useHubReviewActions(props()))
+    await act(async () => { expect(await result.current.decideEvidence('exact-item', 'ACCEPTED', rationale)).toBe(false) })
+    expect(mutations.evidence).not.toHaveBeenCalled()
   })
   it('requires exact hash and rationale before sending a confirmed human disposition', async () => {
     const { result } = renderHook(() => useHubReviewActions(props()))
@@ -134,7 +139,7 @@ describe('governed decision wiring', () => {
     const initial = props(), { result, rerender } = renderHook(config => useHubReviewActions(config), { initialProps: initial })
     const retained = result.current.decideEvidence
     rerender({ ...initial, ...patch })
-    return act(async () => { await retained('item', 'ACCEPTED'); expect(mutations.evidence).not.toHaveBeenCalled() })
+    return act(async () => { await retained('item', 'ACCEPTED', 'A recorded human rationale.'); expect(mutations.evidence).not.toHaveBeenCalled() })
   })
   it('rejects retained callbacks after unmount or a session change before rerender', async () => {
     const { result, unmount } = renderHook(() => useHubReviewActions({ ...props(), sessionRevision: 0 }))
@@ -147,7 +152,7 @@ describe('governed decision wiring', () => {
   })
   it.each([null, { ...authority, canReview: false, canReviewEvidence: false }])('never sends without eligible server authority', async eligibility => {
     const { result } = renderHook(() => useHubReviewActions({ ...props(), authority: eligibility }))
-    await act(async () => { await result.current.decideEvidence('exact-item', 'ACCEPTED'); await result.current.decideFinding({ id: 'finding', evidencePairHash: hash }, 'NOT_CONTRADICTORY', 'A recorded human rationale.') })
+    await act(async () => { await result.current.decideEvidence('exact-item', 'ACCEPTED', 'A recorded human rationale.'); await result.current.decideFinding({ id: 'finding', evidencePairHash: hash }, 'NOT_CONTRADICTORY', 'A recorded human rationale.') })
     expect(mutations.evidence).not.toHaveBeenCalled()
     expect(mutations.finding).not.toHaveBeenCalled()
   })
@@ -156,12 +161,12 @@ describe('governed decision wiring', () => {
     mutations.evidence.mockImplementation(() => ({ unwrap: () => new Promise((_resolve, reject) => { fail = reject }) }))
     const { result } = renderHook(() => useHubReviewActions(props()))
     let pending
-    act(() => { pending = result.current.decideEvidence('exact-item', 'ACCEPTED'); result.current.decideEvidence('exact-item', 'ACCEPTED') })
+    act(() => { pending = result.current.decideEvidence('exact-item', 'ACCEPTED', 'A recorded human rationale.'); result.current.decideEvidence('exact-item', 'ACCEPTED', 'A recorded human rationale.') })
     expect(mutations.evidence).toHaveBeenCalledOnce()
     await act(async () => { fail({ status: 'FETCH_ERROR' }); await pending })
     expect(result.current.feedback.error).toBe(true)
     expect(result.current.canReviewEvidence).toBe(false)
-    await act(async () => { await result.current.decideEvidence('exact-item', 'ACCEPTED') })
+    await act(async () => { await result.current.decideEvidence('exact-item', 'ACCEPTED', 'A recorded human rationale.') })
     expect(mutations.evidence).toHaveBeenCalledOnce()
     act(() => result.current.resetAfterRefresh())
     expect(result.current.canReviewEvidence).toBe(true)
@@ -169,14 +174,14 @@ describe('governed decision wiring', () => {
   it.each([403, 409, 500])('shows %s failure without success or another write', async status => {
     mutations.evidence.mockImplementation(() => ({ unwrap: () => Promise.reject({ status, data: { error: { message: 'Server denied this decision.' } } }) }))
     const { result } = renderHook(() => useHubReviewActions(props()))
-    await act(async () => { await result.current.decideEvidence('item', 'ACCEPTED') })
+    await act(async () => { await result.current.decideEvidence('item', 'ACCEPTED', 'A recorded human rationale.') })
     expect(result.current.feedback.message).toContain('Server denied')
     expect(result.current.canReviewEvidence).toBe(false)
     expect(mutations.evidence).toHaveBeenCalledOnce()
   })
   it('keeps recomputation/read refresh failure visible and blocks subsequent decisions', async () => {
     const { result } = renderHook(() => useHubReviewActions({ ...props(), refresh: vi.fn().mockResolvedValue(false) }))
-    await act(async () => { await result.current.decideEvidence('item', 'ACCEPTED') })
+    await act(async () => { await result.current.decideEvidence('item', 'ACCEPTED', 'A recorded human rationale.') })
     expect(result.current.feedback.message).toContain('Decision recorded, but current reads could not be refreshed')
     expect(result.current.feedback.error).toBe(true)
     expect(result.current.canReviewEvidence).toBe(false)
@@ -187,7 +192,7 @@ describe('governed decision wiring', () => {
     const initial = props()
     const { result, rerender } = renderHook(config => useHubReviewActions(config), { initialProps: initial })
     let pending
-    act(() => { pending = result.current.decideEvidence('item', 'ACCEPTED') })
+    act(() => { pending = result.current.decideEvidence('item', 'ACCEPTED', 'A recorded human rationale.') })
     rerender({ ...initial, runtimeInstanceId: 'other-revision', contextKey: 'other', viewKey: 'other:Review' })
     await act(async () => { finish({}); await pending })
     expect(result.current.feedback).toBeNull()

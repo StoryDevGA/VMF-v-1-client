@@ -56,6 +56,8 @@ export default function ReviewView({ scope, stateVersion, canInspect, locked = f
   const [decisionDraft, setDecisionDraft] = useState({ owner: inspectionKey, choice: '', rationale: '' })
   const decisionAttempt = useRef(null)
   const currentDraft = decisionDraft.owner === inspectionKey ? decisionDraft : { choice: '', rationale: '' }
+  const validRationale = currentDraft.rationale.trim().length >= 10 && currentDraft.rationale.length <= 2000
+    && !hasQualityControlCharacters(currentDraft.rationale)
   const canPreviewQuality = selected?.kind === 'quality' && !locked && SUPPORTED_DISPOSITIONS.includes(currentDraft.choice)
     && currentDraft.rationale.trim().length >= 10 && currentDraft.rationale.length <= 2000 && !hasQualityControlCharacters(currentDraft.rationale)
   useLayoutEffect(() => {
@@ -94,10 +96,10 @@ export default function ReviewView({ scope, stateVersion, canInspect, locked = f
   const confirmEvidence = () => {
     const decision = visibleInspection?.kind === 'accept' ? 'ACCEPTED' : visibleInspection?.kind === 'reject' ? 'REJECTED' : null
     if (!owned() || !available || locked || !decision || selected?.kind !== 'evidence' || !actions?.canReviewEvidence || actions.busy
-      || selected.item.reviewStatus === decision || decisionAttempt.current === visibleInspection) return
+      || !validRationale || selected.item.reviewStatus === decision || decisionAttempt.current === visibleInspection) return
     decisionAttempt.current = visibleInspection
     close()
-    actions.decideEvidence(selected.id, decision)
+    actions.decideEvidence(selected.id, decision, currentDraft.rationale.trim())
   }
   const selectFilter = value => {
     if (!owned() || !FILTERS.includes(value)) return
@@ -120,7 +122,11 @@ export default function ReviewView({ scope, stateVersion, canInspect, locked = f
   const history = selected && <><strong>{title}</strong><p>{status(selected)} · Current recorded state</p>
     {selected.kind === 'quality' && selected.item.latestReview ? <><p>{selected.item.latestReview.rationale || 'Rationale unavailable'}</p>
       <p>Reviewer: {selected.item.latestReview.reviewedBy || 'Unavailable'} · {selected.item.latestReview.reviewedAt || 'Time unavailable'}</p></>
-      : <p>Per-item evidence decision history is not supplied by this read. A current status is not a history receipt.</p>}
+      : <><p>{selected.item.reviewRationale || 'No decision rationale was recorded for this item.'}</p>
+        <p>Reviewer: {selected.item.reviewStatus === 'ACCEPTED' ? selected.item.acceptedBy || 'Unavailable'
+          : selected.item.reviewStatus === 'REJECTED' ? selected.item.rejectedBy || 'Unavailable' : 'Unavailable'} · {selected.item.reviewStatus === 'ACCEPTED'
+          ? selected.item.acceptanceTimestamp || 'Time unavailable' : selected.item.reviewStatus === 'REJECTED' ? selected.item.rejectionTimestamp || 'Time unavailable' : 'Time unavailable'}</p>
+        <p>Per-item evidence decision history is not supplied by this read. A current status is not a history receipt.</p></>}
     {selected.kind === 'quality' ? <ContradictionHistoryInspector compact scope={{ ...scope, stateVersion, sessionRevision }} findingId={selected.id}
       disabled={!canInspect || !/^sha256:[a-f0-9]{64}$/.test(selected.item.evidencePairHash || '')} /> : null}{technical}</>
   return <div className="intelligence-hub__review-workspace">
@@ -165,7 +171,11 @@ export default function ReviewView({ scope, stateVersion, canInspect, locked = f
       <Dialog.Body>{visibleInspection.kind === 'history' ? history : ['accept','reject','quality-decision'].includes(visibleInspection.kind) ? <><strong>{title}</strong>
         <p>{visibleInspection.kind === 'quality-decision' ? `${DISPOSITIONS.find(([value])=>value===currentDraft.choice)?.[1] || 'Preview unavailable'} · Quality disposition only; no evidence status change.` : visibleInspection.kind === 'accept' ? 'Accept evidence · Evidence decision only.' : 'Reject evidence · Evidence decision only.'}</p>
         {visibleInspection.kind === 'quality-decision' ? <><p>{currentDraft.rationale}</p><p>This local preview cannot record a Quality decision. Inspect the current governed basis to record it; the draft remains here.</p></> : <p>This records an evidence decision only. It does not verify the source, resolve Quality findings, complete review or authorise publication.</p>}
-        <div className="intelligence-hub__review-confirm-actions">{visibleInspection.kind === 'quality-decision' ? <><Button size="sm" disabled>Confirm decision</Button><Button size="sm" variant="outline" onClick={() => navigate('Intelligence Quality', { findingId: selected.id })}>Open governed Quality<FiArrowRight size={14} aria-hidden="true" /></Button></> : <Button size="sm" disabled={locked || !actions?.canReviewEvidence || actions?.busy} onClick={confirmEvidence}>{visibleInspection.kind === 'accept' ? 'Confirm acceptance' : 'Confirm rejection'}</Button>}<Button size="sm" variant="outline" onClick={close}>Cancel</Button></div>
+        {visibleInspection.kind !== 'quality-decision' ? <Textarea label="Decision rationale" size="sm" rows={3} fullWidth required
+          value={currentDraft.rationale} maxLength={2000} disabled={locked || actions?.busy}
+          helperText="Explain the decision in 10–2000 characters. Acceptance does not independently verify the source."
+          onChange={event => { if (owned() && !locked) setDecisionDraft({ owner: inspectionKey, ...currentDraft, rationale: event.target.value }) }} /> : null}
+        <div className="intelligence-hub__review-confirm-actions">{visibleInspection.kind === 'quality-decision' ? <><Button size="sm" disabled>Confirm decision</Button><Button size="sm" variant="outline" onClick={() => navigate('Intelligence Quality', { findingId: selected.id })}>Open governed Quality<FiArrowRight size={14} aria-hidden="true" /></Button></> : <Button size="sm" disabled={locked || !actions?.canReviewEvidence || actions?.busy || !validRationale} onClick={confirmEvidence}>{visibleInspection.kind === 'accept' ? 'Confirm acceptance' : 'Confirm rejection'}</Button>}<Button size="sm" variant="outline" onClick={close}>Cancel</Button></div>
         {technical}</> : <><strong>{source ? sourceLabel(source) : title}</strong><p>{recordedEvidenceLocation(selected.item, source, stateVersion)} · Current recorded basis</p><p>{selected.kind === 'evidence' ? fact(selected.item) : selected.item.basis || 'Recorded contradiction basis unavailable'}</p>
         {selected.kind === 'evidence' ? <SourceEvidenceDetails source={source} item={selected.item} stateVersion={stateVersion} /> : null}
         <h3>Classification</h3><p>Not assessed; acceptance does not mean independently verified.</p><h3>Finding types</h3><p>Contradiction, Missing coverage, Weak confidence, Duplicate source are distinct populations. Only bounded detected contradictions are supplied here.</p>
