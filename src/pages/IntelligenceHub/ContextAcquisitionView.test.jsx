@@ -1165,6 +1165,19 @@ const publicRunFor = (key, status = 'SUCCEEDED', mode = 'OFFLINE') => {
  return value
 }
 describe('combined Public Research explicit Start and original request connection', () => {
+ it('a malformed present category matrix withholds even an otherwise valid LIVE Start descriptor', async () => {
+  const config = publicStartConfiguration('LIVE')
+  expect(readFixtureStart(config.data)?.eligible).toBe(true)
+  config.data.availability.capabilityMatrix = {contractVersion: 'public-research-capability-matrix.v1', categories: [], canStart: true}
+  calls.configRead = {currentData: config}
+  expect(readResearchAvailability(config.data)).toBeNull()
+  expect(readFixtureStart(config.data)).toBeNull()
+  render(researchView(researchProps(), '/app/intelligence?view=context'))
+  await userEvent.click(screen.getByRole('button', {name: 'Configure research'}))
+  expect(screen.getByRole('button', {name: 'Start research'})).toBeDisabled()
+  expect(screen.queryByText('Available under the current operating release.')).not.toBeInTheDocument()
+  expect(calls.execute).not.toHaveBeenCalled()
+ })
  it.each(['OFFLINE', 'LIVE'])('submits only the frozen %s selector with its correct request identity', async mode => {
   const config = publicStartConfiguration(mode); calls.configRead = {currentData: config}
   calls.execute.mockImplementation(({body}) => ({unwrap: async () => ({data: {acquisitionRun: publicRunFor(body.requestKey, 'SUCCEEDED', mode)}})}))

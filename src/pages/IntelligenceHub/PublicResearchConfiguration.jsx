@@ -6,7 +6,8 @@ import { Input } from '../../components/Input'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { PUBLIC_RESEARCH_SOURCES, initialResearchConfiguration, changeResearchJurisdiction,
-  researchPurpose, researchDraftMatchesSaved, RESEARCH_AVAILABILITY_MESSAGES, researchConfigurationProblem, savedResearchDraft } from './publicResearchConfiguration.js'
+  researchPurpose, researchDraftMatchesSaved, RESEARCH_AVAILABILITY_MESSAGES, researchConfigurationProblem, savedResearchDraft,
+  readResearchCapabilityMatrix, RESEARCH_CAPABILITY_LABELS } from './publicResearchConfiguration.js'
 
 // Saving settings is deliberately separate from research execution.
 export default function PublicResearchConfiguration({ brief, profile, canPrepare, onInspectAvailability,
@@ -44,6 +45,7 @@ export default function PublicResearchConfiguration({ brief, profile, canPrepare
   const problem = researchConfigurationProblem(draft)
   const checkedAvailability = availability && researchDraftMatchesSaved(draft, savedConfiguration) ? availability : null
   const startDescriptor = checkedAvailability && (Object.hasOwn(checkedAvailability, 'researchStart') ? checkedAvailability.researchStart : checkedAvailability.fixtureStart)
+  const capabilityMatrix = readResearchCapabilityMatrix(availability?.capabilityMatrix)
   return <section className="intelligence-hub__research-availability" aria-label="Public research availability">
     <div>
       <Tickbox label="Research public information" checked={selected} disabled={!canPrepare || saving}
@@ -81,12 +83,18 @@ export default function PublicResearchConfiguration({ brief, profile, canPrepare
           <p>Confirmation is your configuration choice, not verified legal identity. Ambiguous names remain unresolved; no namesake record can become evidence.</p>
         </Fieldset.Content></Fieldset>
         <Fieldset><Fieldset.Legend>Public source categories</Fieldset.Legend><Fieldset.Content>
+          <p>Selecting a source does not authorise access. A current release must cover public access, licensing, retention, region and spend. Private, authenticated or prohibited collection stays blocked.</p>
           {PUBLIC_RESEARCH_SOURCES.map(source => {
             const capability = checkedAvailability?.categories.find(item => item.key === source.key)
+            const method = capabilityMatrix?.categories.find(item => item.key === source.key)
+            const available = capability?.selected && capability.status === 'GATED'
+              && capability.reason === 'OPERATING_APPROVAL_NOT_RECORDED' && startAvailable && startDescriptor?.eligible
             const checked = draft.sources.includes(source.key)
             return <div key={source.key}>
               <Tickbox label={source.label} disabled={saving} checked={checked} onChange={event => change({ sources: event.target.checked ? [...draft.sources, source.key] : draft.sources.filter(key => key !== source.key) })} />
-              <p>{capability ? `${({ NOT_SELECTED: 'Not selected', GATED: 'Gated', UNAVAILABLE: 'Unavailable', NOT_APPLICABLE: 'Not applicable' })[capability.status]} — ${RESEARCH_AVAILABILITY_MESSAGES[capability.reason]}` : 'Save settings to check availability.'}</p>
+              <p>{available ? startDescriptor.mode === 'LIVE' ? 'Available under the current operating release.' : 'Available for the registered offline fixture.'
+                : capability ? `${({ NOT_SELECTED: 'Not selected', GATED: 'Gated', UNAVAILABLE: 'Unavailable', NOT_APPLICABLE: 'Not applicable' })[capability.status]} — ${RESEARCH_AVAILABILITY_MESSAGES[capability.reason]}` : 'Save settings to check availability.'}</p>
+              {method ? <p>{RESEARCH_CAPABILITY_LABELS[method.implementation]} · {method.method}. {method.limitation}</p> : null}
               <p>{source.boundary}</p>
             </div>
           })}

@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import process from 'node:process'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import PublicResearchConfiguration from './PublicResearchConfiguration.jsx'
 import { PUBLIC_RESEARCH_SOURCES, initialResearchConfiguration, changeResearchJurisdiction,
-  researchConfigurationProblem, readResearchAvailability } from './publicResearchConfiguration.js'
+  researchConfigurationProblem, readResearchAvailability, readResearchCapabilityMatrix } from './publicResearchConfiguration.js'
+
+// Test-only parity read; production data comes from the authenticated API.
+const capabilityMatrix = JSON.parse(readFileSync(resolve(process.cwd(), '../VMF-v-1-api/src/runtime-contracts/public-research-capability-matrix.v1.json'), 'utf8'))
 
 const brief = { companyName: 'Fixture company', companyWebsite: 'https://fixture.example',
   marketRegion: 'A bounded market', targetOffer: 'Fixture service', notes: 'Preserve qualifications.' }
@@ -12,6 +18,80 @@ const open = async user => {
   await user.click(screen.getByRole('button', { name: 'Configure research' }))
   return screen.getByRole('dialog', { name: 'Configure research' })
 }
+
+const catalogueAvailability = matrix => ({ contractVersion: 'public-research-availability.v1', canStart: false,
+  executionEnabled: false, reason: 'CONFIGURATION_NOT_RECORDED', configurationVersion: null, configurationHash: null,
+  categories: PUBLIC_RESEARCH_SOURCES.map(source => ({ key: source.key, selected: false,
+    status: 'NOT_SELECTED', reason: 'SOURCE_NOT_SELECTED' })), requestMapping: null,
+  ...(matrix === undefined ? {} : { capabilityMatrix: matrix }) })
+
+it('accepts the actual server catalogue and preserves legacy missing metadata without inventing support', () => {
+  expect(readResearchCapabilityMatrix(capabilityMatrix)).toEqual(capabilityMatrix)
+  expect(readResearchAvailability({ configuration: null, availability: catalogueAvailability(capabilityMatrix) })).not.toBeNull()
+  const legacy = readResearchAvailability({ configuration: null, availability: catalogueAvailability() })
+  expect(legacy).not.toBeNull(); expect(legacy.capabilityMatrix).toBeUndefined()
+})
+
+it.each(['version', 'missing', 'duplicate', 'unknown', 'implementation', 'permit', 'long-text', 'array-key', 'blank'])('rejects malformed present catalogue %s before it can inform Start', kind => {
+  const matrix = structuredClone(capabilityMatrix)
+  if (kind === 'version') matrix.contractVersion = 'public-research-capability-matrix.v2'
+  if (kind === 'missing') matrix.categories.pop()
+  if (kind === 'duplicate') matrix.categories[1] = { ...matrix.categories[0] }
+  if (kind === 'unknown') matrix.categories[0].key = 'PRIVATE'
+  if (kind === 'implementation') matrix.categories.find(row => row.key === 'GITHUB').implementation = 'NATIVE_GATED'
+  if (kind === 'permit') matrix.canStart = true
+  if (kind === 'long-text') matrix.categories[0].limitation = 'a'.repeat(401)
+  if (kind === 'array-key') matrix.categories[0].key = ['WEBSITE']
+  if (kind === 'blank') matrix.categories[0].method = '  '
+  expect(readResearchCapabilityMatrix(matrix)).toBeNull()
+  expect(readResearchAvailability({ configuration: null, availability: catalogueAvailability(matrix) })).toBeNull()
+})
+
+it('shows server-owned methods separately from unchecked request readiness and never dispatches on selection', async () => {
+  const user = userEvent.setup(), start = vi.fn(), save = vi.fn()
+  render(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare
+    availability={catalogueAvailability(capabilityMatrix)} onStart={start} onSave={save} />)
+  const dialog = await open(user)
+  for (const row of capabilityMatrix.categories) expect(within(dialog).getByText(new RegExp(row.method.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeVisible()
+  expect(within(dialog).getAllByText(/Internal test capture only/)).toHaveLength(2)
+  await user.click(within(dialog).getByRole('checkbox', { name: 'GitHub', exact: true }))
+  expect(within(dialog).getByRole('button', { name: 'Start research' })).toBeDisabled()
+  expect(start).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled()
+})
+
+it.each(['LIVE', 'OFFLINE'])('ready copy requires the existing verified caller flag for %s', async mode => {
+  const user = userEvent.setup(), saved = { configurationVersion: 'saved-ready', savedAt: '2026-11-23T10:00:00Z',
+    settings: { ...initialResearchConfiguration(brief), startingUrls: ['https://fixture.example'] } }
+  const availability = { ...catalogueAvailability(capabilityMatrix), categories: PUBLIC_RESEARCH_SOURCES.map(source => ({
+    key: source.key, selected: saved.settings.sources.includes(source.key), status: saved.settings.sources.includes(source.key) ? 'GATED' : 'NOT_SELECTED',
+    reason: saved.settings.sources.includes(source.key) ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' })),
+    researchStart: { eligible: true, mode } }
+  const view = render(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare
+    savedConfiguration={saved} availability={availability} startAvailable={false} />)
+  await user.click(screen.getByRole('button', { name: 'Configure research' }))
+  expect(screen.queryByText(/Available under the current operating release|Available for the registered offline fixture/)).not.toBeInTheDocument()
+  view.rerender(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare
+    savedConfiguration={saved} availability={availability} startAvailable />)
+  expect(screen.getAllByText(mode === 'LIVE' ? 'Available under the current operating release.' : 'Available for the registered offline fixture.')).toHaveLength(2)
+  await user.click(screen.getByRole('checkbox', { name: 'GitHub', exact: true }))
+  expect(screen.queryByText(/Available under the current operating release|Available for the registered offline fixture/)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
+  expect(screen.getAllByText(/Internal test capture only/)).toHaveLength(2)
+})
+
+it('preserves selected non-UK registry N/A despite a verified eligible whole-run descriptor', async () => {
+  const user = userEvent.setup(), settings = { ...initialResearchConfiguration(brief), startingUrls: ['https://fixture.example'],
+    sources: ['WEBSITE', 'REGISTRY'], countryCode: 'US' }
+  const saved = { configurationVersion: 'saved-registry', savedAt: '2026-11-23T10:00:00Z', settings }
+  const availability = { ...catalogueAvailability(capabilityMatrix), categories: PUBLIC_RESEARCH_SOURCES.map(source => ({
+    key: source.key, selected: settings.sources.includes(source.key), status: source.key === 'REGISTRY' ? 'NOT_APPLICABLE' : source.key === 'WEBSITE' ? 'GATED' : 'NOT_SELECTED',
+    reason: source.key === 'REGISTRY' ? 'UK_REGISTRY_NOT_APPLICABLE' : source.key === 'WEBSITE' ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' })),
+    researchStart: { eligible: true, mode: 'LIVE' } }
+  render(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare savedConfiguration={saved} availability={availability} startAvailable />)
+  await user.click(screen.getByRole('button', { name: 'Configure research' }))
+  expect(screen.getAllByText('Available under the current operating release.')).toHaveLength(1)
+  expect(screen.getByText(/Not applicable — The initial UK registry path does not apply/)).toBeVisible()
+})
 
 describe('saved research configuration', () => {
   it.each(['STANDARD', 'ENHANCED'])('inherits %s and derives purpose without creating or submitting a run', async profile => {

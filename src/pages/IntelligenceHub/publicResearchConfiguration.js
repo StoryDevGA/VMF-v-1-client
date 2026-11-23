@@ -100,6 +100,29 @@ export const researchDraftMatchesSaved = (draft, saved) => {
       .every(key => draft[key] === settings[key])
     && JSON.stringify(draft.sources) === JSON.stringify(settings.sources)
 }
+export const RESEARCH_CAPABILITY_LABELS = Object.freeze({
+  NATIVE_GATED: 'Implemented method · operating release required',
+  INTERNAL_FIXTURE_ONLY: 'Internal test capture only',
+  UNAVAILABLE: 'Retrieval unavailable',
+  SEPARATE_SPRINT: 'Separate registry work',
+})
+export const readResearchCapabilityMatrix = value => {
+  const exact = (row, fields) => row && !Array.isArray(row) && Object.keys(row).length === fields.length
+    && fields.every(key => Object.hasOwn(row, key))
+  const implementation = { WEBSITE: 'NATIVE_GATED', SEARCH: 'NATIVE_GATED', REGISTRY: 'SEPARATE_SPRINT',
+    GITHUB: 'INTERNAL_FIXTURE_ONLY', LINKEDIN: 'UNAVAILABLE', SOCIAL: 'UNAVAILABLE', NEWS: 'INTERNAL_FIXTURE_ONLY',
+    REVIEWS: 'UNAVAILABLE', INDUSTRY: 'UNAVAILABLE' }
+  if (!exact(value, ['contractVersion', 'categories']) || value.contractVersion !== 'public-research-capability-matrix.v1'
+    || !Array.isArray(value.categories) || value.categories.length !== PUBLIC_RESEARCH_SOURCES.length
+    || new Set(value.categories.map(row => row?.key)).size !== PUBLIC_RESEARCH_SOURCES.length) return null
+  for (const row of value.categories) {
+    if (!exact(row, ['key', 'implementation', 'method', 'limitation'])
+      || typeof row.key !== 'string' || !Object.hasOwn(implementation, row.key) || row.implementation !== implementation[row.key]
+      || ![['method', 120], ['limitation', 400]].every(([key, max]) => typeof row[key] === 'string'
+        && row[key].trim().length > 0 && row[key].length <= max)) return null
+  }
+  return value
+}
 export const readResearchAvailability = value => {
   const availability = value?.availability, record = value?.configuration
   const sameFields = (left, right, fields) => fields.every(key => left?.[key] === right?.[key])
@@ -108,6 +131,7 @@ export const readResearchAvailability = value => {
     || !['CONFIGURATION_NOT_RECORDED', 'REVISION_NOT_EDITABLE', 'CONFIGURATION_STALE', 'OPERATING_APPROVAL_NOT_RECORDED'].includes(availability.reason)
     || availability.configurationVersion !== (record?.configurationVersion || null)
     || availability.configurationHash !== (record?.configurationHash || null)
+    || Object.hasOwn(availability, 'capabilityMatrix') && !readResearchCapabilityMatrix(availability.capabilityMatrix)
     || !Array.isArray(availability.categories) || availability.categories.length !== PUBLIC_RESEARCH_SOURCES.length
     || new Set(availability.categories.map(item => item?.key)).size !== PUBLIC_RESEARCH_SOURCES.length) return null
   for (const category of availability.categories) {
