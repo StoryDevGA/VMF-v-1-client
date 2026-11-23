@@ -227,7 +227,20 @@ const queries = {
     } } }, isLoading: false }
   },
   }
-  return { useCancelAcquisitionRunMutation: () => [vi.fn()], useSaveResearchConfigurationMutation: () => [vi.fn()], useExecuteRuntimeActionMutation: () => [calls.execute],
+  return {
+  // Package behavior is verified in its dedicated panel suite; these route fixtures expose an unavailable package read.
+  // Neutral qualification is unavailable in these peer-route fixtures; its own suite verifies saves and receipts.
+  useGetEvidenceNeutralQualificationQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useGetEvidenceNeutralQualificationHistoryQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useSaveEvidenceNeutralQualificationMutation: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationReceiptQuery: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationRequestQuery: () => [vi.fn()],
+  useGetEvidencePackageQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useLazyGetEvidencePackageReceiptQuery: () => [vi.fn()],
+  useBatchReviewEvidenceMutation: () => [vi.fn()],
+  useFreezeEvidencePackageMutation: () => [vi.fn()],
+  useSaveEvidencePackageMutation: () => [vi.fn()],
+  useCancelAcquisitionRunMutation: () => [vi.fn()], useSaveResearchConfigurationMutation: () => [vi.fn()], useExecuteRuntimeActionMutation: () => [calls.execute],
   useAcceptRuntimeDiscoveryMutation: () => [vi.fn()],
   useGetAcquisitionRunsQuery: () => ({ refetch: vi.fn() }),
   useGetAcquisitionRunQuery: () => ({}),

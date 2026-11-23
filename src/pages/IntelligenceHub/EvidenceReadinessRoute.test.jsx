@@ -13,6 +13,23 @@ const readStore = configureStore({ reducer: () => ({ auth: { user: null } }) })
 const render = (ui, options) => renderWithDOM(ui, { wrapper: ({ children }) => <Provider store={readStore}>{children}</Provider>, ...options })
 vi.mock('../../hooks/useTenantContext.js', () => ({ useTenantContext: () => ({ customerId: 'customer', tenantId: 'tenant' }) }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  // Neutral qualification is unavailable in these peer-route fixtures; its own suite verifies saves and receipts.
+  useGetEvidenceNeutralQualificationQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useGetEvidenceNeutralQualificationHistoryQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useSaveEvidenceNeutralQualificationMutation: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationReceiptQuery: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationRequestQuery: () => [vi.fn()],
+
+  // Package behavior is verified in its dedicated panel suite; these route fixtures expose an unavailable package read.
+  // Existing Context research reads are explicitly unavailable in these non-research route fixtures.
+  useGetResearchConfigurationQuery: () => ({ error: { status: 503 }, refetch: state.refresh }),
+  useSaveResearchConfigurationMutation: () => [vi.fn()],
+  useCancelAcquisitionRunMutation: () => [vi.fn()],
+  useGetEvidencePackageQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useLazyGetEvidencePackageReceiptQuery: () => [vi.fn()],
+  useBatchReviewEvidenceMutation: () => [vi.fn()],
+  useFreezeEvidencePackageMutation: () => [vi.fn()],
+  useSaveEvidencePackageMutation: () => [vi.fn()],
   useGetRuntimePostLockOperationalCapabilityQuery: (_args, options) => ({ isUninitialized: options.skip, refetch: state.refresh }),
   useAcceptRuntimeDiscoveryMutation: () => [state.accept],
   useGetRuntimeStateFindingsQuery: (_args, options) => ({ isUninitialized: options.skip }),

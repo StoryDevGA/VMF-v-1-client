@@ -10,6 +10,7 @@ import { Textarea } from '../../components/Textarea'
 import ContradictionHistoryInspector from './ContradictionHistoryInspector.jsx'
 import { displayHubCount, displayHubToken, recordedEvidenceLocation } from './intelligenceHubModel.js'
 import SourceEvidenceDetails from './SourceEvidenceDetails.jsx'
+import NeutralQualificationPanel from './NeutralQualificationPanel.jsx'
 import { hasQualityControlCharacters } from './intelligenceQualityModel.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 
@@ -23,7 +24,7 @@ const status = row => row.kind === 'evidence' ? row.item.reviewStatus === 'PENDI
 
 export default function ReviewView({ scope, stateVersion, canInspect, locked = false, completion, evidencePage, isLoading, error,
   evidenceStatusCounts, countsLoading, onOpenSource, onSelectView, page, filter, onFilterChange, query, onSearch,
-  actions, findings, findingsLoading, pagination, focused, onReturn, onRefresh, refreshing }) {
+  actions, findings, findingsLoading, pagination, focused, onReturn, onRefresh, refreshing, onQualificationRecorded }) {
   const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
   const [draftState, setDraftState] = useState({ query, draft: query })
   if (draftState.query !== query) setDraftState({ query, draft: query })
@@ -58,6 +59,7 @@ export default function ReviewView({ scope, stateVersion, canInspect, locked = f
   const currentDraft = decisionDraft.owner === inspectionKey ? decisionDraft : { choice: '', rationale: '' }
   const validRationale = currentDraft.rationale.trim().length >= 10 && currentDraft.rationale.length <= 2000
     && !hasQualityControlCharacters(currentDraft.rationale)
+  const validEvidenceRationale = validRationale || inspection?.kind === 'accept' && !currentDraft.rationale.trim()
   const canPreviewQuality = selected?.kind === 'quality' && !locked && SUPPORTED_DISPOSITIONS.includes(currentDraft.choice)
     && currentDraft.rationale.trim().length >= 10 && currentDraft.rationale.length <= 2000 && !hasQualityControlCharacters(currentDraft.rationale)
   useLayoutEffect(() => {
@@ -96,7 +98,7 @@ export default function ReviewView({ scope, stateVersion, canInspect, locked = f
   const confirmEvidence = () => {
     const decision = visibleInspection?.kind === 'accept' ? 'ACCEPTED' : visibleInspection?.kind === 'reject' ? 'REJECTED' : null
     if (!owned() || !available || locked || !decision || selected?.kind !== 'evidence' || !actions?.canReviewEvidence || actions.busy
-      || !validRationale || selected.item.reviewStatus === decision || decisionAttempt.current === visibleInspection) return
+      || !validEvidenceRationale || selected.item.reviewStatus === decision || decisionAttempt.current === visibleInspection) return
     decisionAttempt.current = visibleInspection
     close()
     actions.decideEvidence(selected.id, decision, currentDraft.rationale.trim())
@@ -171,13 +173,16 @@ export default function ReviewView({ scope, stateVersion, canInspect, locked = f
       <Dialog.Body>{visibleInspection.kind === 'history' ? history : ['accept','reject','quality-decision'].includes(visibleInspection.kind) ? <><strong>{title}</strong>
         <p>{visibleInspection.kind === 'quality-decision' ? `${DISPOSITIONS.find(([value])=>value===currentDraft.choice)?.[1] || 'Preview unavailable'} · Quality disposition only; no evidence status change.` : visibleInspection.kind === 'accept' ? 'Accept evidence · Evidence decision only.' : 'Reject evidence · Evidence decision only.'}</p>
         {visibleInspection.kind === 'quality-decision' ? <><p>{currentDraft.rationale}</p><p>This local preview cannot record a Quality decision. Inspect the current governed basis to record it; the draft remains here.</p></> : <p>This records an evidence decision only. It does not verify the source, resolve Quality findings, complete review or authorise publication.</p>}
-        {visibleInspection.kind !== 'quality-decision' ? <Textarea label="Decision rationale" size="sm" rows={3} fullWidth required
+        {visibleInspection.kind !== 'quality-decision' ? <Textarea label="Decision rationale" size="sm" rows={3} fullWidth required={visibleInspection.kind === 'reject'}
           value={currentDraft.rationale} maxLength={2000} disabled={locked || actions?.busy}
-          helperText="Explain the decision in 10–2000 characters. Acceptance does not independently verify the source."
+          helperText={visibleInspection.kind === 'accept' ? 'Acceptance note is optional; supplied notes use 10–2000 characters. Acceptance does not independently verify the source.' : 'Explain the rejection in 10–2000 characters.'}
           onChange={event => { if (owned() && !locked) setDecisionDraft({ owner: inspectionKey, ...currentDraft, rationale: event.target.value }) }} /> : null}
-        <div className="intelligence-hub__review-confirm-actions">{visibleInspection.kind === 'quality-decision' ? <><Button size="sm" disabled>Confirm decision</Button><Button size="sm" variant="outline" onClick={() => navigate('Intelligence Quality', { findingId: selected.id })}>Open governed Quality<FiArrowRight size={14} aria-hidden="true" /></Button></> : <Button size="sm" disabled={locked || !actions?.canReviewEvidence || actions?.busy || !validRationale} onClick={confirmEvidence}>{visibleInspection.kind === 'accept' ? 'Confirm acceptance' : 'Confirm rejection'}</Button>}<Button size="sm" variant="outline" onClick={close}>Cancel</Button></div>
+        <div className="intelligence-hub__review-confirm-actions">{visibleInspection.kind === 'quality-decision' ? <><Button size="sm" disabled>Confirm decision</Button><Button size="sm" variant="outline" onClick={() => navigate('Intelligence Quality', { findingId: selected.id })}>Open governed Quality<FiArrowRight size={14} aria-hidden="true" /></Button></> : <Button size="sm" disabled={locked || !actions?.canReviewEvidence || actions?.busy || !validEvidenceRationale} onClick={confirmEvidence}>{visibleInspection.kind === 'accept' ? 'Confirm acceptance' : 'Confirm rejection'}</Button>}<Button size="sm" variant="outline" onClick={close}>Cancel</Button></div>
         {technical}</> : <><strong>{source ? sourceLabel(source) : title}</strong><p>{recordedEvidenceLocation(selected.item, source, stateVersion)} · Current recorded basis</p><p>{selected.kind === 'evidence' ? fact(selected.item) : selected.item.basis || 'Recorded contradiction basis unavailable'}</p>
         {selected.kind === 'evidence' ? <SourceEvidenceDetails source={source} item={selected.item} stateVersion={stateVersion} /> : null}
+        {visibleInspection.kind === 'detail' && selected.kind === 'evidence' && source?.sourceId === selected.item.sourceId
+          ? <NeutralQualificationPanel scope={scope} evidenceObjectId={selected.item.evidenceObjectId} sourceId={selected.item.sourceId}
+            stateVersion={stateVersion} locked={locked} canInspect={canInspect} ownsIntent={owned} onRecorded={onQualificationRecorded} /> : null}
         <h3>Classification</h3><p>Not assessed; acceptance does not mean independently verified.</p><h3>Finding types</h3><p>Contradiction, Missing coverage, Weak confidence, Duplicate source are distinct populations. Only bounded detected contradictions are supplied here.</p>
         <h3>Explanation and required action</h3><p>{explanation}</p><h3>Permission and history</h3><p>{actions?.canReviewEvidence ? 'Current evidence decision authority is available.' : 'Current evidence decision authority is unavailable.'} Quality and completion have separate authority.</p>
         <Button size="sm" variant="outline" onClick={() => { if (owned()) setInspection({ kind: 'history', owner: inspectionKey }) }}>Inspect this item's history</Button>

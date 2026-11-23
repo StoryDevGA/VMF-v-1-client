@@ -31,3 +31,8 @@ Recorded lock snapshot describes persisted metadata, rather than a verified succ
 The back footer opens [Review](intelligence-hub-review.md). The forward footer opens [Readiness & publish](intelligence-hub-readiness-publish.md). Both retain the selected revision, including locked and unavailable states. Expanded diagnostics are inspection only.
 
 Resolve the displayed current reason before continuing. A Review Completion receipt, source snapshot receipt or target-readiness assessment cannot be inferred from a green count.
+
+
+## Saved packages and section support
+
+A reviewed, frozen package is separate from the workspace lock snapshot and selected-target sufficiency. Its saved receipt preserves membership and qualifications; it does not establish those later gates. Explicitly unassigned evidence can retain provenance while providing no section support. Missing, stale or unavailable proof must stay visible. See [Review](intelligence-hub-review.md) for package save/reopen and [Sources](intelligence-hub-sources.md) for exact support and qualification limits.

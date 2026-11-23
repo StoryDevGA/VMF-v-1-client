@@ -12,6 +12,12 @@ Matching sources describes the current search population. Whole-revision sources
 
 ## Inspect and review
 
+The **Qualified evidence package** inspection uses the same source/evidence registry. It is not another public-research queue. Open a package preview or reopen the saved package, expand an evidence entry in its qualification ledger and choose **Open exact source and evidence** to inspect that precise source/evidence pair.
+
+Each accepted package item retains publisher/locator, retrieval and currentness, exact excerpt and UTF-16 span, content/source hashes, certainty, scope, qualifications, permitted/prohibited interpretation, unknowns and derivation where recorded. **Not recorded** and explicit unknowns are information gaps; acceptance never fills them by inference. Coordinates refer to normalized extracted text, not original page coordinates.
+
+The package Evidence Register and Validated Customer Baseline link to the same frozen membership and qualification ledger. Observations, patterns, hypotheses, contradictions and unknowns retain their supporting evidence links. The package preserves attribution and limitations; it does not approve stronger claims, change customer truth, lock the workspace or publish an output. Recorded packages can become historical after a later basis change and remain inspectable without being represented as current.
+
 Select a source, inspect its evidence statement and provenance, then follow the exact evidence handoff to Review. Accepted, Rejected and Needs Review describe evidence decisions. Acceptance does not establish independent verification, confidence, quality resolution or snapshot sufficiency.
 
 An evidence title is a display label. When no title is recorded, the heading says Evidence object. The current read does not supply governed evidence classifications or domain assignments, so these remain explicitly unavailable even when a title exists. Titles, acceptance and validation states do not substitute for those contracts.
@@ -22,11 +28,25 @@ Exact source and evidence identities are kept in the link so Back and reload can
 
 Source and evidence reads must match the current selected revision version and session before record inspection or Review handoff. During a failed or refreshing read, previous records are withheld. Invalid or repeated query fields offer Reset Sources query; an old selection cannot navigate after the revision, session or read basis changes. Search and Retry source reads remain available for recovery within the current verified scope.
 
+## Record an evidence qualification
+
+Open **Recorded text and Review** for an exact evidence object. **Evidence qualification** records your scope, currentness, time, historical context, attribution, permitted statement and interpretation, prohibited interpretation and limitations. Leave a field blank for **Not recorded**. Words such as Unknown or Historical are kept as you wrote them; the application does not invent missing facts, confidence or authenticity.
+
+Choose **Edit qualification**, then **Save qualifications**. The note is optional. **Cancel qualification edit** discards only the unsaved draft. Saving requires update permission and an editable revision. The saved record is reread before success is reported. **Recorded qualification history** lets you reopen an exact earlier record with its recorded author and time. A history read that fails is unavailable, not an empty history.
+
+**Matches current source and evidence** describes whether the recorded binding still matches the material; it does not certify your currentness statement. A source or evidence change can make that binding stale. Earlier records remain inspectable. Qualification does not accept evidence, verify the source, map it to a section, admit it to a package or authorise generation.
+
+If a save is unconfirmed, further saves are blocked. **Recover original request** reads the original request identity without sending another save. A missing or unavailable receipt remains unresolved. **Refresh qualification reads** refreshes the selected scope; closing an inspection does not undo a record that was committed.
+
+The saved neutral qualification and its receipt remain separate from any specialised draft-placement qualification. A historical or stale record is not silently treated as current. Recorded extraction confidence is not a statement of certainty.
+
 ## Recorded capture and exact support
 
 Source details shows a recorded capture receipt when it is supplied and consistent with the current read. Recorded text and Review opens the selected evidence object's supporting excerpt and provenance. Inspect the source identity, capture time, extraction method and any recorded Capture Run and Capture Attempt. A non-run capture can have no Run or Attempt recorded; do not infer another execution identity from that absence. Capture receipts and document-processing receipts describe different operations.
 
 Original content hash identifies the recorded input version. For website captures, it is calculated from the complete decoded response text; it does not identify the original transferred bytes. Extracted-text hash identifies the normalized text used for the supporting excerpt. Its span uses UTF-16 code units with an exclusive end: [start, end) includes the start and stops before the end. These coordinates are not original HTML positions, PDF pages or original-file locations. The exact recorded excerpt, excerpt hash and source binding keep support attached to its own source, even when another source contains the same words.
+
+Where separately retained for a new supported input, original bytes have their own byte hash and retention-policy binding. That byte hash is distinct from the website capture hash and normalized-text hash above. A missing historical original remains unavailable; it is not reconstructed from an excerpt. This inspection does not promise an original-file download or a Production retention policy.
 
 Recorded capture and support do not establish source authenticity, independent verification, evidence acceptance or frozen membership. Source assertions remain qualified statements awaiting their separate review decisions. If a receipt or supporting span is missing, stale or inconsistent with the selected source and revision, inspection explains that it is unavailable; it does not invent a location or substitute another source. A changed or unavailable read closes the previous inspection rather than keeping old details current.
 

@@ -604,6 +604,29 @@ export const buildReviewCompletionQuery = ({ runtimeInstanceId, customerId, tena
   appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/review-completion`, { customerId, tenantId })
 export const buildCompleteReviewQuery = ({ body, ...scope }) => ({ url: buildReviewCompletionQuery(scope), method: 'POST', body })
 
+const evidencePackagePath = runtimeInstanceId => `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/evidence-package`
+const neutralQualificationPath = ({ runtimeInstanceId, evidenceObjectId }) => `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-evidence/${encodeURIComponent(String(evidenceObjectId ?? '').trim())}/neutral-qualification`
+export const buildEvidenceNeutralQualificationQuery = scope => appendRuntimeStateScope(neutralQualificationPath(scope), scope)
+export const buildSaveEvidenceNeutralQualificationQuery = ({ body, ...scope }) => ({ url: buildEvidenceNeutralQualificationQuery(scope), method: 'PATCH', body })
+export const buildEvidenceNeutralQualificationReceiptQuery = ({ receiptId, ...scope }) => appendRuntimeStateScope(`${neutralQualificationPath(scope)}/receipts/${encodeURIComponent(String(receiptId ?? '').trim())}`, scope)
+export const buildEvidenceNeutralQualificationRequestQuery = ({ requestKey, ...scope }) => appendRuntimeStateScope(`${neutralQualificationPath(scope)}/requests/${encodeURIComponent(String(requestKey ?? '').trim())}`, scope)
+export const buildEvidenceNeutralQualificationHistoryQuery = ({ limit = 5, cursor, ...scope }) => {
+  const base = appendRuntimeStateScope(`${neutralQualificationPath(scope)}/history`, scope)
+  return `${base}${base.includes('?') ? '&' : '?'}limit=${encodeURIComponent(limit)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+}
+export const buildEvidencePackageQuery = ({ runtimeInstanceId, customerId, tenantId }) =>
+  appendRuntimeStateScope(evidencePackagePath(runtimeInstanceId), { customerId, tenantId })
+export const buildBatchReviewEvidenceQuery = ({ body, runtimeInstanceId, customerId, tenantId }) => ({
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-evidence/batch-review`, { customerId, tenantId }),
+  method: 'POST', body,
+})
+export const buildFreezeEvidencePackageQuery = ({ body, runtimeInstanceId, customerId, tenantId }) => ({
+  url: appendRuntimeStateScope(`${evidencePackagePath(runtimeInstanceId)}/freeze`, { customerId, tenantId }), method: 'POST', body,
+})
+export const buildSaveEvidencePackageQuery = ({ body, ...scope }) => ({ url: buildEvidencePackageQuery(scope), method: 'POST', body })
+export const buildEvidencePackageReceiptQuery = ({ receiptId, runtimeInstanceId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`${evidencePackagePath(runtimeInstanceId)}/${encodeURIComponent(String(receiptId ?? '').trim())}`, { customerId, tenantId })
+
 export const buildReviewRuntimeDiscoveryContradictionQuery = ({ runtimeInstanceId, contradictionId, body }) => ({
   url: `${buildRuntimeDiscoveryContradictionsQuery({ runtimeInstanceId })}/${encodeURIComponent(String(contradictionId ?? '').trim())}/review`,
   method: 'PATCH',
@@ -1152,6 +1175,19 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
       providesTags: getRuntimeRendererTags,
     }),
+    getEvidencePackage: build.query({ query: buildEvidencePackageQuery, providesTags: getRuntimeRendererTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    getEvidenceNeutralQualification: build.query({ query: buildEvidenceNeutralQualificationQuery, providesTags: getRuntimeRendererTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    getEvidenceNeutralQualificationReceipt: build.query({ query: buildEvidenceNeutralQualificationReceiptQuery, providesTags: getRuntimeRendererTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    getEvidenceNeutralQualificationRequest: build.query({ query: buildEvidenceNeutralQualificationRequestQuery, providesTags: getRuntimeRendererTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    getEvidenceNeutralQualificationHistory: build.query({ query: buildEvidenceNeutralQualificationHistoryQuery, providesTags: getRuntimeRendererTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    // The inspection verifies its exact receipt/current/history readback before
+    // explicitly refreshing related workspace reads. Early invalidation would
+    // unmount that inspection during its own save.
+    saveEvidenceNeutralQualification: build.mutation({ query: buildSaveEvidenceNeutralQualificationQuery, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    getEvidencePackageReceipt: build.query({ query: buildEvidencePackageReceiptQuery, providesTags: getRuntimeRendererTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    batchReviewEvidence: build.mutation({ query: buildBatchReviewEvidenceQuery, invalidatesTags: getMutateRuntimeStateInvalidationTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    freezeEvidencePackage: build.mutation({ query: buildFreezeEvidencePackageQuery, invalidatesTags: getMutateRuntimeStateInvalidationTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    saveEvidencePackage: build.mutation({ query: buildSaveEvidencePackageQuery, invalidatesTags: getMutateRuntimeStateInvalidationTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
     completeReview: build.mutation({
       query: buildCompleteReviewQuery,
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
@@ -1287,6 +1323,16 @@ export const {
   useRecordRuntimeSourceVerificationMutation,
   useGetRuntimeDiscoveryContradictionsQuery,
   useGetReviewCompletionQuery,
+  useGetEvidencePackageQuery,
+  useGetEvidenceNeutralQualificationQuery,
+  useSaveEvidenceNeutralQualificationMutation,
+  useLazyGetEvidenceNeutralQualificationReceiptQuery,
+  useLazyGetEvidenceNeutralQualificationRequestQuery,
+  useGetEvidenceNeutralQualificationHistoryQuery,
+  useLazyGetEvidencePackageReceiptQuery,
+  useBatchReviewEvidenceMutation,
+  useFreezeEvidencePackageMutation,
+  useSaveEvidencePackageMutation,
   useCompleteReviewMutation,
   useReviewRuntimeDiscoveryContradictionMutation,
   useReviewRuntimeSectionEvidenceMutation,

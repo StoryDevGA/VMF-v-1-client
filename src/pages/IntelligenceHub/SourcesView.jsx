@@ -12,6 +12,7 @@ import SourceEvidenceDetails from './SourceEvidenceDetails.jsx'
 import { sourceProcessingLabel, sourceProcessingExplanation } from './sourceSummaryModel.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import SourceVerificationForm from './SourceVerificationForm.jsx'
+import NeutralQualificationPanel from './NeutralQualificationPanel.jsx'
 
 const STATE_KEYS = ['sourceQuery', 'sourceType', 'sourcePage', 'sourceId', 'evidenceObjectId', 'evidencePage', 'sourceEvidencePage', 'sourceContext']
 const label = source => source?.label || source?.sourceRef || source?.sourceId || 'Source unavailable'
@@ -213,6 +214,19 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
       }).map(([term,value])=><div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
       <p>{evidenceInspection ? 'The fragment is preserved as recorded, not rewritten as a complete or verified assertion.' : 'Extracted evidence is retained. Unavailable processing provenance is not a failed extraction.'}</p>
       <SourceEvidenceDetails source={source} item={evidenceInspection ? item : undefined} stateVersion={stateVersion} />
+      {evidenceInspection && source?.sourceId === item.sourceId ? <NeutralQualificationPanel
+        scope={{ runtimeInstanceId: revisionId, customerId, tenantId }} evidenceObjectId={item.evidenceObjectId}
+        sourceId={item.sourceId} stateVersion={stateVersion} locked={locked}
+        ownsIntent={() => inspectionNavigation.current?.ownerKey === inspectionOwnerKey
+          && inspectionNavigation.current.selected?.sourceId === item.sourceId && inspectionNavigation.current.currentFrame()}
+        onRecorded={async () => {
+          const ownsRead = () => verificationFrame.current?.key === verificationOwnerKey && verificationFrame.current.active
+            && verificationFrame.current.canRead && getSessionRevision() === sessionRevision
+          if (!ownsRead()) return false
+          const reads = await Promise.allSettled([registryRead.refetch(), exactRead.refetch(), evidenceRead.refetch()])
+          if (!ownsRead() || reads.some(read => read.status !== 'fulfilled' || !read.value || read.value.error)) return false
+          return onSourceReviewed ? onSourceReviewed() : true
+        }} /> : null}
       <details className="intelligence-hub__source-technical"><summary>Technical basis</summary><dl className="intelligence-hub__inspection-facts">{Object.entries({
         'Source ID':source?.sourceId || 'Unavailable',Reference:source?.sourceRef || 'Unavailable',
         'Source lineage':source?.lineageRef || 'Unavailable','State version':source?.stateVersion || 'Unavailable',

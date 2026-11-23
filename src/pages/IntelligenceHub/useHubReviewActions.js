@@ -44,7 +44,8 @@ export default function useHubReviewActions({ authority, runtimeInstanceId, cont
     if (!owned() || frame.current.authority !== authority || frame.current.blocked || !enabled || inFlight.current || !item?.id
       || typeof rationale !== 'string'
       || kind === 'evidence' && (!authority.canReviewEvidence || !['ACCEPTED', 'REJECTED'].includes(decision)
-        || rationale.trim().length < 10 || rationale.trim().length > 2000)
+        || decision === 'REJECTED' && rationale.trim().length < 10
+        || rationale.trim() && rationale.trim().length < 10 || rationale.trim().length > 2000)
       || kind === 'finding' && (!authority.canReview || !['NOT_CONTRADICTORY', 'CONFIRMED', 'REOPENED'].includes(decision)
         || !/^sha256:[a-f0-9]{64}$/.test(item.evidencePairHash || '') || rationale.trim().length < 10 || rationale.trim().length > 2000)) return false
     inFlight.current = true
@@ -53,7 +54,8 @@ export default function useHubReviewActions({ authority, runtimeInstanceId, cont
       const body = { expectedUpdatedAt: authority.runtimeUpdatedAt }
       let receipt = null
       if (kind === 'evidence') {
-        await reviewEvidence({ runtimeInstanceId, evidenceObjectId: item.id, body: { ...body, reviewStatus: decision, rationale: rationale.trim() } }).unwrap()
+        await reviewEvidence({ runtimeInstanceId, evidenceObjectId: item.id, body: { ...body, reviewStatus: decision,
+          ...(rationale.trim() ? { rationale: rationale.trim() } : {}) } }).unwrap()
       } else {
         const signature = JSON.stringify([contextKey, runtimeInstanceId, authority.control.id, sessionRevision, item.id, item.evidencePairHash, decision, rationale.trim()])
         if (attempt.current?.signature !== signature) attempt.current = { signature, id: item.id, runtimeId: authority.control.id, stateVersion: authority.control.stateVersion, body: {

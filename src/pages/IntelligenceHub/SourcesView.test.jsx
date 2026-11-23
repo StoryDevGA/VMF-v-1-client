@@ -28,6 +28,13 @@ const control = { id: 'revision-2', runtimeInstanceKey: 'revision-2', customerId
 const source = { sourceId: 'source-off-page', label: 'Stored website', sourceType: 'WEBSITE', evidenceObjectCount: 853, acquisitionStatus: 'ACQUIRED' }
 const object = { evidenceObjectId: 'evidence-off-page', sourceId: source.sourceId, extractedFact: 'Evidence only needle', reviewStatus: 'PENDING' }
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  // Neutral qualification is unavailable in these peer-route fixtures; its own suite verifies saves and receipts.
+  useGetEvidenceNeutralQualificationQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useGetEvidenceNeutralQualificationHistoryQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useSaveEvidenceNeutralQualificationMutation: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationReceiptQuery: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationRequestQuery: () => [vi.fn()],
+
   useRecordRuntimeSourceVerificationMutation: () => [calls.record],
   useGetRuntimeStateSourcesQuery: (query, options) => {
     calls.sources(query, options)
@@ -322,6 +329,15 @@ it('shows exact recorded evidence text and hands its pair to Review from inspect
   expect(within(inspection.container).getByText(object.extractedFact)).toBeInTheDocument()
   await user.click(within(inspection.container).getByRole('button', { name: 'Inspect in Review' }))
   expect(calls.selectView).toHaveBeenCalledWith('Review', undefined, { sourceId: object.sourceId, evidenceObjectId: object.evidenceObjectId })
+  expect(calls.record).not.toHaveBeenCalled()
+})
+it('places neutral qualification only in exact evidence inspection and reports unavailable reads honestly', async () => {
+  show('&sourceId=source-off-page')
+  fireEvent.click(screen.getByRole('button', { name: 'Inspect recorded lineage · Stored website' }))
+  const inspection = render(calls.open.mock.calls.at(-1)[0].body)
+  const panel = within(inspection.container).getByRole('region', { name: 'Neutral evidence qualification' })
+  expect(within(panel).getByText(/Current qualification is unavailable/)).toBeVisible()
+  expect(within(panel).queryByRole('button', { name: 'Edit qualification' })).not.toBeInTheDocument()
   expect(calls.record).not.toHaveBeenCalled()
 })
 it('keeps inspection Review navigation live when opening the dialog rerenders its parent', async () => {

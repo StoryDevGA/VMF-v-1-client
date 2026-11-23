@@ -13,7 +13,14 @@ vi.mock('../../components/Button', async original => {
     return <actual.Button {...props} />
   } }
 })
-vi.mock('../../store/api/runtimeInstanceApi.js', () => ({ useGetRuntimeStateContradictionHistoryQuery: () => ({error:{status:503},refetch:vi.fn()}) }))
+vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  // Neutral qualification is unavailable in these peer-route fixtures; its own suite verifies saves and receipts.
+  useGetEvidenceNeutralQualificationQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useGetEvidenceNeutralQualificationHistoryQuery: () => ({ error: { status: 503 }, refetch: vi.fn() }),
+  useSaveEvidenceNeutralQualificationMutation: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationReceiptQuery: () => [vi.fn()],
+  useLazyGetEvidenceNeutralQualificationRequestQuery: () => [vi.fn()],
+ useGetRuntimeStateContradictionHistoryQuery: () => ({error:{status:503},refetch:vi.fn()}) }))
 vi.mock('./ContradictionHistoryInspector.jsx', async original => {
   const ActualInspector=(await original()).default
   return {default:props=>calls.realHistory ? <ActualInspector {...props} /> : <button disabled={props.disabled}>View recorded decisions</button>}
@@ -23,11 +30,20 @@ const evidence = { evidenceObjectId: 'evidence-1', sourceId: 'source-1', extract
 const finding = { id: 'contradiction-1', type: 'Contradiction', domain: 'Company', basis: 'Two recorded statements disagree.', status: 'UNREVIEWED', evidence: [evidence], evidencePairHash: `sha256:${'a'.repeat(64)}` }
 const base = { scope, stateVersion: 'current-version', canInspect: true, evidencePage: { evidenceObjects: [evidence], sourceRegistry: [{ sourceId: 'source-1', label: 'Customer interview' }] }, isLoading: false, evidenceStatusCounts: { accepted: 1, pending: 0 }, filter: 'All', page: 1, query: '', actions: { canReviewEvidence: true, decideEvidence: calls.decide }, findings: [finding], onSelectView: calls.navigate, onOpenSource: calls.source, onFilterChange: calls.filter, onSearch: calls.search, onRefresh: calls.refresh }
 
-it('requires a reason, retains the same-item cancelled draft and sends the exact reason once', async () => {
+it('embeds neutral qualification in Detailed inspection without recording an evidence decision', () => {
+  show({ findings: [] })
+  fireEvent.click(screen.getByRole('button', { name: 'Detailed inspection' }))
+  const dialog = screen.getByRole('dialog', { name: 'Contextual inspection' })
+  expect(within(dialog).getByRole('region', { name: 'Neutral evidence qualification' })).toBeVisible()
+  expect(within(dialog).getByText(/Current qualification is unavailable/)).toBeVisible()
+  expect(calls.decide).not.toHaveBeenCalled()
+})
+
+it('accepts an optional note, retains the same-item cancelled draft and sends the exact supplied note once', async () => {
   const pending = { ...evidence, reviewStatus: 'PENDING' }
   show({ findings: [], evidencePage: { ...base.evidencePage, evidenceObjects: [pending] } })
   fireEvent.click(screen.getByRole('button', { name: 'Accept evidence' }))
-  expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeEnabled()
   fireEvent.change(screen.getByRole('textbox', { name: 'Decision rationale' }), { target: { value: 'short' } })
   expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeDisabled()
   const rationale = 'Accepted as a supported first-party source assertion, not independent verification.'
@@ -62,7 +78,17 @@ it('does not carry an earlier evidence rationale into another selected item', ()
   fireEvent.click(within(screen.getByRole('region', { name: 'Evidence candidate queue' })).getByRole('button', { name: /Another exact source assertion/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Accept evidence' }))
   expect(screen.getByRole('textbox', { name: 'Decision rationale' })).toHaveValue('')
-  expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Confirm acceptance' })).toBeEnabled()
+})
+
+it('allows acceptance without a note but requires a written rejection rationale', () => {
+  show({ findings: [], evidencePage: { ...base.evidencePage, evidenceObjects: [{ ...evidence, reviewStatus: 'PENDING' }] } })
+  fireEvent.click(screen.getByRole('button', { name: 'Accept evidence' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm acceptance' }))
+  expect(calls.decide).toHaveBeenCalledWith('evidence-1', 'ACCEPTED', '')
+  fireEvent.click(screen.getByRole('button', { name: 'Reject evidence' }))
+  expect(screen.getByRole('textbox', { name: 'Decision rationale' })).toBeRequired()
+  expect(screen.getByRole('button', { name: 'Confirm rejection' })).toBeDisabled()
 })
 beforeEach(() => { vi.clearAllMocks(); calls.session = 1; calls.realHistory=false; calls.handlers = {} })
 const show = changes => render(<ReviewView {...base} {...changes} />)

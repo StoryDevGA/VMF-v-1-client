@@ -47,6 +47,13 @@ describe('scoped Review authority', () => {
   ])('denies unavailable, locked or mismatched basis %j', change => { expect(read(change)).toBeNull() })
 })
 describe('governed decision wiring', () => {
+  it('omits an empty acceptance note but refuses rejection without a written rationale', async () => {
+    const { result } = renderHook(() => useHubReviewActions(props()))
+    await act(async () => { expect(await result.current.decideEvidence('evidence', 'REJECTED', '')).toBe(false) })
+    expect(mutations.evidence).not.toHaveBeenCalled()
+    await act(async () => { expect(await result.current.decideEvidence('evidence', 'ACCEPTED', '')).toBe(true) })
+    expect(mutations.evidence.mock.calls[0][0].body).toEqual({ expectedUpdatedAt: stamp, reviewStatus: 'ACCEPTED' })
+  })
   it.each(['requestKey', 'requestPayloadHash', 'runtimeInstanceId', 'contradictionId', 'evidencePairHash', 'disposition', 'rationale', 'requestExpectedUpdatedAt', 'reviewedBy', 'contractVersion'])('rejects receipt mismatch in %s', async field => {
     const command = { contradictionId: 'finding', body: { expectedUpdatedAt: stamp, expectedEvidencePairHash: hash,
       disposition: 'CONFIRMED', rationale: 'A recorded human rationale.', confirm: true, requestKey: webcrypto.randomUUID() } }
@@ -74,7 +81,12 @@ describe('governed decision wiring', () => {
     expect(config.refresh).toHaveBeenCalledOnce()
     expect(result.current.feedback.message).toContain('Current reads refreshed')
   })
-  it.each([undefined, '', 'short', 'x'.repeat(2001)])('refuses an absent or out-of-bounds evidence rationale', async rationale => {
+  it.each([undefined, '', 'short', 'x'.repeat(2001)])('refuses an absent or out-of-bounds rejection rationale', async rationale => {
+    const { result } = renderHook(() => useHubReviewActions(props()))
+    await act(async () => { expect(await result.current.decideEvidence('exact-item', 'REJECTED', rationale)).toBe(false) })
+    expect(mutations.evidence).not.toHaveBeenCalled()
+  })
+  it.each(['short', 'x'.repeat(2001)])('refuses a supplied out-of-bounds acceptance note', async rationale => {
     const { result } = renderHook(() => useHubReviewActions(props()))
     await act(async () => { expect(await result.current.decideEvidence('exact-item', 'ACCEPTED', rationale)).toBe(false) })
     expect(mutations.evidence).not.toHaveBeenCalled()
