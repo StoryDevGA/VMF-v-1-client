@@ -57,6 +57,64 @@ export const getRecordedSourceCapture = (source, stateVersion) => {
   return capture
 }
 
+// Recorded references/capture descriptors contain plain objects and scalar JSON
+// values. Compare their values, independent of storage/projection key order.
+const sameRecordedValue = (left, right, seen = new WeakSet(), depth = 0) => {
+  if (depth > 16 || typeof left !== typeof right) return false
+  if (left === null || right === null) return left === right
+  if (['string', 'boolean', 'number'].includes(typeof left))
+    return (typeof left !== 'number' || Number.isFinite(left)) && left === right
+  if (typeof left !== 'object' || Array.isArray(left) || Array.isArray(right)
+    || ![Object.prototype, null].includes(Object.getPrototypeOf(left))
+    || ![Object.prototype, null].includes(Object.getPrototypeOf(right))
+    || Object.getOwnPropertySymbols(left).length || Object.getOwnPropertySymbols(right).length
+    || seen.has(left) || seen.has(right)) return false
+  const leftFields = Object.getOwnPropertyDescriptors(left), rightFields = Object.getOwnPropertyDescriptors(right)
+  const keys = Object.keys(leftFields)
+  if (keys.length !== Object.keys(rightFields).length) return false
+  seen.add(left); seen.add(right)
+  try {
+    return keys.every(key => !['__proto__', 'constructor', 'prototype'].includes(key)
+      && Object.hasOwn(rightFields, key) && leftFields[key].enumerable && rightFields[key].enumerable
+      && Object.hasOwn(leftFields[key], 'value') && Object.hasOwn(rightFields[key], 'value')
+      && sameRecordedValue(leftFields[key].value, rightFields[key].value, seen, depth + 1))
+  } finally { seen.delete(left); seen.delete(right) }
+}
+
+export const getRecordedNativeOriginal = (source, scope) => {
+  const capture = getRecordedSourceCapture(source, scope?.stateVersion), ref = source?.originalContentRef
+  const binding = ref?.binding, native = ref?.policy?.nativeResearch, grant = native?.grant
+  if (!capture || !scope?.customerId || !scope?.tenantId || !scope?.runtimeInstanceId
+    || ref?.contractVersion !== 'evidence-original-reference.v1' || ref.inputKind !== 'PUBLIC_URL'
+    || !/^original_[a-f0-9]{64}$/.test(ref.originalId || '') || !sourceEvidenceHash(ref.byteHash)
+    || !Number.isSafeInteger(ref.byteLength) || ref.byteLength < 1 || ref.byteLength > 320000
+    || binding?.customerId !== scope.customerId || binding.tenantId !== scope.tenantId
+    || ![binding.runtimeInstanceId, binding.runtimeInstanceKey].includes(scope.runtimeInstanceId)
+    || binding.sourceId !== source.sourceId || binding.sourceContentHash !== capture.originalContentHash
+    || binding.sourceLocator !== (source.sourceRef || source.url) || ref.policy.policyId !== 'FS-006'
+    || ref.policy.policyVersion !== '0.2' || ref.policy.retentionDays !== 30
+    || ref.policy.effectiveEnvironment !== 'DEVELOPMENT_TEST' || !sourceEvidenceHash(ref.policy.policyHash)
+    || grant?.kind !== 'PUBLISHER_TERMS' || grant.decision !== 'ALLOWED' || grant.legalStatus !== 'CONFIRMED'
+    || !grant.retentionAllowed || grant.url !== binding.sourceLocator
+    || grant.scope?.customerId !== scope.customerId || grant.scope?.tenantId !== scope.tenantId
+    || !grant.attribution?.statement || !grant.attribution?.publisher
+    || !sameRecordedValue(native.capture, capture)) return null
+  try {
+    const url = new URL(grant.attribution.licenceUrl)
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) return null
+  } catch { return null }
+  return ref
+}
+
+export const getRecordedOriginalRead = (response, source, scope) => {
+  const ref = getRecordedNativeOriginal(source, scope), data = getHubPayload(response)
+  if (!ref || data?.availability !== 'AVAILABLE_DEV_TEST' || data.observedStateVersion !== scope.stateVersion
+    || !sameRecordedValue(data.originalContentRef, ref)
+    || !/^[a-f0-9]{24}$/.test(data.auditId || '') || typeof data.capturedText !== 'string'
+    || data.capturedText.length !== ref.policy.nativeResearch.capture.textLength || data.capturedText.length > 80000) return null
+  return data
+}
+
 export const getRecordedEvidenceSupport = (item, source, stateVersion) => {
   const capture = getRecordedSourceCapture(source, stateVersion)
   const support = item?.evidenceSupport

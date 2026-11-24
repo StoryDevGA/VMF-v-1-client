@@ -47,3 +47,19 @@ it('keeps Run read failures explicit without automatic repeated heavy reads', as
   expect(transport).toHaveBeenCalledTimes(1)
   request.unsubscribe()
 })
+
+it('reads an original with only strict scope and purpose query fields', async () => {
+  const transport=setup(new Response(JSON.stringify({data:{}}),{headers:{'content-type':'application/json'}}))
+  const request=store.dispatch(runtimeInstanceApi.endpoints.getEvidenceOriginal.initiate({...scope,sourceId:'source/a',originalId:'original/a',
+    purpose:'Human review & source inspection',stateVersion:'cache-key-only',sessionRevision:23}))
+  expect((await request).error).toBeUndefined()
+  const url=new URL(transport.mock.lastCall[0].url)
+  expect(url.pathname).toMatch(/\/discovery-sources\/source%2Fa\/originals\/original%2Fa$/)
+  expect(Object.fromEntries(url.searchParams)).toEqual({customerId:scope.customerId,tenantId:scope.tenantId,purpose:'Human review & source inspection'})
+  expect(transport.mock.lastCall[0].method).toBe('GET');expect(transport).toHaveBeenCalledTimes(1);request.unsubscribe()
+})
+it.each([403,404,409,503])('keeps original read %s failures explicit without retry', async status => {
+  const transport=setup(new Response(JSON.stringify({error:{message:'Unavailable'}}),{status,headers:{'content-type':'application/json'}}))
+  const request=store.dispatch(runtimeInstanceApi.endpoints.getEvidenceOriginal.initiate({...scope,sourceId:'source',originalId:'original',purpose:'Human review'}))
+  expect((await request).error.status).toBe(status);expect(transport).toHaveBeenCalledTimes(1);request.unsubscribe()
+})

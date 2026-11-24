@@ -213,7 +213,7 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
         'Frozen membership': 'Not established by current source records',
       }).map(([term,value])=><div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
       <p>{evidenceInspection ? 'The fragment is preserved as recorded, not rewritten as a complete or verified assertion.' : 'Extracted evidence is retained. Unavailable processing provenance is not a failed extraction.'}</p>
-      <SourceEvidenceDetails source={source} item={evidenceInspection ? item : undefined} stateVersion={stateVersion} />
+      <SourceEvidenceDetails source={source} item={evidenceInspection ? item : undefined} stateVersion={stateVersion} scope={scope} />
       {evidenceInspection && source?.sourceId === item.sourceId ? <NeutralQualificationPanel
         scope={{ runtimeInstanceId: revisionId, customerId, tenantId }} evidenceObjectId={item.evidenceObjectId}
         sourceId={item.sourceId} stateVersion={stateVersion} locked={locked}

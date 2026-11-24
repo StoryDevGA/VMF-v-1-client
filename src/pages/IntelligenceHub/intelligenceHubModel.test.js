@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   HUB_VIEWS,
   getRecordedSourceCapture,
+  getRecordedNativeOriginal,
+  getRecordedOriginalRead,
   getRecordedEvidenceSupport,
   recordedEvidenceLocation,
   getHubContextSearch,
@@ -222,4 +224,62 @@ it('continues to refuse document capture owner IDs rather than extending the web
   const source = ordinaryWebsiteSource()
   source.sourceCapture.captureReceipt.operation = 'DOCUMENT_TEXT_CAPTURE'
   expect(getRecordedSourceCapture(source, recordedVersion)).toBeNull()
+})
+
+const nativeUnitRead = () => {
+  const source = structuredClone(recordedSource)
+  source.sourceRef = 'https://unit.example/'
+  Object.assign(source.sourceCapture, {adapter:'website-html-fetch-v1', extractionMethod:'DECODED_HTML_STRIPPED_TEXT'})
+  Object.assign(source.sourceCapture.captureReceipt,{operation:'WEBSITE_DECODED_TEXT_CAPTURE'})
+  const scope={customerId:'customer',tenantId:'tenant',runtimeInstanceId:'runtime',stateVersion:recordedVersion,sessionRevision:0}
+  source.originalContentRef={contractVersion:'evidence-original-reference.v1',originalId:'original_'+'a'.repeat(64),
+    inputKind:'PUBLIC_URL',byteHash:'sha256:'+'b'.repeat(64),byteLength:10,acquiredAt:'2026-11-24T12:00:00.000Z',
+    binding:{customerId:scope.customerId,tenantId:scope.tenantId,runtimeInstanceId:scope.runtimeInstanceId,
+      sourceId:source.sourceId,sourceContentHash:source.contentHash,sourceLocator:source.sourceRef},
+    policy:{policyId:'FS-006',policyVersion:'0.2',effectiveEnvironment:'DEVELOPMENT_TEST',policyHash:'sha256:'+'c'.repeat(64),retentionDays:30,
+      nativeResearch:{capture:source.sourceCapture,grant:{kind:'PUBLISHER_TERMS',decision:'ALLOWED',legalStatus:'CONFIRMED',retentionAllowed:true,
+        url:source.sourceRef,scope:{customerId:scope.customerId,tenantId:scope.tenantId},
+        attribution:{publisher:'Unit publisher',statement:'Unit attribution',licenceUrl:'https://unit.example/licence'}}}}}
+  const data={availability:'AVAILABLE_DEV_TEST',originalContentRef:source.originalContentRef,observedStateVersion:recordedVersion,
+    auditId:'d'.repeat(24),capturedText:'x'.repeat(source.sourceCapture.textLength)}
+  return {source,scope,data}
+}
+it('binds original read metadata to selected source, scope and current state',()=>{
+  const {source,scope,data}=nativeUnitRead()
+  expect(getRecordedNativeOriginal(source,scope)).toEqual(source.originalContentRef)
+  expect(getRecordedOriginalRead({data},source,scope)).toEqual(data)
+  for(const patch of [{stateVersion:'old'},{customerId:'other'},{tenantId:'other'},{runtimeInstanceId:'other'}])
+    expect(getRecordedNativeOriginal(source,{...scope,...patch})).toBeNull()
+  for(const patch of [{observedStateVersion:'old'},{availability:'AVAILABLE_DEV_TEST_FIXTURE'},{auditId:null},{capturedText:'wrong'}])
+    expect(getRecordedOriginalRead({data:{...data,...patch}},source,scope)).toBeNull()
+})
+it('hides malformed or missing native references without inventing legacy originals',()=>{
+  const {source,scope}=nativeUnitRead()
+  expect(getRecordedNativeOriginal(recordedSource,scope)).toBeNull()
+  for(const mutate of [
+    ref=>{ref.binding.sourceId='other'},ref=>{ref.byteHash='unverified'},
+    ref=>{ref.policy.nativeResearch.grant.attribution.licenceUrl='javascript:alert(1)'},
+    ref=>{ref.policy.nativeResearch.grant.retentionAllowed=false},
+  ]){const copy=structuredClone(source);mutate(copy.originalContentRef);expect(getRecordedNativeOriginal(copy,scope)).toBeNull()}
+})
+
+const reverseRecordedKeys = value => value && typeof value === 'object'
+  ? Object.fromEntries(Object.entries(value).reverse().map(([key,item])=>[key,reverseRecordedKeys(item)])) : value
+it('accepts the same recorded values after storage and projection reorder nested keys',()=>{
+  const {source,scope,data}=nativeUnitRead()
+  source.originalContentRef.policy.nativeResearch.capture=reverseRecordedKeys(source.sourceCapture)
+  data.originalContentRef=reverseRecordedKeys(source.originalContentRef)
+  expect(getRecordedNativeOriginal(source,scope)).toEqual(source.originalContentRef)
+  expect(getRecordedOriginalRead({data},source,scope)).toEqual(data)
+  data.originalContentRef.binding.sourceId='changed'
+  expect(getRecordedOriginalRead({data},source,scope)).toBeNull()
+})
+it('rejects malformed or cyclic recorded values even when both arguments share identity',()=>{
+  const {source,scope,data}=nativeUnitRead()
+  source.originalContentRef.self=source.originalContentRef
+  expect(getRecordedOriginalRead({data},source,scope)).toBeNull()
+  delete source.originalContentRef.self
+  Object.defineProperty(source.originalContentRef.policy.nativeResearch.capture,'injected',{enumerable:true,get:()=>{throw Error('Getter must not run')}})
+  expect(()=>getRecordedNativeOriginal(source,scope)).not.toThrow()
+  expect(getRecordedNativeOriginal(source,scope)).toBeNull()
 })

@@ -1160,6 +1160,16 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
     cancelAcquisitionRun: build.mutation({ query: buildCancelAcquisitionRunQuery, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    getEvidenceOriginal: build.query({
+      query: ({ runtimeInstanceId, customerId, tenantId, sourceId, originalId, purpose }) => {
+        const params = new URLSearchParams()
+        appendParam(params, 'customerId', customerId); appendParam(params, 'tenantId', tenantId)
+        appendParam(params, 'purpose', purpose)
+        return `/runtime-instances/${encodeURIComponent(runtimeInstanceId)}/discovery-sources/${encodeURIComponent(sourceId)}/originals/${encodeURIComponent(originalId)}?${params}`
+      },
+      providesTags: getRuntimeRendererTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
     getAcquisitionRun: build.query({
       query: ({ runtimeInstanceId, customerId, tenantId, runId }) => {
         const params = new URLSearchParams()
@@ -1239,6 +1249,7 @@ export const {
   useSaveResearchConfigurationMutation,
   useCancelAcquisitionRunMutation,
   useGetAcquisitionRunQuery,
+  useGetEvidenceOriginalQuery,
   usePlanRuntimeOutcomeRequestMutation,
   useConfirmRuntimeOutcomeRequestPlanMutation,
   useLazyRetrieveRuntimeOutcomeRequestPlanQuery,

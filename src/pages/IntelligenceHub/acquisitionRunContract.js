@@ -62,8 +62,13 @@ const publicResearchRunMatches = value => {
   }
   const ordinals = new Set()
   for (const receipt of summary.receipts) {
+    const hasProviderMessage = receipt != null && Object.hasOwn(receipt, 'providerMessage')
     if (!keys(receipt, ['ordinal', 'category', 'phase', 'inputIndex', 'requestHash', 'responseTextHash', 'httpStatus', 'bytesRead',
-      'elapsedMs', 'providerRequestId', 'sourceId', 'evidenceObjectCount'])
+      'elapsedMs', 'providerRequestId', 'sourceId', 'evidenceObjectCount', ...(hasProviderMessage ? ['providerMessage'] : [])])
+      || hasProviderMessage && (receipt.category !== 'SEARCH' || receipt.phase !== 'RECORDED' || !(receipt.httpStatus >= 400)
+        || !summary.categories.some(category => category.key === 'SEARCH' && category.failedCount > 0)
+        || typeof receipt.providerMessage !== 'string' || !receipt.providerMessage.trim()
+        || receipt.providerMessage.length > 300 || /\p{Cc}/u.test(receipt.providerMessage))
       || !count(receipt.ordinal, 4) || ordinals.has(receipt.ordinal) || !['SEARCH', 'WEBSITE', 'REGISTRY'].includes(receipt.category)
       || !['DISPATCHING', 'RECORDED'].includes(receipt.phase) || !count(receipt.inputIndex, receipt.category === 'WEBSITE' ? 2 : 0)
       || !hash(receipt.requestHash) || !(receipt.responseTextHash === null || hash(receipt.responseTextHash))

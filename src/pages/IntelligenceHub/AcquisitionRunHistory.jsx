@@ -123,6 +123,7 @@ function ScopedRunHistory({ scope, active, locked, canAcquire, busy, onRetry, ca
               <dl className="intelligence-hub__inspection-facts"><div><dt>Request hash</dt><dd>{receipt.requestHash}</dd></div>
                 <div><dt>Response hash</dt><dd>{receipt.responseTextHash ?? 'No response hash recorded'}</dd></div>
                 <div><dt>HTTP status</dt><dd>{receipt.httpStatus ?? 'No HTTP status recorded'}</dd></div>
+                {receipt.providerMessage ? <div><dt>Provider response</dt><dd>{receipt.providerMessage}</dd></div> : null}
                 <div><dt>Provider request ID</dt><dd>{receipt.providerRequestId ?? 'Not recorded'}</dd></div>
                 <div><dt>Saved source ID</dt><dd>{receipt.sourceId ?? 'No original source saved'}</dd></div></dl>
             </li>)}</ul>
