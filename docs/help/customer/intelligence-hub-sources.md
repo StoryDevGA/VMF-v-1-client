@@ -50,6 +50,14 @@ Where separately retained for a new supported input, original bytes have their o
 
 Recorded capture and support do not establish source authenticity, independent verification, evidence acceptance or frozen membership. Source assertions remain qualified statements awaiting their separate review decisions. If a receipt or supporting span is missing, stale or inconsistent with the selected source and revision, inspection explains that it is unavailable; it does not invent a location or substitute another source. A changed or unavailable read closes the previous inspection rather than keeping old details current.
 
+## Read separately retained original material
+
+Select the exact source, open Source details, then choose Read retained material when offered. The reader shows the full retained extracted text, source binding and licence attribution for a supported original. Use the supporting evidence excerpt and its recorded span to check what the source actually says. A source assertion is not independent verification, and readable material remains subject to a separate Review decision.
+
+Retention and access are checked separately from the capture result. Research can be saved while original retention remains unconfirmed; inspect the recorded outcome before attempting anything else. If original material is unavailable, preserve that result rather than substituting a snippet or another source. Normal original reads are audited. The approved Development/Test policy is 30 days; that does not establish a Production retention policy or prove that historical material has been physically deleted.
+
+Public-search discoveries remain in the recorded research Run. Their URLs and snippets are discovery metadata; they are not additional original sources or evidence items in this registry. Only separately captured and saved material contributes original evidence. Open the recorded Run from Context to inspect its discoveries, then return here for its saved sources.
+
 ## Partial, stale and unavailable reads
 
 A bounded read can be partial or capped. An unknown total is unavailable, not zero. Refresh the selected scope when currency is uncertain. Do not treat an empty visible page as proof that the whole revision has no evidence.

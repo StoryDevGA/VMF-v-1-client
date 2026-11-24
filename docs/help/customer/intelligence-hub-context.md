@@ -26,7 +26,7 @@ After the recording is confirmed, open [After lock](intelligence-hub-after-lock.
 4. Choose Acquire new evidence when the current server-projected action and your authority permit it.
 5. Inspect the resulting source contributions in Sources and make evidence decisions in Review.
 
-PDF, PPTX, DOCX, TXT, MD and CSV are supported. Select up to five documents: 2.5 MB each, or up to 40 MB for PPTX. Originals are used for extraction and are not stored. Up to ten website URLs can be submitted. Strategic Acquisition is unavailable.
+PDF, PPTX, DOCX, TXT, MD and CSV are supported. Select up to five documents: 2.5 MB each, or up to 40 MB for PPTX. Ordinary extraction does not itself promise original-file storage. Separately supported and authorised original retention is inspected in Sources where available. Up to ten website URLs can be submitted through ordinary acquisition; a public-research release can impose a smaller bound. Strategic Acquisition is unavailable.
 
 Further file selections add to the staged batch. An identical filename, type, size and content is included once; changed content under the same filename remains a separate input. Use Remove beside a staged document to remove that input, or Clear selected files to empty the batch. Cancelling the picker leaves the batch unchanged. An invalid, oversized or unreadable batch, or one exceeding five distinct files, leaves the previous valid selection available. Staging and removal are local preparation; they do not delete an acquired source or accept evidence.
 
@@ -38,19 +38,31 @@ Loading or a failed refresh hides the previous summary. Refresh the selected rev
 
 ## Configure public research
 
-Select Research public information, then Configure research to prepare starting URLs, the legal entity and jurisdiction, source categories and optional narrowing instructions. Coverage is inherited from the Context brief's Standard or Enhanced level. Confirming an entity is a configuration choice, not verified legal identity. Registry availability depends on the exact UK entity or explicitly identified UK subsidiary; a similar company name is not a verified match.
+1. Check the selected workspace and revision, then prepare the evidence gathering brief.
+2. Select Research public information and open Configure research. Prepare starting URLs, source categories and optional narrowing instructions. Coverage comes from the Context brief. Leave unresolved legal-entity details unconfirmed; a similar name is not a verified identity match.
+3. Select Save research configuration. This saves settings separately from the brief and evidence. It does not retrieve a source, create a Run, spend money or accept evidence.
+4. Read the current availability explanations. Start research is available only when the server verifies the package, your authority, saved basis, source-access and storage requirements and a current operating release. Changing settings requires saving and checking again. A previous successful Run does not authorise a new one.
+5. When Start research is available, inspect the saved choices and select it deliberately. Follow the original request and saved Run receipt, then inspect Sources and Review.
 
-Save research configuration saves these prepared settings separately from the Context brief and evidence. Saving does not retrieve sources, create a Run, accept evidence or authorise live research. Research availability describes the current saved settings and selected revision. Changed settings must be saved and checked again; stale, denied or unavailable checks do not establish permission. Live search and registry execution are not enabled by these controls. A search snippet or summary is discovery information, not original evidence.
+Official website capture and Public web search are implemented methods with operating restrictions. Search discovers possible sources; snippets and query summaries are not original evidence. GitHub and News retrieval are not currently connected to native Start. LinkedIn, X/Instagram, Reviews and Industry retrieval also remain unavailable. Selecting a category does not connect it or authorise private, authenticated or prohibited access. Companies House and other registry integration are separate work.
 
-Only a specifically registered Development/Test workspace can offer Start research for the controlled provider-free fixture. Saving settings in an ordinary workspace does not enable that fixture or a live provider. Where Start is explicitly available, inspect the saved settings before selecting it. Selection, configuration, opening history and refresh do not start a Run.
+Website capture requires a recorded basis permitting capture and retention. Missing, restricted or unclear permission keeps capture unavailable. A publisher's public page is not, by itself, proof of permission. A source-access decision also does not establish transport health or successful original storage. Supply material through the existing supported document flow when appropriate; that does not bypass its own authority and retention requirements.
 
-## Inspect a controlled research Run
+A website Run may capture an approved URL list. An explicit operating release can also permit one level of approved same-site links. Only links actually found within the recorded scan and page limits can be followed. A limit can leave the Run partial even when its saved pages are readable; do not treat it as complete site coverage or increase limits by retrying.
 
-After an explicit Start, progress comes from the saved Run receipt. A submitted request without a verified receipt has an uncertain outcome. Keep the original research request link: reopening it after reload checks that original request without submitting another Start. Use Refresh original research request and Refresh selected Run receipt before deciding what happened. An unavailable or empty check does not prove that nothing was saved.
+## Inspect a research Run
 
-Close research run only closes a terminal Run in the view. View research run reopens its recorded receipt; neither action deletes it or starts work. Cancel research run appears only for an eligible controlled attempt that has not saved evidence. A confirmed cancellation prevents that Run from saving results and leaves previously saved material unchanged. Work already in progress may still finish; the receipt does not confirm worker or provider abort.
+After Start, progress comes from saved receipts. A submitted request without a verified receipt has an uncertain outcome. Keep the original research request link: reopening it after reload checks that request without another Start. Use Refresh original research request and Refresh selected Run receipt before deciding what happened. An empty or unavailable check does not prove that nothing was saved.
 
-Prepare explicit retry of this Run is available only for an eligible failed controlled Run against the current saved configuration and basis. Preparation starts nothing. Inspect Configure research again, then deliberately select Start to create a new Run and Attempt linked to the predecessor. A cancelled, active, saved, stale or unverified Run does not qualify. This controlled fixture behavior does not authorise a live provider retry or automatic redispatch.
+In native Run details, inspect each category and operation, response hash, HTTP status, provider request identity and saved source identity. Public web search discoveries show recorded URLs and snippets, retrieval time and query handling where recorded. These are discovery metadata, not retained originals or accepted evidence. Publication dates and currentness are not verified by the search receipt. Historical records can lack query-handling details.
+
+A new website receipt can retain hashes and transport metadata without the page body. Use Sources, Source details and Read retained material where available to inspect a separately retained original and its attribution. An unavailable original is not reconstructed from a search snippet or supporting excerpt. Review still requires a separate human decision.
+
+Close research run closes the terminal Run in the view. View research run reopens its receipt; neither deletes it or starts work. Cancel research run appears only when the current recorded attempt permits it. A confirmed cancellation prevents that Run from saving results and preserves previously saved material; it does not prove the worker or provider was aborted.
+
+Prepare explicit retry of this Run is available only for a currently eligible failed Run. Preparation starts nothing. A native retry still needs a current server-issued release bound to its saved configuration, authority and basis, and records a new Run and Attempt linked to the predecessor. Saved, active, cancelled, stale or unverified results do not create retry permission. Reload and refresh never automatically redispatch.
+
+Historical controlled Runs remain labelled as such. Their sample material does not establish native retrieval, current source permission or customer truth.
 
 ## Handle failure and changed data
 
@@ -64,7 +76,7 @@ If prior source, registry or evidence identities cannot be reconciled, acquisiti
 
 When an error records actual extraction outcomes, inspect those separately from whether the revision was saved. An input can extract successfully, including with zero eligible evidence objects, while a continuity check prevents the result from being saved. A network or response failure alone does not prove whether a save completed. Use Check original acquisition request while the pending request is retained: it resends the exact original operation and request key, rather than starting a new operation with edited inputs. The server checks your current authority and returns the recorded result or an unresolved execution state. Do not start another operation while the outcome remains unconfirmed.
 
-An active or unresolved ordinary acquisition Run does not prove failure or permit cancellation or retry. The eligible controlled research cancellation described above is a separate, explicit action. Refresh the selected receipt and contact support if the outcome remains unresolved. Reloading, changing revision or changing login session clears ordinary local pending-request tracking and staged files; it cannot reconstruct the original document bytes. Controlled research retains its original request link for read-only checks after reload. Use durable Run history to inspect what was recorded before staging another operation.
+An active or unresolved ordinary acquisition Run does not prove failure or permit cancellation or retry. The eligible research cancellation described above is a separate, explicit action. Refresh the selected receipt and contact support if the outcome remains unresolved. Reloading, changing revision or changing login session clears ordinary local pending-request tracking and staged files; it cannot reconstruct the original document bytes. Research retains its original request link for read-only checks after reload. Use durable Run history to inspect what was recorded before staging another operation.
 
 Discard local changes resets this draft; it is not a governed evidence reset. Switching revision replaces the draft context. If another operation changed the basis, refresh and deliberately reconcile your input before acquiring again.
 
@@ -79,9 +91,3 @@ Acquisition Run history records explicit operations in the selected revision. Ba
 Snapshot continuity receipts remain unavailable until their governed contract is connected. The existing acquisition workbench remains a recovery path while complete Context parity is being verified.
 
 [Inspect Sources](intelligence-hub-sources.md) or [review evidence](intelligence-hub-review.md).
-
-## Recorded illustration
-
-This synthetic engineering example shows the Context brief and separate completeness and review counts. The values are fictitious and are not the current state of your workspace.
-
-![Synthetic Context brief showing four complete brief fields and evidence still awaiting review](../assets/intelligence-hub-context.jpg)

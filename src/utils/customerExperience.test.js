@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCustomerHomeWorkspaceCard,
+  formatCustomerActivityTitle,
   CUSTOMER_EXPERIENCE,
   resolveCustomerExperience,
 } from './customerExperience.js'
@@ -111,3 +112,28 @@ describe('customer home workspace summary adapter', () => {
   })
 })
 
+
+
+describe('customer original-content activity titles', () => {
+  it.each([['EVIDENCE_ORIGINAL_READ', 'accessed'], ['EVIDENCE_ORIGINAL_CAPTURED', 'recorded']])(
+    'neutralises only the known historical %s template', (action, verb) => {
+      const summary = 'User ' + verb + ' a synthetic evidence original for RuntimeInstance recorded-id'
+      const activity = { action, summary }
+      expect(formatCustomerActivityTitle(activity)).toBe('User ' + verb + ' a retained evidence original for RuntimeInstance recorded-id')
+      expect(activity.summary).toBe(summary)
+    })
+  it.each([
+    { action: 'OTHER', summary: 'User accessed a synthetic evidence original for RuntimeInstance x' },
+    { summary: 'User accessed a synthetic evidence original for RuntimeInstance x' },
+    { action: 'EVIDENCE_ORIGINAL_READ', summary: 'User accessed a synthetic evidence originals for RuntimeInstance x' },
+    { action: 'EVIDENCE_ORIGINAL_READ', summary: 'Custom review of a synthetic evidence original for research' },
+    { action: 'EVIDENCE_ORIGINAL_CAPTURED', summary: 'User accessed a synthetic evidence original for RuntimeInstance x' },
+    { action: 'EVIDENCE_ORIGINAL_READ', summary: '<strong>Custom literal text</strong>' },
+  ])('preserves unrelated, absent-action or custom wording: %j', activity => {
+    expect(formatCustomerActivityTitle(activity)).toBe(activity.summary)
+  })
+  it('retains the existing whitespace, workspace-suffix and missing-summary behavior', () => {
+    expect(formatCustomerActivityTitle({ summary: '  Workspace updated for value-narrative-recorded-key  ' })).toBe('Workspace updated')
+    expect(formatCustomerActivityTitle()).toBe('Workspace activity')
+  })
+})

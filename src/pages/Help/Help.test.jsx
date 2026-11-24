@@ -79,7 +79,6 @@ describe('Workflow Help articles', () => {
     expect(relatedUrl.searchParams.get('findingId')).toBe('f1')
     expect(relatedUrl.searchParams.get('helpReturnView')).toBe('context')
     for (const key of ['researchRequestKey', 'acquisitionRunId', 'closedAcquisitionRunId']) expect(relatedUrl.searchParams.get(key)).toBe(url.searchParams.get(key))
-    expect(screen.getByRole('img', { name: /Synthetic Context brief/ })).toHaveAttribute('src', expect.stringContaining('intelligence-hub-context.jpg'))
   })
 
   it('escapes HTML and leaves unsafe links, traversal and unknown assets as text', () => {

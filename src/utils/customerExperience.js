@@ -236,3 +236,15 @@ export const buildCustomerHomeWorkspaceCard = (summary = {}) => {
     updatedAt: summary.updatedAt ?? summary.updated_at ?? summary.modifiedAt ?? summary.createdAt ?? null,
   }
 }
+
+
+export const formatCustomerActivityTitle = (activity = {}) => {
+  const summary = String(activity.summary ?? '').trim()
+  const legacy = activity.action === 'EVIDENCE_ORIGINAL_READ'
+    ? /^(.+ accessed) a synthetic evidence original for (.+)$/
+    : activity.action === 'EVIDENCE_ORIGINAL_CAPTURED'
+      ? /^(.+ recorded) a synthetic evidence original for (.+)$/ : null
+  const projected = legacy ? summary.replace(legacy, '$1 a retained evidence original for $2') : summary
+  const shortened = projected.replace(/\s+for\s+value-narrative-.+$/i, '').trim()
+  return shortened || 'Workspace activity'
+}

@@ -17,9 +17,14 @@ const publicResearchRunMatches = value => {
   const date = candidate => typeof candidate === 'string' && candidate.length <= 100 && Number.isFinite(Date.parse(candidate))
   const sourceId = candidate => typeof candidate === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(candidate)
   const isTerminal = terminal.includes(value.status)
+  const hasTraversal = summary != null && Object.hasOwn(summary, 'websiteTraversal')
+  const traversal = summary?.websiteTraversal
   if (!keys(summary, ['mode', 'classification', 'liveExecutionEnabled', 'planHash', 'policyHash', 'receiptHash', 'releaseId',
     'operationCount', 'completedOperationCount', 'bytesRead', 'reservedCostMicros', 'elapsedMsRecorded', 'modelTokens',
-    'limits', 'categories', 'receipts', 'qualifications'])
+    'limits', 'categories', 'receipts', 'qualifications', ...(hasTraversal ? ['websiteTraversal'] : [])])
+    || hasTraversal && (!keys(traversal, ['contractVersion', 'maxDepth', 'maxLinks'])
+      || traversal.contractVersion !== 'public-research-website-traversal.v1' || traversal.maxDepth !== 1
+      || traversal.maxLinks !== 100 || summary.mode !== 'LIVE')
     || !['OFFLINE', 'LIVE'].includes(summary.mode)
     || summary.classification !== (summary.mode === 'OFFLINE' ? 'CONTROLLED_PROVIDER_FREE_RESEARCH' : 'NATIVE_PUBLIC_RESEARCH')
     || summary.liveExecutionEnabled !== (summary.mode === 'LIVE')
@@ -62,9 +67,28 @@ const publicResearchRunMatches = value => {
   }
   const ordinals = new Set()
   for (const receipt of summary.receipts) {
+    const hasScan = receipt != null && Object.hasOwn(receipt, 'linkScan')
+    const hasDiscovery = receipt != null && Object.hasOwn(receipt, 'discovery')
+    const hasBodyDisposition = receipt != null && Object.hasOwn(receipt, 'bodyDisposition')
     const hasProviderMessage = receipt != null && Object.hasOwn(receipt, 'providerMessage')
     if (!keys(receipt, ['ordinal', 'category', 'phase', 'inputIndex', 'requestHash', 'responseTextHash', 'httpStatus', 'bytesRead',
-      'elapsedMs', 'providerRequestId', 'sourceId', 'evidenceObjectCount', ...(hasProviderMessage ? ['providerMessage'] : [])])
+      'elapsedMs', 'providerRequestId', 'sourceId', 'evidenceObjectCount', ...(hasProviderMessage ? ['providerMessage'] : []), ...(hasBodyDisposition ? ['bodyDisposition'] : []),
+      ...(hasScan ? ['linkScan'] : []), ...(hasDiscovery ? ['discovery'] : [])])
+      || hasScan && (!hasTraversal || receipt.ordinal !== 0 || receipt.category !== 'WEBSITE'
+        || receipt.phase !== 'RECORDED' || receipt.httpStatus !== 200 || !hasBodyDisposition
+        || !keys(receipt.linkScan, ['observedAnchorCount', 'truncated', 'baseUnsupported', 'pageLimitReached', 'approvedLinkCount'])
+        || !count(receipt.linkScan.observedAnchorCount, 100) || !count(receipt.linkScan.approvedLinkCount, 2)
+        || receipt.linkScan.approvedLinkCount > receipt.linkScan.observedAnchorCount
+        || !['truncated', 'baseUnsupported', 'pageLimitReached'].every(key => typeof receipt.linkScan[key] === 'boolean')
+        || receipt.linkScan.baseUnsupported && receipt.linkScan.approvedLinkCount !== 0
+        || receipt.linkScan.truncated && receipt.linkScan.observedAnchorCount !== 100
+        || receipt.linkScan.pageLimitReached !== (receipt.linkScan.approvedLinkCount > limits.maxPages - 1))
+      || hasDiscovery && (!hasTraversal || receipt.category !== 'WEBSITE' || receipt.ordinal === 0
+        || !keys(receipt.discovery, ['method', 'parentOrdinal', 'parentContentHash', 'depth'])
+        || receipt.discovery.method !== 'HTML_ANCHOR' || receipt.discovery.parentOrdinal !== 0
+        || receipt.discovery.depth !== 1 || !hash(receipt.discovery.parentContentHash))
+      || hasBodyDisposition && (receipt.bodyDisposition !== 'NOT_RETAINED_IN_RUN' || receipt.category !== 'WEBSITE'
+        || summary.mode !== 'LIVE' || receipt.phase !== 'RECORDED')
       || hasProviderMessage && (receipt.category !== 'SEARCH' || receipt.phase !== 'RECORDED' || !(receipt.httpStatus >= 400)
         || !summary.categories.some(category => category.key === 'SEARCH' && category.failedCount > 0)
         || typeof receipt.providerMessage !== 'string' || !receipt.providerMessage.trim()
@@ -80,6 +104,61 @@ const publicResearchRunMatches = value => {
       || receipt.phase === 'DISPATCHING' && (receipt.responseTextHash !== null || receipt.httpStatus !== null || receipt.providerRequestId !== null
         || receipt.sourceId !== null || receipt.bytesRead !== 0 || receipt.elapsedMs !== 0 || receipt.evidenceObjectCount !== 0)) return false
     ordinals.add(receipt.ordinal)
+  }
+  if (value.discovery !== undefined) {
+    const discovery = value.discovery, query = discovery?.queryBinding
+    const searchReceipts = summary.receipts.filter(receipt => receipt.category === 'SEARCH')
+    const receipt = searchReceipts[0]
+    const text = (candidate, max, empty = false) => typeof candidate === 'string' && candidate.length <= max
+      && (empty || candidate.trim().length > 0)
+    const safeUrl = candidate => {
+      if (!text(candidate, 500) || Array.from(candidate).some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)) return false
+      try {
+        const url = new URL(candidate)
+        return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.port
+          && !url.hash && ![...url.searchParams.keys()].some(key =>
+            /^(?:api[_-]?key|access_token|token|password|secret|authorization|credential|client_secret|refresh_token)$/i.test(key))
+      } catch { return false }
+    }
+    if (!keys(discovery, ['classification', 'originalEvidence', 'status', 'retrievedAt', 'requestHash', 'responseHash', 'items',
+      ...(query !== undefined ? ['queryBinding'] : [])]) || summary.mode !== 'LIVE'
+      || discovery.classification !== 'DISCOVERY_METADATA_ONLY' || discovery.originalEvidence !== false
+      || !['SUCCESS', 'EMPTY', 'PARTIAL', 'UNAVAILABLE', 'RATE_LIMITED'].includes(discovery.status)
+      || searchReceipts.length !== 1 || receipt.phase !== 'RECORDED'
+      || discovery.requestHash !== receipt.requestHash || discovery.responseHash !== receipt.responseTextHash
+      || !hash(discovery.responseHash) || !date(discovery.retrievedAt)
+      || !date(value.startedAt) || Date.parse(discovery.retrievedAt) < Date.parse(value.startedAt)
+      || value.completedAt && Date.parse(discovery.retrievedAt) > Date.parse(value.completedAt)
+      || !Array.isArray(discovery.items) || discovery.items.length > 4
+      || new Set(discovery.items.map(item => item?.url)).size !== discovery.items.length
+      || ['SUCCESS', 'PARTIAL'].includes(discovery.status) !== (discovery.items.length > 0)
+      || ['SUCCESS', 'EMPTY', 'PARTIAL'].includes(discovery.status) && receipt.httpStatus !== 200
+      || discovery.status === 'RATE_LIMITED' && receipt.httpStatus !== 429
+      || discovery.status === 'UNAVAILABLE' && [200, 429].includes(receipt.httpStatus)
+        && !(receipt.providerRequestId === null && summary.categories.some(category => category.key === 'SEARCH' && category.unknownCount > 0))
+      || discovery.items.some((item, index) => !keys(item, ['url', 'title', 'snippet', 'resultOrder'])
+        || !safeUrl(item.url) || !text(item.title, 255) || !text(item.snippet, 2000, true) || item.resultOrder !== index + 1)) return false
+    if (query !== undefined) {
+      if (!keys(query, ['contractVersion', 'submittedQuery', 'providerQuery', 'normalization'])
+        || query.contractVersion !== 'tavily-query-binding.v2' || !text(query.submittedQuery, 2000)
+        || !text(query.providerQuery, 2000) || !['EXACT', 'LEADING_APPROVED_SITE_OPERATOR_REMOVED'].includes(query.normalization)
+        || query.normalization === 'EXACT' && query.submittedQuery !== query.providerQuery
+        || query.normalization === 'LEADING_APPROVED_SITE_OPERATOR_REMOVED'
+          && (!/^site:[^ ]+ .+$/.test(query.submittedQuery) || query.submittedQuery.slice(query.submittedQuery.indexOf(' ') + 1) !== query.providerQuery)
+        || !['SUCCESS', 'EMPTY', 'PARTIAL'].includes(discovery.status)) return false
+      const hostname = query.submittedQuery.startsWith('site:') ? query.submittedQuery.slice(5).split(' ')[0] : query.submittedQuery
+      if (!safeUrl('https://' + hostname) || new URL('https://' + hostname).hostname !== hostname
+        || discovery.items.some(item => new URL(item.url).hostname !== hostname)) return false
+    }
+  }
+  if (hasTraversal) {
+    const root = summary.receipts.find(receipt => receipt.ordinal === 0), children = summary.receipts.filter(receipt => receipt.ordinal > 0)
+    if (limits.maxPages < 2 || summary.categories.some(category => category.key !== 'WEBSITE' && category.status !== 'NOT_SELECTED')
+      || summary.receipts.some(receipt => receipt.category !== 'WEBSITE' || receipt.inputIndex !== receipt.ordinal)
+      || children.length > Math.min(root?.linkScan?.approvedLinkCount || 0, limits.maxPages - 1)
+      || root?.linkScan?.baseUnsupported && children.length
+      || children.some(receipt => !receipt.discovery || !root?.linkScan || root.phase !== 'RECORDED'
+        || receipt.discovery.parentContentHash !== root.responseTextHash)) return false
   }
   if (value.status === 'SUCCEEDED' && (summary.bytesRead > limits.maxTotalBytes || summary.elapsedMsRecorded > limits.maxElapsedMs
     || summary.categories.some(category => !['NOT_SELECTED', 'NOT_APPLICABLE', 'SUCCEEDED', 'EMPTY'].includes(category.status)
@@ -212,7 +291,7 @@ export const readAcquisitionRun = (value, scope, requestKey) => {
       || (value.currency === 'ACTIVE') === terminal.includes(value.status))
     || (controlled ? !controlledRunMatches(value) : value.controlledReplayProvenance !== undefined)
     || !search && (value.providerFreeSearch !== undefined || value.receiptRecorded !== undefined)
-    || !research && value.publicResearch !== undefined) return null
+    || !research && (value.publicResearch !== undefined || value.discovery !== undefined)) return null
   if (research) return publicResearchRunMatches(value) ? value : null
   if (search) return searchRunMatches(value) ? value : null
   const cancellation = value.cancellation

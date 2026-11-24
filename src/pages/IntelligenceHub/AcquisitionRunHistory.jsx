@@ -2,6 +2,7 @@ import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
+import { Link } from '../../components/Link'
 import { useGetAcquisitionRunsQuery, useGetAcquisitionRunQuery, useCancelAcquisitionRunMutation } from '../../store/api/runtimeInstanceApi.js'
 import { isAcquisitionRunId, isControlledAcquisitionRun, isProviderFreeSearchRun, isPublicResearchRun, readAcquisitionRun, acquisitionRunLabel, isTerminalAcquisitionRun, ORIGINAL_EXTRACTION_UNCONFIRMED } from './acquisitionRunContract.js'
 
@@ -105,6 +106,7 @@ function ScopedRunHistory({ scope, active, locked, canAcquire, busy, onRetry, ca
             {!run.canonicalSaved ? <p>No original evidence has been saved by this Run.</p> : null}
             <dl className="intelligence-hub__inspection-facts">
               <div><dt>Mode</dt><dd>{run.publicResearch.mode}</dd></div>
+              {run.publicResearch.websiteTraversal ? <div><dt>Website link limits</dt><dd>One link level · up to 100 anchor entries · approved pages only</dd></div> : null}
               <div><dt>Recorded operations</dt><dd>{run.publicResearch.completedOperationCount} of {run.publicResearch.operationCount}</dd></div>
               <div><dt>Bytes read</dt><dd>{run.publicResearch.bytesRead}</dd></div>
               <div><dt>Recorded elapsed time</dt><dd>{run.publicResearch.elapsedMsRecorded} ms</dd></div>
@@ -122,12 +124,35 @@ function ScopedRunHistory({ scope, active, locked, canAcquire, busy, onRetry, ca
               {receipt.category} {receipt.inputIndex + 1}: {receipt.phase} · {receipt.bytesRead} bytes · {receipt.elapsedMs} ms
               <dl className="intelligence-hub__inspection-facts"><div><dt>Request hash</dt><dd>{receipt.requestHash}</dd></div>
                 <div><dt>Response hash</dt><dd>{receipt.responseTextHash ?? 'No response hash recorded'}</dd></div>
+                {receipt.linkScan ? <div><dt>Homepage link scan</dt><dd>{receipt.linkScan.observedAnchorCount} anchor entries observed · {receipt.linkScan.approvedLinkCount} approved links found
+                  {receipt.linkScan.truncated ? ' · scan limit reached' : ''}{receipt.linkScan.baseUnsupported ? ' · base URL unsupported; no links followed' : ''}
+                  {receipt.linkScan.pageLimitReached ? ' · page limit reached' : ''}</dd></div> : null}
+                {receipt.discovery ? <div><dt>Link discovered from</dt><dd>Operation {receipt.discovery.parentOrdinal + 1} · HTML anchor · depth {receipt.discovery.depth} · {receipt.discovery.parentContentHash}</dd></div> : null}
+                {receipt.bodyDisposition ? <div><dt>Response body</dt><dd>Not retained in this Run. Inspect the source’s original availability.</dd></div> : null}
                 <div><dt>HTTP status</dt><dd>{receipt.httpStatus ?? 'No HTTP status recorded'}</dd></div>
                 {receipt.providerMessage ? <div><dt>Provider response</dt><dd>{receipt.providerMessage}</dd></div> : null}
                 <div><dt>Provider request ID</dt><dd>{receipt.providerRequestId ?? 'Not recorded'}</dd></div>
                 <div><dt>Saved source ID</dt><dd>{receipt.sourceId ?? 'No original source saved'}</dd></div></dl>
             </li>)}</ul>
-            <p>A recorded response-text hash may identify an available prefix. A withheld or missing response has no recorded hash. These records do not establish complete retrieval or native source authority.</p>
+            {run.discovery ? <section aria-label="Public web search discoveries">
+              <h5>Public web search discoveries</h5>
+              <p>Discovery metadata only. These snippets are not retained originals or accepted evidence. Publication dates and currentness are not verified.</p>
+              <dl className="intelligence-hub__inspection-facts">
+                <div><dt>Discovery status</dt><dd>{run.discovery.status.replaceAll('_', ' ')}</dd></div>
+                <div><dt>Retrieved at</dt><dd>{run.discovery.retrievedAt}</dd></div>
+                {run.discovery.queryBinding ? <>
+                  <div><dt>Submitted search</dt><dd>{run.discovery.queryBinding.submittedQuery}</dd></div>
+                  <div><dt>Provider query</dt><dd>{run.discovery.queryBinding.providerQuery}</dd></div>
+                  <div><dt>Query handling</dt><dd>{run.discovery.queryBinding.normalization.replaceAll('_', ' ')}</dd></div>
+                </> : <div><dt>Query handling</dt><dd>Not recorded in this historical projection</dd></div>}
+              </dl>
+              {run.discovery.items.length ? <ol>{run.discovery.items.map(item => <li key={item.url}>
+                <Link href={item.url} openInNewTab>{item.title}</Link>
+                <dl className="intelligence-hub__inspection-facts"><div><dt>Discovered URL</dt><dd>{item.url}</dd></div>
+                  <div><dt>Search snippet</dt><dd>{item.snippet || 'No snippet supplied'}</dd></div></dl>
+              </li>)}</ol> : <p>No discovery results were recorded.</p>}
+            </section> : null}
+            <p>A recorded response-text hash may identify a complete response or a prefix. It does not mean the body is stored in this Run. An unavailable response has no observed text hash. These records do not establish complete retrieval or native source authority.</p>
             {run.publicResearch.qualifications.length ? <>
               <p>These qualifications were recorded during acquisition. See Review for current evidence decisions.</p>
               <ul aria-label="Research qualifications">{run.publicResearch.qualifications.map((qualification, index) => <li key={index}>{qualification}</li>)}</ul>

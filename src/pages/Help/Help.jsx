@@ -10,11 +10,8 @@ import { Link } from '../../components/Link'
 import { renderSafeMarkdown, renderSafeInlineMarkdown } from '../../utils/safeMarkdown.jsx'
 import { HELP_ARTICLES } from './helpArticles.js'
 import { getHelpArticleHref, getHelpReturnHref } from './helpNavigation.js'
-import contextIllustration from '../../../docs/help/assets/intelligence-hub-context.jpg'
 import { Fieldset } from '../../components/Fieldset'
 import './Help.css'
-
-const HELP_ASSETS = Object.freeze({ '../assets/intelligence-hub-context.jpg': contextIllustration })
 
 function Help() {
   const { search } = useLocation()
@@ -25,7 +22,6 @@ function Help() {
     const match = token.match(/^(!?)\[([^\]]+)\]\(([^)]+)\)$/)
     if (!match) return renderSafeInlineMarkdown(token)
     const [, image, label, target] = match
-    if (image && Object.hasOwn(HELP_ASSETS, target)) return <img key={index} src={HELP_ASSETS[target]} alt={label} loading="lazy" className="help__illustration" />
     const related = !image && HELP_ARTICLES.find(item => target === item.slug + '.md')
     return related ? <Link key={index} to={getHelpArticleHref(search, related.slug)}>{label}</Link> : token
   })

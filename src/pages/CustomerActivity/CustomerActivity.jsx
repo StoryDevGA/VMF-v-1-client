@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatCustomerActivityTitle } from '../../utils/customerExperience.js'
 import { MdCheck, MdDescription, MdPriorityHigh, MdSubdirectoryArrowRight } from 'react-icons/md'
 import { useSearchParams } from 'react-router-dom'
 import { Link } from '../../components/Link'
@@ -28,12 +29,6 @@ const getActivityCategory = (activity) => {
   if (action.includes('REVIEW') || action.includes('QUALITY') || action.includes('TRUTH')) return 'REVIEW'
   if (action.includes('SOURCE') || action.includes('EVIDENCE')) return 'SOURCE'
   return 'WORKSPACE'
-}
-
-const formatActivityTitle = (activity) => {
-  const summary = String(activity.summary ?? '').trim()
-  const shortened = summary.replace(/\s+for\s+value-narrative-.+$/i, '').trim()
-  return shortened || 'Workspace activity'
 }
 
 const getActivityDescription = (category) => ({
@@ -146,7 +141,7 @@ export function CustomerActivity() {
                     <span className="customer-centre__activity-icon" aria-hidden="true"><Icon /></span>
                     <div>
                       <span className="customer-centre__activity-type">{category[0] + category.slice(1).toLowerCase()}</span>
-                      <h3>{formatActivityTitle(activity)}</h3>
+                      <h3>{formatCustomerActivityTitle(activity)}</h3>
                       <p>{getActivityDescription(category)}</p>
                       <small>{activity.runtimeName || 'Selected workspace'}</small>
                     </div>

@@ -13,14 +13,8 @@ import { Dialog } from '../../components/Dialog'
 import { Link } from '../../components/Link'
 import { Status } from '../../components/Status'
 import { TableDateTime } from '../../components/TableDateTime/TableDateTime.jsx'
-import { CUSTOMER_WORKSPACE_STATES } from '../../utils/customerExperience.js'
+import { CUSTOMER_WORKSPACE_STATES, formatCustomerActivityTitle } from '../../utils/customerExperience.js'
 import { projectAction } from './dashboardModel.js'
-
-const formatRecentActivityTitle = (activity = {}) => {
-  const summary = String(activity.summary ?? '').trim()
-  const shortened = summary.replace(/\s+for\s+value-narrative-.+$/i, '').trim()
-  return shortened || 'Workspace activity'
-}
 
 const getRecentActivityCategory = (activity = {}) => {
   const value = `${activity.action ?? ''} ${activity.summary ?? ''}`.toUpperCase()
@@ -267,7 +261,7 @@ export function RecentActivity({ activities = [], isLoading = false }) {
                 )}
               </span>
               <div>
-                <strong>{formatRecentActivityTitle(activity)}</strong>
+                <strong>{formatCustomerActivityTitle(activity)}</strong>
                 <p>{activity.runtimeName || getRecentActivityCategory(activity)}</p>
               </div>
               <TableDateTime value={activity.occurredAt} fallback="Time unavailable" className="customer-home__date-time" />

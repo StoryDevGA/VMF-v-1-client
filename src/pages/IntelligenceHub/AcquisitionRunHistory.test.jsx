@@ -464,6 +464,20 @@ const publicResearchRun = (status = 'SUCCEEDED', mode = 'OFFLINE') => {
   return value
 }
 describe('combined Public Research Run contract and existing history', () => {
+  it('shows website body minimisation on a new native receipt without claiming original availability', () => {
+    const value = publicResearchRun('SUCCEEDED', 'LIVE')
+    value.publicResearch.receipts[2].bodyDisposition = 'NOT_RETAINED_IN_RUN'
+    expect(readAcquisitionRun(value, controlledScope)).toEqual(value)
+    showSearchReceipt(value); mount({ scope: controlledScope }, `/app/intelligence?acquisitionRunId=${runId}`)
+    expect(screen.getByText('Not retained in this Run. Inspect the source’s original availability.')).toBeVisible()
+  })
+  it.each(['unknown value', 'search', 'registry', 'offline', 'dispatch'])('rejects incompatible body disposition: %s', kind => {
+    const value = publicResearchRun('SUCCEEDED', kind === 'offline' ? 'OFFLINE' : 'LIVE')
+    const receipt = value.publicResearch.receipts[kind === 'search' ? 0 : kind === 'registry' ? 1 : 2]
+    receipt.bodyDisposition = kind === 'unknown value' ? 'SAVED_ORIGINAL' : 'NOT_RETAINED_IN_RUN'
+    if (kind === 'dispatch') receipt.phase = 'DISPATCHING'
+    expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+  })
   it.each(['PUBLIC null', 'PUBLIC array', 'PUBLIC string', 'SEARCH null', 'SEARCH array', 'SEARCH string'])(
     'refuses a malformed %s outcome without crashing history', kind => {
       const value = kind.startsWith('PUBLIC') ? publicResearchRun() : searchReceiptRun()
@@ -622,4 +636,170 @@ it.each(['operation count', 'completed count', 'ordinal five'])('rejects PUBLIC 
  if (kind === 'completed count') value.publicResearch.completedOperationCount = 2
  if (kind === 'ordinal five') value.publicResearch.receipts[0].ordinal = 5
  expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+})
+
+
+const nativeTraversalRun = () => {
+  const value = publicResearchRun('SUCCEEDED', 'LIVE'), summary = value.publicResearch
+  const parent = { ...summary.receipts[2], ordinal: 0, bytesRead: 40, elapsedMs: 10, bodyDisposition: 'NOT_RETAINED_IN_RUN',
+    linkScan: { observedAnchorCount: 3, approvedLinkCount: 1, truncated: false, baseUnsupported: false, pageLimitReached: false } }
+  const child = { ...parent, ordinal: 1, inputIndex: 1, sourceId: 'unit_child',
+    discovery: { method: 'HTML_ANCHOR', parentOrdinal: 0, parentContentHash: parent.responseTextHash, depth: 1 } }
+  delete child.linkScan
+  summary.websiteTraversal = { contractVersion: 'public-research-website-traversal.v1', maxDepth: 1, maxLinks: 100 }
+  Object.assign(summary, { receipts: [parent, child], operationCount: 2, completedOperationCount: 2, bytesRead: 80, elapsedMsRecorded: 20 })
+  Object.assign(summary.limits, { maxPages: 2, maxSearchRequests: 0, maxRegistryRequests: 0 })
+  for (const category of summary.categories) Object.assign(category, category.key === 'WEBSITE'
+    ? { completedCount: 2, evidenceObjectCount: 6 } : { status: 'NOT_SELECTED', completedCount: 0, evidenceObjectCount: 0 })
+  const website = value.outcomes[2]
+  value.outcomes = [website, { ...website, inputIndex: 1, sourceId: 'unit_child' }]
+  summary.qualifications = ['PENDING_HUMAN_REVIEW']
+  return value
+}
+
+describe('native one-hop traversal receipt presentation', () => {
+  it('shows the bounded actual scan and parent hash without adding another navigation flow', () => {
+    const value = nativeTraversalRun()
+    expect(readAcquisitionRun(value, controlledScope)).toEqual(value)
+    showSearchReceipt(value); mount({ scope: controlledScope }, `/app/intelligence?acquisitionRunId=${runId}`)
+    expect(screen.getByText('One link level · up to 100 anchor entries · approved pages only')).toBeVisible()
+    expect(screen.getByText('3 anchor entries observed · 1 approved links found')).toBeVisible()
+    expect(screen.getByText(/Operation 1 · HTML anchor · depth 1/)).toHaveTextContent(value.publicResearch.receipts[0].responseTextHash)
+  })
+  it('shows a scan limitation alongside partial results', () => {
+    const value = nativeTraversalRun(); value.status = 'PARTIALLY_SUCCEEDED'
+    Object.assign(value.publicResearch.receipts[0].linkScan, { observedAnchorCount: 100, truncated: true })
+    value.publicResearch.categories[1].status = 'PARTIAL'
+    expect(readAcquisitionRun(value, controlledScope)).toEqual(value)
+    showSearchReceipt(value); mount({ scope: controlledScope }, `/app/intelligence?acquisitionRunId=${runId}`)
+    expect(screen.getByText(/100 anchor entries observed · 1 approved links found · scan limit reached/)).toBeVisible()
+  })
+  it.each(['missing opt-in', 'offline', 'wrong limit', 'unknown scan', 'child scan', 'missing lineage',
+    'wrong parent', 'wrong hash', 'wrong depth', 'no observed link', 'base with child'])(
+    'refuses inconsistent traversal metadata: %s', kind => {
+      const value = nativeTraversalRun(), summary = value.publicResearch, parent = summary.receipts[0], child = summary.receipts[1]
+      if (kind === 'missing opt-in') delete summary.websiteTraversal
+      if (kind === 'offline') summary.mode = 'OFFLINE'
+      if (kind === 'wrong limit') summary.websiteTraversal.maxDepth = 2
+      if (kind === 'unknown scan') parent.linkScan.urls = ['private']
+      if (kind === 'child scan') child.linkScan = { ...parent.linkScan }
+      if (kind === 'missing lineage') delete child.discovery
+      if (kind === 'wrong parent') child.discovery.parentOrdinal = 1
+      if (kind === 'wrong hash') child.discovery.parentContentHash = 'sha256:' + 'f'.repeat(64)
+      if (kind === 'wrong depth') child.discovery.depth = 2
+      if (kind === 'no observed link') parent.linkScan.approvedLinkCount = 0
+      if (kind === 'base with child') { parent.linkScan.baseUnsupported = true; parent.linkScan.approvedLinkCount = 0 }
+      expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+    })
+})
+
+
+const nativeDiscoveryRun = () => {
+  const value = publicResearchRun('SUCCEEDED', 'LIVE'), receipt = value.publicResearch.receipts[0]
+  value.discovery = { classification: 'DISCOVERY_METADATA_ONLY', originalEvidence: false, status: 'SUCCESS',
+    retrievedAt: value.completedAt, requestHash: receipt.requestHash, responseHash: receipt.responseTextHash,
+    queryBinding: { contractVersion: 'tavily-query-binding.v2', submittedQuery: 'site:unit.example Unit', providerQuery: 'Unit', normalization: 'LEADING_APPROVED_SITE_OPERATOR_REMOVED' },
+    items: [{ url: 'https://unit.example/about', title: 'Actual-shaped unit title', snippet: '<script>unit text only</script>', resultOrder: 1 }] }
+  return value
+}
+describe('native discovery-only Run presentation', () => {
+  it('shows recorded query, retrieval time, safe link and literal snippet without implying original evidence', () => {
+    const value = nativeDiscoveryRun(); loadControlled(value)
+    mount({ scope: controlledScope }, '/app/intelligence?acquisitionRunId=' + runId)
+    const section = screen.getByRole('region', { name: 'Public web search discoveries' })
+    expect(section).toHaveTextContent('These snippets are not retained originals or accepted evidence')
+    expect(section).toHaveTextContent('site:unit.example Unit')
+    expect(section).toHaveTextContent(value.completedAt)
+    expect(section).toHaveTextContent('<script>unit text only</script>')
+    expect(section.querySelector('script')).toBeNull()
+    expect(screen.getByRole('link', { name: /Actual-shaped unit title/ })).toHaveAttribute('href', 'https://unit.example/about')
+    expect(screen.getByRole('link', { name: /Actual-shaped unit title/ })).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(reads.cancel).not.toHaveBeenCalled()
+  })
+  it('preserves legacy missing query binding and absent discovery', () => {
+    const value = nativeDiscoveryRun(); delete value.discovery.queryBinding
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+    delete value.discovery; expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+  })
+  it.each(['EMPTY', 'UNAVAILABLE', 'RATE_LIMITED'])('accepts actual empty %s projection without invented query or items', status => {
+    const value = nativeDiscoveryRun(); Object.assign(value.discovery, { status, items: [] }); delete value.discovery.queryBinding
+    value.publicResearch.receipts[0].httpStatus = status === 'EMPTY' ? 200 : status === 'RATE_LIMITED' ? 429 : 503
+    value.status = 'PARTIALLY_SUCCEEDED'; value.publicResearch.categories[0].status = status === 'EMPTY' ? 'EMPTY' : 'FAILED'
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+  })
+  it.each(['offline', 'other run', 'original', 'request hash', 'response hash', 'time', 'late time', 'count', 'order', 'duplicate',
+    'unsafe URL', 'credential URL', 'token URL', 'foreign host', 'empty success', 'error items', 'unknown field', 'bad query', 'wrong query version', 'false normalization'])('refuses malformed discovery: %s', kind => {
+    const value = nativeDiscoveryRun(), discovery = value.discovery
+    if (kind === 'offline') { value.publicResearch.mode = 'OFFLINE'; value.publicResearch.classification = 'CONTROLLED_PROVIDER_FREE_RESEARCH'; value.publicResearch.liveExecutionEnabled = false }
+    if (kind === 'other run') { value.contractVersion = 'acquisition-run.v1'; delete value.publicResearch }
+    if (kind === 'original') discovery.originalEvidence = true
+    if (kind === 'request hash') discovery.requestHash = 'sha256:' + 'f'.repeat(64)
+    if (kind === 'response hash') discovery.responseHash = 'sha256:' + 'f'.repeat(64)
+    if (kind === 'time') discovery.retrievedAt = '2020-01-01T00:00:00.000Z'
+    if (kind === 'late time') discovery.retrievedAt = '2099-01-01T00:00:00.000Z'
+    if (kind === 'count') discovery.items = Array.from({ length: 5 }, (_, index) => ({ ...discovery.items[0], url: 'https://unit.example/' + index, resultOrder: index + 1 }))
+    if (kind === 'order') discovery.items[0].resultOrder = 2
+    if (kind === 'duplicate') discovery.items.push({ ...discovery.items[0], resultOrder: 2 })
+    if (kind === 'unsafe URL') discovery.items[0].url = 'javascript:alert(1)'
+    if (kind === 'credential URL') discovery.items[0].url = 'https://user:pass@unit.example/'
+    if (kind === 'token URL') discovery.items[0].url = 'https://unit.example/?token=private'
+    if (kind === 'foreign host') discovery.items[0].url = 'https://other.example/'
+    if (kind === 'empty success') discovery.items = []
+    if (kind === 'error items') discovery.status = 'UNAVAILABLE'
+    if (kind === 'unknown field') discovery.invented = true
+    if (kind === 'bad query') discovery.queryBinding.providerQuery = 'other'
+    if (kind === 'wrong query version') discovery.queryBinding.contractVersion = 'tavily-query-binding.v3'
+    if (kind === 'false normalization') discovery.queryBinding.normalization = 'EXACT'
+    expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+  })
+})
+
+
+// Unit-only failed DTOs. No live timeout or research execution.
+const nativeTimeoutRun = (httpStatus, cancelled = false) => {
+  const value = publicResearchRun('FAILED', 'LIVE'), summary = value.publicResearch, receipt = summary.receipts[0]
+  Object.assign(summary, { operationCount: 1, completedOperationCount: 1, bytesRead: 1, elapsedMsRecorded: 1 })
+  summary.limits.maxRegistryRequests = 0
+  Object.assign(receipt, { httpStatus, providerRequestId: null, bytesRead: 1, elapsedMs: 1 })
+  summary.receipts = [receipt]
+  for (const category of summary.categories) {
+    Object.assign(category, { status: category.key === 'REGISTRY' ? 'NOT_SELECTED' : 'UNKNOWN',
+      completedCount: category.key === 'SEARCH' ? 1 : 0, failedCount: 0,
+      unknownCount: category.key === 'REGISTRY' ? 0 : 1 })
+  }
+  value.outcomes = [{ kind: 'SEARCH', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 },
+    { kind: 'WEBSITE', inputIndex: 0, status: 'UNATTEMPTED', evidenceObjectCount: 0 }]
+  value.discovery = { classification: 'DISCOVERY_METADATA_ONLY', originalEvidence: false, status: 'UNAVAILABLE',
+    retrievedAt: value.completedAt, requestHash: receipt.requestHash, responseHash: receipt.responseTextHash, items: [] }
+  if (cancelled) {
+    value.status = 'CANCELLED'
+    value.cancellation = { eligible: false, executionAttemptId: value.executionAttemptId, stage: 'RUNNING', workerStopConfirmed: false }
+    value.outcomes.forEach(outcome => { outcome.status = 'CANCELLED' })
+    summary.categories.filter(category => category.key !== 'REGISTRY').forEach(category => { category.status = 'CANCELLED' })
+  }
+  return value
+}
+
+describe('native search timeout readback', () => {
+  it.each([null, 200, 429].flatMap(httpStatus => [false, true].map(cancelled => [httpStatus, cancelled])))(
+    'accepts an unavailable response with observed HTTP %s and recorded uncertainty (cancelled: %s)', (httpStatus, cancelled) => {
+      const value = nativeTimeoutRun(httpStatus, cancelled), before = JSON.stringify(value)
+      expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+      expect(JSON.stringify(value)).toBe(before)
+    })
+  it.each([200, 429].flatMap(httpStatus => ['completed', 'provider identity'].map(kind => [httpStatus, kind])))(
+    'rejects unavailable HTTP %s with contradictory %s', (httpStatus, kind) => {
+      const value = nativeTimeoutRun(httpStatus)
+      if (kind === 'completed') {
+        Object.assign(value.publicResearch.categories[0], { status: 'SUCCEEDED', unknownCount: 0 })
+      } else value.publicResearch.receipts[0].providerRequestId = 'unexpected-completed-request'
+      expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+    })
+  it('shows the saved unavailable result without claiming an original or retrying', () => {
+    const value = nativeTimeoutRun(200); showSearchReceipt(value)
+    mount({ scope: controlledScope }, '/app/intelligence?acquisitionRunId=' + runId)
+    expect(screen.getByRole('region', { name: 'Public web search discoveries' })).toHaveTextContent('UNAVAILABLE')
+    expect(screen.queryByText('Run history unavailable. Refresh to verify recorded executions.')).not.toBeInTheDocument()
+    expect(reads.cancel).not.toHaveBeenCalled()
+  })
 })
