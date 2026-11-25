@@ -1,3 +1,5 @@
+import { readGithubCapture, githubCaptureRequestUrl } from './githubCaptureContract.js'
+import { readIndustryCapture } from './industryCaptureContract.js'
 export const PUBLIC_RESEARCH_SOURCES = Object.freeze([
   { key: 'WEBSITE', label: 'Official website', boundary: 'Public representation, not independent proof of outcomes.' },
   { key: 'SEARCH', label: 'Public web search', boundary: 'Discovery only; snippets and AI summaries are not source evidence.' },
@@ -102,7 +104,6 @@ export const researchDraftMatchesSaved = (draft, saved) => {
 }
 export const RESEARCH_CAPABILITY_LABELS = Object.freeze({
   NATIVE_GATED: 'Implemented method · operating release required',
-  INTERNAL_FIXTURE_ONLY: 'Internal test capture only',
   UNAVAILABLE: 'Retrieval unavailable',
   SEPARATE_SPRINT: 'Separate registry work',
 })
@@ -110,8 +111,8 @@ export const readResearchCapabilityMatrix = value => {
   const exact = (row, fields) => row && !Array.isArray(row) && Object.keys(row).length === fields.length
     && fields.every(key => Object.hasOwn(row, key))
   const implementation = { WEBSITE: 'NATIVE_GATED', SEARCH: 'NATIVE_GATED', REGISTRY: 'SEPARATE_SPRINT',
-    GITHUB: 'INTERNAL_FIXTURE_ONLY', LINKEDIN: 'UNAVAILABLE', SOCIAL: 'UNAVAILABLE', NEWS: 'NATIVE_GATED',
-    REVIEWS: 'UNAVAILABLE', INDUSTRY: 'UNAVAILABLE' }
+    GITHUB: 'NATIVE_GATED', LINKEDIN: 'UNAVAILABLE', SOCIAL: 'UNAVAILABLE', NEWS: 'NATIVE_GATED',
+    REVIEWS: 'UNAVAILABLE', INDUSTRY: 'NATIVE_GATED' }
   if (!exact(value, ['contractVersion', 'categories']) || value.contractVersion !== 'public-research-capability-matrix.v1'
     || !Array.isArray(value.categories) || value.categories.length !== PUBLIC_RESEARCH_SOURCES.length
     || new Set(value.categories.map(row => row?.key)).size !== PUBLIC_RESEARCH_SOURCES.length) return null
@@ -170,7 +171,13 @@ export const readFixtureStart = data => {
       } catch { return false }
     }
     const fields = ['contractVersion', 'eligible', 'mode', 'liveExecutionEnabled', 'classification', 'actorUserId', 'scope', 'basis', 'selector', 'requestKey']
+    const combined = Object.hasOwn(start || {}, 'newsCapture')
+    const github = Object.hasOwn(start || {}, 'githubCapture')
+    const industry = Object.hasOwn(start || {}, 'industryCapture')
     if (offline) fields.push('fixture')
+    if (combined) fields.push('newsCapture')
+    if (github) fields.push('githubCapture')
+    if (industry) fields.push('industryCapture')
     if (!keys(start, fields) || start.contractVersion !== 'public-research-start.v1' || start.eligible !== true || !record
       || !['OFFLINE', 'LIVE'].includes(start.mode) || start.liveExecutionEnabled !== !offline
       || start.classification !== (offline ? 'CONTROLLED_PROVIDER_FREE_RESEARCH' : 'NATIVE_PUBLIC_RESEARCH')
@@ -182,8 +189,21 @@ export const readFixtureStart = data => {
       || !keys(start.selector, ['configurationVersion', 'configurationHash', 'basisStateVersion'])
       || start.selector.configurationVersion !== record.configurationVersion || start.selector.configurationHash !== record.configurationHash
       || start.selector.basisStateVersion !== data.basis.stateVersion
-      || record.settings.sources.some(key => !['SEARCH', 'WEBSITE', 'REGISTRY', 'NEWS'].includes(key))
-      || record.settings.sources.includes('NEWS') && (offline || record.settings.sources.length !== 1
+      || record.settings.sources.some(key => !['SEARCH', 'WEBSITE', 'REGISTRY', 'NEWS', 'GITHUB', 'INDUSTRY'].includes(key))
+      || (github || record.settings.sources.includes('GITHUB')) && (offline || !github || combined || industry
+        || !readGithubCapture(start.githubCapture) || record.settings.sources.length !== 1 || record.settings.sources[0] !== 'GITHUB'
+        || record.settings.startingUrls.length !== 1 || record.settings.startingUrls[0] !== githubCaptureRequestUrl(start.githubCapture))
+      || (industry || record.settings.sources.includes('INDUSTRY')) && (offline || !industry || combined || github
+        || !readIndustryCapture(start.industryCapture) || record.settings.sources.length !== 1 || record.settings.sources[0] !== 'INDUSTRY'
+        || record.settings.startingUrls.length !== 1 || record.settings.startingUrls[0] !== start.industryCapture.reportUrl)
+      || combined && (offline || !keys(start.newsCapture, ['contractVersion', 'articleUrl'])
+        || start.newsCapture.contractVersion !== 'public-research-news-capture.v2'
+        || record.settings.sources.length !== 3 || !['WEBSITE', 'SEARCH', 'NEWS'].every(key => record.settings.sources.includes(key))
+        || record.settings.startingUrls.length < 2 || record.settings.startingUrls.length > 3
+        || new Set(record.settings.startingUrls).size !== record.settings.startingUrls.length
+        || !record.settings.startingUrls.every(target => typeof target === 'string' && target.length <= 500 && safeNewsUrl(target))
+        || record.settings.startingUrls.indexOf(start.newsCapture.articleUrl) < 1)
+      || !combined && record.settings.sources.includes('NEWS') && (offline || record.settings.sources.length !== 1
         || record.settings.startingUrls.length !== 1 || !safeNewsUrl(record.settings.startingUrls[0]))) return null
     if (offline) {
       if (start.requestKey !== null || !keys(start.fixture, ['fixtureId', 'fixtureVersion', 'fixtureFileSha256', 'controlledBindingId'])

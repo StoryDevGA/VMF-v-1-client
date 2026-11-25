@@ -1,3 +1,5 @@
+import { readGithubCapture } from './githubCaptureContract.js'
+import { readIndustryCapture } from './industryCaptureContract.js'
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/
 const terminal = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'CANCELLED']
 export const isTerminalAcquisitionRun = run => terminal.includes(run?.status)
@@ -18,15 +20,31 @@ const publicResearchRunMatches = value => {
   const sourceId = candidate => typeof candidate === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(candidate)
   const isTerminal = terminal.includes(value.status)
   const hasNews = summary != null && Object.hasOwn(summary, 'newsCapture')
-  const captureCategory = hasNews ? 'NEWS' : 'WEBSITE'
+  const hasGithub = summary != null && Object.hasOwn(summary, 'githubCapture')
+  const hasIndustry = summary != null && Object.hasOwn(summary, 'industryCapture')
+  const singleCaptureCategory = hasIndustry ? 'INDUSTRY' : hasGithub ? 'GITHUB' : null
+  const combined = summary?.newsCapture?.contractVersion === 'public-research-news-capture.v2'
+  const captureCategories = hasIndustry ? ['INDUSTRY'] : hasGithub ? ['GITHUB'] : combined ? ['WEBSITE', 'NEWS'] : hasNews ? ['NEWS'] : ['WEBSITE']
+  const safeArticleUrl = candidate => {
+    if (typeof candidate !== 'string' || candidate.length > 500) return false
+    try {
+      const url = new URL(candidate)
+      return url.protocol === 'https:' && !url.username && !url.password && !url.hash && !url.search && !url.port
+    } catch { return false }
+  }
   const hasTraversal = summary != null && Object.hasOwn(summary, 'websiteTraversal')
   const traversal = summary?.websiteTraversal
   if (!keys(summary, ['mode', 'classification', 'liveExecutionEnabled', 'planHash', 'policyHash', 'receiptHash', 'releaseId',
     'operationCount', 'completedOperationCount', 'bytesRead', 'reservedCostMicros', 'elapsedMsRecorded', 'modelTokens',
-    'limits', 'categories', 'receipts', 'qualifications', ...(hasTraversal ? ['websiteTraversal'] : []), ...(hasNews ? ['newsCapture'] : [])])
-    || hasNews && (!keys(summary.newsCapture, ['contractVersion'])
-      || summary.newsCapture.contractVersion !== 'public-research-news-capture.v1' || summary.mode !== 'LIVE' || hasTraversal
+    'limits', 'categories', 'receipts', 'qualifications', ...(hasTraversal ? ['websiteTraversal'] : []), ...(hasNews ? ['newsCapture'] : []), ...(hasGithub ? ['githubCapture'] : []), ...(hasIndustry ? ['industryCapture'] : [])])
+    || hasIndustry && (summary.mode !== 'LIVE' || hasGithub || hasNews || hasTraversal || !readIndustryCapture(summary.industryCapture))
+    || hasGithub && (summary.mode !== 'LIVE' || hasNews || hasTraversal || hasIndustry || !readGithubCapture(summary.githubCapture)
       || value.discovery !== undefined)
+    || hasNews && (summary.mode !== 'LIVE' || hasTraversal
+      || (combined ? !keys(summary.newsCapture, ['contractVersion', 'articleUrl', 'inputIndex'])
+        || !safeArticleUrl(summary.newsCapture.articleUrl) || !count(summary.newsCapture.inputIndex, 2) || summary.newsCapture.inputIndex < 1
+        : !keys(summary.newsCapture, ['contractVersion']) || summary.newsCapture.contractVersion !== 'public-research-news-capture.v1'
+          || value.discovery !== undefined))
     || hasTraversal && (!keys(traversal, ['contractVersion', 'maxDepth', 'maxLinks'])
       || traversal.contractVersion !== 'public-research-website-traversal.v1' || traversal.maxDepth !== 1
       || traversal.maxLinks !== 100 || summary.mode !== 'LIVE')
@@ -53,21 +71,22 @@ const publicResearchRunMatches = value => {
     || ['maxPageBytes', 'maxJsonBytes', 'maxTotalBytes', 'maxElapsedMs', 'maxRequestMs'].some(key => limits[key] === 0)
     || limits.concurrency !== 1 || limits.retries !== 0 || limits.redirects !== 0 || limits.modelTokens !== 0
     || summary.reservedCostMicros > limits.maxCostMicros
-    || !Array.isArray(summary.categories) || summary.categories.length !== (hasNews ? 4 : 3)
-    || new Set(summary.categories.map(category => category?.key)).size !== (hasNews ? 4 : 3)
+    || !Array.isArray(summary.categories) || summary.categories.length !== (hasNews || hasGithub || hasIndustry ? 4 : 3)
+    || new Set(summary.categories.map(category => category?.key)).size !== (hasNews || hasGithub || hasIndustry ? 4 : 3)
     || !Array.isArray(summary.receipts) || summary.receipts.length > 5
     || summary.operationCount !== summary.receipts.length
     || summary.completedOperationCount !== summary.receipts.filter(receipt => receipt?.phase === 'RECORDED').length
-    || !Array.isArray(summary.qualifications) || summary.qualifications.length > 8
+    || !Array.isArray(summary.qualifications) || summary.qualifications.length > (value.discovery?.scopeDisposition ? 9 : 8)
     || summary.qualifications.some(text => typeof text !== 'string' || !text.trim() || text.length > 180)) return false
-  const categoryStates = ['NOT_SELECTED', 'NOT_APPLICABLE', 'PENDING', 'RUNNING', 'SUCCEEDED', 'EMPTY', 'PARTIAL', 'FAILED', 'UNKNOWN', 'CANCELLED']
+  const categoryStates = ['NOT_SELECTED', 'NOT_APPLICABLE', 'PENDING', 'RUNNING', 'SUCCEEDED', 'EMPTY', 'PARTIAL', 'FAILED', 'UNKNOWN', 'CANCELLED',
+    ...(combined ? ['NOT_ATTEMPTED'] : [])]
   for (const category of summary.categories) {
-    if (!keys(category, ['key', 'status', 'completedCount', 'failedCount', 'unknownCount', 'evidenceObjectCount'])
-      || !(hasNews ? ['SEARCH', 'WEBSITE', 'REGISTRY', 'NEWS'] : ['SEARCH', 'WEBSITE', 'REGISTRY']).includes(category.key) || !categoryStates.includes(category.status)
-      || !['completedCount', 'failedCount', 'unknownCount', 'evidenceObjectCount'].every(key => count(category[key]))
+    if (!keys(category, ['key', 'status', 'completedCount', 'failedCount', 'unknownCount', 'evidenceObjectCount', ...(combined ? ['notAttemptedCount'] : [])])
+      || !(hasIndustry ? ['SEARCH', 'WEBSITE', 'REGISTRY', 'INDUSTRY'] : hasGithub ? ['SEARCH', 'WEBSITE', 'REGISTRY', 'GITHUB'] : hasNews ? ['SEARCH', 'WEBSITE', 'REGISTRY', 'NEWS'] : ['SEARCH', 'WEBSITE', 'REGISTRY']).includes(category.key) || !categoryStates.includes(category.status)
+      || !['completedCount', 'failedCount', 'unknownCount', 'evidenceObjectCount', ...(combined ? ['notAttemptedCount'] : [])].every(key => count(category[key]))
       || ['NOT_SELECTED', 'NOT_APPLICABLE'].includes(category.status)
         && ['completedCount', 'failedCount', 'unknownCount', 'evidenceObjectCount'].some(key => category[key] !== 0)
-      || category.key !== captureCategory && category.evidenceObjectCount !== 0
+      || !captureCategories.includes(category.key) && category.evidenceObjectCount !== 0
       || isTerminal && ['PENDING', 'RUNNING'].includes(category.status)) return false
   }
   const ordinals = new Set()
@@ -80,7 +99,7 @@ const publicResearchRunMatches = value => {
     if (!keys(receipt, ['ordinal', 'category', 'phase', 'inputIndex', 'requestHash', 'responseTextHash', 'httpStatus', 'bytesRead',
       'elapsedMs', 'providerRequestId', 'sourceId', 'evidenceObjectCount', ...(hasProviderMessage ? ['providerMessage'] : []), ...(hasBodyDisposition ? ['bodyDisposition'] : []),
       ...(hasScan ? ['linkScan'] : []), ...(hasDiscovery ? ['discovery'] : []), ...(hasProvenanceHash ? ['provenanceHash'] : [])])
-      || hasProvenanceHash && (!hasNews || receipt.category !== 'NEWS' || receipt.phase !== 'RECORDED'
+      || hasProvenanceHash && (!(hasNews && receipt.category === 'NEWS') && !(hasGithub && receipt.category === 'GITHUB') && !(hasIndustry && receipt.category === 'INDUSTRY') || receipt.phase !== 'RECORDED'
         || !hash(receipt.provenanceHash) || receipt.httpStatus !== 200 || !hasBodyDisposition)
       || hasScan && (!hasTraversal || receipt.ordinal !== 0 || receipt.category !== 'WEBSITE'
         || receipt.phase !== 'RECORDED' || receipt.httpStatus !== 200 || !hasBodyDisposition
@@ -95,25 +114,37 @@ const publicResearchRunMatches = value => {
         || !keys(receipt.discovery, ['method', 'parentOrdinal', 'parentContentHash', 'depth'])
         || receipt.discovery.method !== 'HTML_ANCHOR' || receipt.discovery.parentOrdinal !== 0
         || receipt.discovery.depth !== 1 || !hash(receipt.discovery.parentContentHash))
-      || hasBodyDisposition && (receipt.bodyDisposition !== 'NOT_RETAINED_IN_RUN' || receipt.category !== captureCategory
+      || hasBodyDisposition && (receipt.bodyDisposition !== 'NOT_RETAINED_IN_RUN' || !captureCategories.includes(receipt.category)
         || summary.mode !== 'LIVE' || receipt.phase !== 'RECORDED')
       || hasProviderMessage && (receipt.category !== 'SEARCH' || receipt.phase !== 'RECORDED' || !(receipt.httpStatus >= 400)
         || !summary.categories.some(category => category.key === 'SEARCH' && category.failedCount > 0)
         || typeof receipt.providerMessage !== 'string' || !receipt.providerMessage.trim()
         || receipt.providerMessage.length > 300 || /\p{Cc}/u.test(receipt.providerMessage))
-      || !count(receipt.ordinal, 4) || ordinals.has(receipt.ordinal) || !(hasNews ? ['NEWS'] : ['SEARCH', 'WEBSITE', 'REGISTRY']).includes(receipt.category)
-      || !['DISPATCHING', 'RECORDED'].includes(receipt.phase) || !count(receipt.inputIndex, receipt.category === 'WEBSITE' ? 2 : 0)
+      || !count(receipt.ordinal, 4) || ordinals.has(receipt.ordinal)
+      || !(hasIndustry ? ['INDUSTRY'] : hasGithub ? ['GITHUB'] : combined ? ['SEARCH', 'WEBSITE', 'NEWS'] : hasNews ? ['NEWS'] : ['SEARCH', 'WEBSITE', 'REGISTRY']).includes(receipt.category)
+      || !['DISPATCHING', 'RECORDED'].includes(receipt.phase) || !count(receipt.inputIndex, receipt.category === 'WEBSITE' || combined && receipt.category === 'NEWS' ? 2 : 0)
+      || combined && receipt.category === 'NEWS' && receipt.inputIndex !== summary.newsCapture.inputIndex
+      || combined && receipt.category === 'WEBSITE' && receipt.inputIndex === summary.newsCapture.inputIndex
       || !hash(receipt.requestHash) || !(receipt.responseTextHash === null || hash(receipt.responseTextHash))
       || !(receipt.httpStatus === null || Number.isInteger(receipt.httpStatus) && receipt.httpStatus >= 100 && receipt.httpStatus <= 599)
       || !(receipt.providerRequestId === null || typeof receipt.providerRequestId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(receipt.providerRequestId))
       || !(receipt.sourceId === null || sourceId(receipt.sourceId))
       || !['bytesRead', 'elapsedMs', 'evidenceObjectCount'].every(key => count(receipt[key]))
-      || receipt.category !== captureCategory && (receipt.sourceId !== null || receipt.evidenceObjectCount !== 0)
+      || !captureCategories.includes(receipt.category) && (receipt.sourceId !== null || receipt.evidenceObjectCount !== 0)
       || receipt.phase === 'DISPATCHING' && (receipt.responseTextHash !== null || receipt.httpStatus !== null || receipt.providerRequestId !== null
         || receipt.sourceId !== null || receipt.bytesRead !== 0 || receipt.elapsedMs !== 0 || receipt.evidenceObjectCount !== 0)) return false
     ordinals.add(receipt.ordinal)
   }
-  if (hasNews && (summary.categories.some(category => category.key === 'NEWS' && ['NOT_SELECTED', 'NOT_APPLICABLE'].includes(category.status))
+  if (singleCaptureCategory && (summary.categories.some(category => category.key === singleCaptureCategory && ['NOT_SELECTED', 'NOT_APPLICABLE', 'EMPTY'].includes(category.status))
+    || limits.maxPages !== 1 || limits.maxSearchRequests !== 0 || limits.maxRegistryRequests !== 0
+    || limits.maxCostMicros !== 0 || limits.searchRequestCostMicros !== 0 || limits.registryRequestCostMicros !== 0
+    || summary.operationCount > 1 || summary.categories.some(category => category.key !== singleCaptureCategory && category.status !== 'NOT_SELECTED')
+    || summary.receipts.some(receipt => receipt.category !== singleCaptureCategory || receipt.inputIndex !== 0
+      || receipt.phase === 'RECORDED' && !receipt.bodyDisposition
+        && (['httpStatus', 'responseTextHash', 'providerRequestId', 'sourceId'].some(key => receipt[key] !== null)
+          || ['bytesRead', 'elapsedMs', 'evidenceObjectCount'].some(key => receipt[key] !== 0) || Object.hasOwn(receipt, 'provenanceHash'))
+      || receipt.sourceId !== null && !receipt.provenanceHash))) return false
+  if (hasNews && !combined && (summary.categories.some(category => category.key === 'NEWS' && ['NOT_SELECTED', 'NOT_APPLICABLE'].includes(category.status))
     || limits.maxPages !== 1 || limits.maxSearchRequests !== 0 || limits.maxRegistryRequests !== 0
     || limits.maxCostMicros !== 0 || limits.searchRequestCostMicros !== 0 || limits.registryRequestCostMicros !== 0
     || summary.operationCount > 1 || summary.categories.some(category => category.key !== 'NEWS' && category.status !== 'NOT_SELECTED')
@@ -123,8 +154,37 @@ const publicResearchRunMatches = value => {
           || ['bytesRead', 'elapsedMs', 'evidenceObjectCount'].some(key => receipt[key] !== 0)
           || Object.hasOwn(receipt, 'provenanceHash'))
       || receipt.sourceId !== null && !receipt.provenanceHash))) return false
+  if (combined) {
+    const pages = summary.receipts.filter(receipt => captureCategories.includes(receipt.category))
+    if (limits.maxPages < 2 || summary.newsCapture.inputIndex >= limits.maxPages
+      || limits.maxSearchRequests !== 1 || limits.maxRegistryRequests !== 0 || limits.registryRequestCostMicros !== 0
+      || limits.searchRequestCostMicros > limits.maxCostMicros || summary.operationCount > limits.maxPages + 1
+      || new Set(pages.map(receipt => receipt.inputIndex)).size !== pages.length
+      || summary.reservedCostMicros !== summary.receipts.filter(receipt => receipt.category === 'SEARCH').length * limits.searchRequestCostMicros
+      || summary.categories.some(category => category.key === 'REGISTRY' ? category.status !== 'NOT_SELECTED'
+        : ['NOT_SELECTED', 'NOT_APPLICABLE'].includes(category.status)
+          || captureCategories.includes(category.key) && category.status === 'EMPTY')
+      || pages.some(receipt => receipt.inputIndex >= limits.maxPages
+        || receipt.phase === 'RECORDED' && !receipt.bodyDisposition
+          && (['httpStatus', 'responseTextHash', 'providerRequestId', 'sourceId'].some(key => receipt[key] !== null)
+            || ['bytesRead', 'elapsedMs', 'evidenceObjectCount'].some(key => receipt[key] !== 0) || Object.hasOwn(receipt, 'provenanceHash'))
+        || receipt.category === 'NEWS' && receipt.sourceId !== null && !receipt.provenanceHash)) return false
+    for (const category of summary.categories) {
+      const receipts = summary.receipts.filter(receipt => receipt.category === category.key)
+      const targets = category.key === 'REGISTRY' ? 0 : category.key === 'WEBSITE' ? limits.maxPages - 1 : 1
+      if (category.notAttemptedCount !== targets - receipts.length
+        || category.completedCount !== receipts.filter(receipt => receipt.phase === 'RECORDED').length
+        || category.evidenceObjectCount !== receipts.reduce((sum, receipt) => sum + receipt.evidenceObjectCount, 0)
+        || category.failedCount + category.unknownCount > receipts.length
+        || isTerminal && value.status !== 'CANCELLED'
+          && (category.status === 'NOT_ATTEMPTED') !== (targets > 0 && receipts.length === 0)) return false
+    }
+    if (value.status === 'SUCCEEDED' && (summary.operationCount !== limits.maxPages + 1
+      || summary.completedOperationCount !== summary.operationCount
+      || summary.categories.some(category => category.key !== 'REGISTRY' && !['SUCCEEDED', 'EMPTY'].includes(category.status)))) return false
+  }
   if (value.discovery !== undefined) {
-    const discovery = value.discovery, query = discovery?.queryBinding
+    const discovery = value.discovery, query = discovery?.queryBinding, scopeDisposition = discovery?.scopeDisposition
     const searchReceipts = summary.receipts.filter(receipt => receipt.category === 'SEARCH')
     const receipt = searchReceipts[0]
     const text = (candidate, max, empty = false) => typeof candidate === 'string' && candidate.length <= max
@@ -139,7 +199,7 @@ const publicResearchRunMatches = value => {
       } catch { return false }
     }
     if (!keys(discovery, ['classification', 'originalEvidence', 'status', 'retrievedAt', 'requestHash', 'responseHash', 'items',
-      ...(query !== undefined ? ['queryBinding'] : [])]) || summary.mode !== 'LIVE'
+      ...(query !== undefined ? ['queryBinding'] : []), ...(scopeDisposition !== undefined ? ['scopeDisposition'] : [])]) || summary.mode !== 'LIVE'
       || discovery.classification !== 'DISCOVERY_METADATA_ONLY' || discovery.originalEvidence !== false
       || !['SUCCESS', 'EMPTY', 'PARTIAL', 'UNAVAILABLE', 'RATE_LIMITED'].includes(discovery.status)
       || searchReceipts.length !== 1 || receipt.phase !== 'RECORDED'
@@ -155,7 +215,7 @@ const publicResearchRunMatches = value => {
       || discovery.status === 'UNAVAILABLE' && [200, 429].includes(receipt.httpStatus)
         && !(receipt.providerRequestId === null && summary.categories.some(category => category.key === 'SEARCH' && category.unknownCount > 0))
       || discovery.items.some((item, index) => !keys(item, ['url', 'title', 'snippet', 'resultOrder'])
-        || !safeUrl(item.url) || !text(item.title, 255) || !text(item.snippet, 2000, true) || item.resultOrder !== index + 1)) return false
+        || !safeUrl(item.url) || !text(item.title, 255) || !text(item.snippet, 2000, true) || (scopeDisposition ? !count(item.resultOrder, 4) || item.resultOrder === 0 : item.resultOrder !== index + 1))) return false
     if (query !== undefined) {
       if (!keys(query, ['contractVersion', 'submittedQuery', 'providerQuery', 'normalization'])
         || query.contractVersion !== 'tavily-query-binding.v2' || !text(query.submittedQuery, 2000)
@@ -167,6 +227,23 @@ const publicResearchRunMatches = value => {
       const hostname = query.submittedQuery.startsWith('site:') ? query.submittedQuery.slice(5).split(' ')[0] : query.submittedQuery
       if (!safeUrl('https://' + hostname) || new URL('https://' + hostname).hostname !== hostname
         || discovery.items.some(item => new URL(item.url).hostname !== hostname)) return false
+    }
+    if (scopeDisposition !== undefined) {
+      const scope = scopeDisposition
+      if (!query || !keys(scope, ['contractVersion', 'approvedHostname', 'receivedCount', 'excluded'])
+        || scope.contractVersion !== 'public-research-search-scope.v1' || !count(scope.receivedCount, 4)
+        || !['SUCCESS', 'EMPTY'].includes(discovery.status) || !Array.isArray(scope.excluded) || scope.excluded.length > 4
+        || scope.receivedCount !== discovery.items.length + scope.excluded.length
+        || scope.approvedHostname !== (query.submittedQuery.startsWith('site:') ? query.submittedQuery.slice(5).split(' ')[0] : query.submittedQuery)
+        || scope.excluded.some(item => !keys(item, ['url', 'resultOrder', 'reason']) || !safeUrl(item.url)
+          || new URL(item.url).hostname === scope.approvedHostname || item.reason !== 'HOSTNAME_OUTSIDE_APPROVED_SCOPE'
+          || !count(item.resultOrder, 4) || item.resultOrder === 0)
+        || Boolean(scope.excluded.length) !== summary.qualifications.includes('SEARCH_OUT_OF_SCOPE_RESULTS_EXCLUDED')) return false
+      const results = [...discovery.items, ...scope.excluded]
+      if (new Set(results.map(item => item.url)).size !== results.length
+        || results.map(item => item.resultOrder).sort((a, b) => a - b).some((order, index) => order !== index + 1)
+        || discovery.items.some((item, index, items) => index > 0 && item.resultOrder <= items[index - 1].resultOrder)
+        || scope.excluded.some((item, index, items) => index > 0 && item.resultOrder <= items[index - 1].resultOrder)) return false
     }
   }
   if (hasTraversal) {
@@ -181,14 +258,14 @@ const publicResearchRunMatches = value => {
   if (value.status === 'SUCCEEDED' && (summary.bytesRead > limits.maxTotalBytes || summary.elapsedMsRecorded > limits.maxElapsedMs
     || summary.categories.some(category => !['NOT_SELECTED', 'NOT_APPLICABLE', 'SUCCEEDED', 'EMPTY'].includes(category.status)
       || category.failedCount !== 0 || category.unknownCount !== 0)
-    || summary.receipts.some(receipt => receipt.bytesRead > (['WEBSITE', 'NEWS'].includes(receipt.category) ? limits.maxPageBytes : limits.maxJsonBytes)
+    || summary.receipts.some(receipt => receipt.bytesRead > (['WEBSITE', 'NEWS', 'GITHUB', 'INDUSTRY'].includes(receipt.category) ? limits.maxPageBytes : limits.maxJsonBytes)
       || receipt.elapsedMs > limits.maxRequestMs))) return false
   const cancellation = value.cancellation
   if (cancellation !== undefined && (!keys(cancellation, value.status === 'CANCELLED'
     ? ['eligible', 'executionAttemptId', 'stage', 'workerStopConfirmed'] : ['eligible', 'executionAttemptId'])
     || typeof cancellation.eligible !== 'boolean' || cancellation.executionAttemptId !== value.executionAttemptId
     || isTerminal && cancellation.eligible)) return false
-  const website = summary.categories.find(category => category.key === captureCategory)
+  const capturedCategories = summary.categories.filter(category => captureCategories.includes(category.key))
   const evidenceRecorded = summary.categories.some(category => category.evidenceObjectCount !== 0)
     || summary.receipts.some(receipt => receipt.evidenceObjectCount !== 0 || receipt.sourceId !== null)
   if (!isTerminal) return value.canonicalSaved !== true && value.outputStateVersion == null && value.audit?.saveId == null && !evidenceRecorded
@@ -205,24 +282,26 @@ const publicResearchRunMatches = value => {
       || !['SUCCEEDED', 'FAILED', 'UNATTEMPTED', 'CANCELLED'].includes(outcome.status) || !count(outcome.evidenceObjectCount)
       || outcome.sourceId != null && !sourceId(outcome.sourceId)
       || (outcome.kind !== captureKind || outcome.status !== 'SUCCEEDED') && (outcome.evidenceObjectCount !== 0 || outcome.sourceId != null)) return false
-    if (hasNews && (outcome.kind !== 'WEBSITE' || outcome.inputIndex !== 0 || value.outcomes.length !== 1)) return false
+    if (hasNews && !combined && (outcome.kind !== 'WEBSITE' || outcome.inputIndex !== 0 || value.outcomes.length !== 1)) return false
     pairs.add(pair)
     if (outcome.kind === captureKind) savedEvidence += outcome.evidenceObjectCount
     if (!count(savedEvidence)) return false
   }
+  if (combined && (value.outcomes.length !== limits.maxPages + 1 || !pairs.has('SEARCH:0')
+    || Array.from({ length: limits.maxPages }, (_, index) => `WEBSITE:${index}`).some(pair => !pairs.has(pair)))) return false
   if (value.canonicalSaved) {
     if (!version(value.outputStateVersion) || !anchor(value.audit?.saveId) || savedEvidence === 0
       || !['SUCCEEDED', 'PARTIALLY_SUCCEEDED'].includes(value.status)
       || value.outcomes.some(outcome => outcome.evidenceObjectCount > 0 && !sourceId(outcome.sourceId))
-      || website.evidenceObjectCount !== savedEvidence
+      || capturedCategories.reduce((sum, category) => sum + category.evidenceObjectCount, 0) !== savedEvidence
       || summary.receipts.reduce((total, receipt) => total + receipt.evidenceObjectCount, 0) !== savedEvidence
       || summary.receipts.some(receipt => receipt.sourceId !== null && !value.outcomes.some(outcome => outcome.kind === captureKind
         && outcome.inputIndex === receipt.inputIndex && outcome.sourceId === receipt.sourceId && outcome.evidenceObjectCount === receipt.evidenceObjectCount))
-      || value.outcomes.some(outcome => outcome.sourceId != null && !summary.receipts.some(receipt => receipt.category === captureCategory
+      || value.outcomes.some(outcome => outcome.sourceId != null && !summary.receipts.some(receipt => captureCategories.includes(receipt.category)
         && receipt.inputIndex === outcome.inputIndex && receipt.sourceId === outcome.sourceId))) return false
   } else if (value.outputStateVersion != null || value.audit?.saveId != null || savedEvidence !== 0 || evidenceRecorded
     || value.outcomes.some(outcome => outcome.sourceId != null)
-    || value.status === 'SUCCEEDED' && website.status !== 'NOT_SELECTED') return false
+    || value.status === 'SUCCEEDED' && capturedCategories.some(category => category.status !== 'NOT_SELECTED')) return false
   if (value.status === 'CANCELLED') return cancellation?.eligible === false && ['QUEUED', 'RUNNING'].includes(cancellation.stage)
     && cancellation.workerStopConfirmed === false && !value.canonicalSaved
     && value.outcomes.every(outcome => outcome.status === 'CANCELLED' && outcome.evidenceObjectCount === 0 && outcome.sourceId == null)

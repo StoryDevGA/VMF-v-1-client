@@ -119,6 +119,7 @@ function ScopedRunHistory({ scope, active, locked, canAcquire, busy, onRetry, ca
             <ul aria-label="Recorded research categories">{run.publicResearch.categories.map(category => <li key={category.key}>
               {category.key}{category.key === 'WEBSITE' && run.publicResearch.mode === 'OFFLINE' ? ' · controlled synthetic capture' : ''}: {category.status.replaceAll('_', ' ')}
               {' · '}{category.completedCount} completed · {category.failedCount} failed · {category.unknownCount} unknown · {category.evidenceObjectCount} saved evidence objects
+              {typeof category.notAttemptedCount === 'number' ? ` · ${category.notAttemptedCount} not attempted` : ''}
             </li>)}</ul>
             <ul aria-label="Recorded research operations">{run.publicResearch.receipts.map(receipt => <li key={receipt.ordinal}>
               {receipt.category} {receipt.inputIndex + 1}: {receipt.phase} · {receipt.bytesRead} bytes · {receipt.elapsedMs} ms
@@ -147,7 +148,20 @@ function ScopedRunHistory({ scope, active, locked, canAcquire, busy, onRetry, ca
                   <div><dt>Query handling</dt><dd>{run.discovery.queryBinding.normalization.replaceAll('_', ' ')}</dd></div>
                 </> : <div><dt>Query handling</dt><dd>Not recorded in this historical projection</dd></div>}
               </dl>
-              {run.discovery.items.length ? <ol>{run.discovery.items.map(item => <li key={item.url}>
+              {run.discovery.scopeDisposition ? <>
+                <p>{run.discovery.scopeDisposition.receivedCount} results returned · {run.discovery.items.length} in scope · {run.discovery.scopeDisposition.excluded.length} excluded. Only separately approved URLs can be captured.</p>
+                {run.discovery.scopeDisposition.excluded.length ? <section aria-label="Excluded search results">
+                  <h6>Excluded search results</h6>
+                  <p>These links are outside the approved search hostname. They were not visited or captured.</p>
+                  <ul>{run.discovery.scopeDisposition.excluded.map(item => <li key={item.url}>
+                    <dl className="intelligence-hub__inspection-facts">
+                      <div><dt>Result {item.resultOrder} · Excluded URL</dt><dd>{item.url}</dd></div>
+                      <div><dt>Reason</dt><dd>Outside approved hostname</dd></div>
+                    </dl>
+                  </li>)}</ul>
+                </section> : null}
+              </> : null}
+              {run.discovery.items.length ? <ol>{run.discovery.items.map(item => <li key={item.url} value={item.resultOrder}>
                 <Link href={item.url} openInNewTab>{item.title}</Link>
                 <dl className="intelligence-hub__inspection-facts"><div><dt>Discovered URL</dt><dd>{item.url}</dd></div>
                   <div><dt>Search snippet</dt><dd>{item.snippet || 'No snippet supplied'}</dd></div></dl>

@@ -73,6 +73,8 @@ export default function PublicResearchConfiguration({ brief, profile, canPrepare
         </dl>
         <Textarea label="Starting URLs · one per line" size="sm" fullWidth disabled={saving} maxLength={5010} value={draft.startingUrls}
           onChange={event => change({ startingUrls: event.target.value })} />
+        {startAvailable && startDescriptor?.newsCapture?.contractVersion === 'public-research-news-capture.v2'
+          ? <p>News article in this release: {startDescriptor.newsCapture.articleUrl}. Other listed pages are Website captures. Public search results remain discovery metadata.</p> : null}
         <Fieldset><Fieldset.Legend>Entity and jurisdiction</Fieldset.Legend><Fieldset.Content>
           <Input id={`${descriptionId}-entity`} label="Legal entity or UK subsidiary name" size="sm" fullWidth disabled={saving} maxLength={255} value={draft.legalEntity} onChange={event => jurisdiction({ legalEntity: event.target.value })} />
           <Input id={`${descriptionId}-country`} label="Country code" helperText="Two-letter code, for example GB. Leave blank if unresolved." size="sm" fullWidth disabled={saving} maxLength={2} placeholder="GB" value={draft.countryCode} onChange={event => jurisdiction({ countryCode: event.target.value.toUpperCase() })} />

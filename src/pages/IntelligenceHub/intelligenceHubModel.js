@@ -1,3 +1,5 @@
+import { readGithubCapture, githubCaptureRequestUrl, githubCaptureCanonicalUrl } from './githubCaptureContract.js'
+import { readIndustryCapture } from './industryCaptureContract.js'
 import { getExecutionWorkspaceDestinationHref, getRuntimeWorkspaceRoute } from '../../utils/runtimeWorkspace.js'
 
 export const HUB_VIEWS = Object.freeze([
@@ -55,6 +57,50 @@ export const getRecordedSourceCapture = (source, stateVersion) => {
         && !(uuid(receipt.runId) && uuid(receipt.attemptId))) return null
   } else if (receipt.runId !== null || receipt.attemptId !== null) return null
   return capture
+}
+
+export const getRecordedGithubSource = (source, stateVersion) => {
+  const capture = getRecordedSourceCapture(source, stateVersion), value = source?.publicResearchProvenance
+  const fields = ['contractVersion', 'mode', 'provider', 'category', 'metadataMethod', 'apiVersion', 'owner', 'repository',
+    'path', 'commit', 'canonicalUrl', 'publishedAt', 'currentness', 'permittedInterpretation', 'prohibitedInterpretation',
+    'limitations', 'sourceId', 'originalContentHash', 'requestedUrl', 'finalUrl', 'retrievedAt']
+  if (!capture || !value || Array.isArray(value) || Object.keys(value).length !== fields.length
+    || !fields.every(key => Object.hasOwn(value, key)) || value.contractVersion !== 'public-research-source.v3'
+    || value.mode !== 'LIVE_PUBLIC_API' || value.provider !== 'GITHUB_CONTENTS' || value.category !== 'GITHUB'
+    || value.metadataMethod !== 'GITHUB_CONTENTS_RENDERED_HTML' || value.apiVersion !== '2026-03-10'
+    || value.publishedAt !== null || value.currentness !== 'PINNED_REVISION_NOT_LATEST_STATUS'
+    || capture.captureReceipt.operation !== 'WEBSITE_DECODED_TEXT_CAPTURE'
+    || value.sourceId !== source.sourceId || value.originalContentHash !== capture.originalContentHash
+    || value.requestedUrl !== source.sourceRef || value.finalUrl !== value.requestedUrl || value.retrievedAt !== capture.capturedAt
+    || !['permittedInterpretation', 'prohibitedInterpretation', 'limitations'].every(key => typeof value[key] === 'string'
+      && value[key].trim().length > 0 && value[key].length <= 2000)) return null
+  const identity = readGithubCapture({ contractVersion: 'public-research-github-capture.v1', owner: value.owner,
+    repository: value.repository, path: value.path, commit: value.commit })
+  return identity && value.requestedUrl === githubCaptureRequestUrl(identity)
+    && value.canonicalUrl === githubCaptureCanonicalUrl(identity) ? value : null
+}
+
+export const getRecordedIndustrySource = (source, stateVersion) => {
+  const capture = getRecordedSourceCapture(source, stateVersion), value = source?.publicResearchProvenance
+  const fields = ['contractVersion', 'mode', 'provider', 'category', 'metadataMethod', 'title', 'publisher', 'publishedAt',
+    'publicationContentId', 'canonicalUrl', 'reportingPeriodQuote', 'reportCaveatQuote', 'scopeMethod', 'currentness',
+    'permittedInterpretation', 'prohibitedInterpretation', 'limitations', 'sourceId', 'originalContentHash', 'requestedUrl', 'finalUrl', 'retrievedAt']
+  const text = (candidate, max) => typeof candidate === 'string' && candidate.trim().length > 0 && candidate.length <= max
+  if (!capture || !value || Array.isArray(value) || Object.keys(value).length !== fields.length
+    || !fields.every(key => Object.hasOwn(value, key)) || value.contractVersion !== 'public-research-source.v4'
+    || value.mode !== 'LIVE_PUBLIC_WEB' || value.provider !== 'PUBLIC_HTTPS' || value.category !== 'INDUSTRY'
+    || value.metadataMethod !== 'GOVUK_HTML_PUBLICATION_METADATA'
+    || value.scopeMethod !== 'NOMINATED_QUOTES_MATCHED_CAPTURE_TEXT'
+    || value.currentness !== 'PUBLISHER_ASSERTED_NOT_INDEPENDENTLY_VERIFIED'
+    || !text(value.title, 500) || !text(value.publisher, 255) || !text(value.publishedAt, 80) || !Number.isFinite(Date.parse(value.publishedAt))
+    || typeof value.publicationContentId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value.publicationContentId)
+    || capture.captureReceipt.operation !== 'WEBSITE_DECODED_TEXT_CAPTURE'
+    || value.sourceId !== source.sourceId || value.originalContentHash !== capture.originalContentHash
+    || value.requestedUrl !== source.sourceRef || value.finalUrl !== value.requestedUrl || value.canonicalUrl !== value.requestedUrl
+    || value.retrievedAt !== capture.capturedAt
+    || !['permittedInterpretation', 'prohibitedInterpretation', 'limitations'].every(key => text(value[key], 2000))) return null
+  return readIndustryCapture({ contractVersion: 'public-research-industry-capture.v1', reportUrl: value.requestedUrl,
+    reportingPeriodQuote: value.reportingPeriodQuote, reportCaveatQuote: value.reportCaveatQuote }) ? value : null
 }
 
 export const getRecordedNewsSource = (source, stateVersion) => {

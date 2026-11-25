@@ -38,7 +38,7 @@ it.each(['version', 'missing', 'duplicate', 'unknown', 'implementation', 'permit
   if (kind === 'missing') matrix.categories.pop()
   if (kind === 'duplicate') matrix.categories[1] = { ...matrix.categories[0] }
   if (kind === 'unknown') matrix.categories[0].key = 'PRIVATE'
-  if (kind === 'implementation') matrix.categories.find(row => row.key === 'GITHUB').implementation = 'NATIVE_GATED'
+  if (kind === 'implementation') matrix.categories.find(row => row.key === 'GITHUB').implementation = 'UNAVAILABLE'
   if (kind === 'permit') matrix.canStart = true
   if (kind === 'long-text') matrix.categories[0].limitation = 'a'.repeat(401)
   if (kind === 'array-key') matrix.categories[0].key = ['WEBSITE']
@@ -53,9 +53,11 @@ it('shows server-owned methods separately from unchecked request readiness and n
     availability={catalogueAvailability(capabilityMatrix)} onStart={start} onSave={save} />)
   const dialog = await open(user)
   for (const row of capabilityMatrix.categories) expect(within(dialog).getByText(new RegExp(row.method.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeVisible()
-  expect(within(dialog).getAllByText(/Internal test capture only/)).toHaveLength(1)
-  await user.click(within(dialog).getByRole('checkbox', { name: 'GitHub', exact: true }))
-  expect(within(dialog).getByRole('button', { name: 'Start research' })).toBeDisabled()
+  expect(within(dialog).queryByText(/Internal test capture only|synthetic material/)).not.toBeInTheDocument()
+  for (const name of ['GitHub', 'LinkedIn', 'X and Instagram', 'Reviews', 'Industry sources']) {
+    await user.click(within(dialog).getByRole('checkbox', { name, exact: true }))
+    expect(within(dialog).getByRole('button', { name: 'Start research' })).toBeDisabled()
+  }
   expect(start).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled()
 })
 
@@ -76,7 +78,7 @@ it.each(['LIVE', 'OFFLINE'])('ready copy requires the existing verified caller f
   await user.click(screen.getByRole('checkbox', { name: 'GitHub', exact: true }))
   expect(screen.queryByText(/Available under the current operating release|Available for the registered offline fixture/)).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
-  expect(screen.getAllByText(/Internal test capture only/)).toHaveLength(1)
+  expect(screen.queryByText(/Internal test capture only|synthetic material/)).not.toBeInTheDocument()
 })
 
 it('preserves selected non-UK registry N/A despite a verified eligible whole-run descriptor', async () => {
@@ -288,6 +290,50 @@ it('reads exact native News capability and builds only the existing release sele
   expect(payload.publicResearch).toEqual({ mode: 'LIVE', releaseId: start.requestKey })
   expect(payload).not.toHaveProperty('settings'); expect(payload).not.toHaveProperty('responseText')
 })
+
+const combinedNewsConfiguration = () => {
+  const data = nativeNewsConfiguration()
+  data.configuration.settings.sources = ['WEBSITE', 'SEARCH', 'NEWS']
+  data.configuration.settings.startingUrls = ['https://unit.example/', 'https://unit.example/about', 'https://unit.example/news']
+  data.availability.categories = PUBLIC_RESEARCH_SOURCES.map(({ key }) => ({ key,
+    selected: data.configuration.settings.sources.includes(key),
+    status: data.configuration.settings.sources.includes(key) ? 'GATED' : 'NOT_SELECTED',
+    reason: data.configuration.settings.sources.includes(key) ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' }))
+  data.availability.researchStart.newsCapture = { contractVersion: 'public-research-news-capture.v2', articleUrl: 'https://unit.example/news' }
+  return data
+}
+
+it('reads an explicitly assigned combined News target without adding target data to dispatch', () => {
+  const data = combinedNewsConfiguration(), start = readFixtureStart(data)
+  expect(start).toBe(data.availability.researchStart)
+  const payload = buildFixtureStartPayload(data, start.requestKey)
+  expect(payload.publicResearch).toEqual({ mode: 'LIVE', releaseId: start.requestKey })
+  expect(payload).not.toHaveProperty('newsCapture')
+})
+
+it('shows the declared News article only while the current draft matches its saved release', async () => {
+  const user = userEvent.setup(), data = combinedNewsConfiguration()
+  render(<PublicResearchConfiguration brief={brief} profile="STANDARD" canPrepare savedConfiguration={data.configuration}
+    currency={data.currency} availability={data.availability} startAvailable onStart={vi.fn()} />)
+  await user.click(screen.getByRole('button', { name: 'Configure research' }))
+  expect(screen.getByText(/News article in this release:/)).toHaveTextContent('https://unit.example/news')
+  expect(screen.getByText(/Other listed pages are Website captures/)).toBeVisible()
+  await user.type(screen.getByLabelText('Optional narrowing instructions'), ' changed')
+  expect(screen.queryByText(/News article in this release:/)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
+})
+
+it.each(['unlisted article', 'first URL', 'missing marker', 'old marker', 'wrong actor', 'missing Search'])(
+  'refuses a combined Start with %s', kind => {
+    const data = combinedNewsConfiguration()
+    if (kind === 'unlisted article') data.availability.researchStart.newsCapture.articleUrl = 'https://unit.example/other'
+    if (kind === 'first URL') data.availability.researchStart.newsCapture.articleUrl = data.configuration.settings.startingUrls[0]
+    if (kind === 'missing marker') delete data.availability.researchStart.newsCapture
+    if (kind === 'old marker') data.availability.researchStart.newsCapture.contractVersion = 'public-research-news-capture.v1'
+    if (kind === 'wrong actor') data.availability.researchStart.actorUserId = '6'.repeat(24)
+    if (kind === 'missing Search') data.configuration.settings.sources = ['WEBSITE', 'NEWS']
+    expect(readFixtureStart(data)).toBeNull()
+  })
 it.each(['offline', 'mixed', 'two URLs', 'http', 'credentials', 'query', 'blocked', 'wrong actor'])(
   'refuses unsupported News capability: %s', kind => {
     const data = nativeNewsConfiguration(), record = data.configuration, start = data.availability.researchStart
@@ -302,5 +348,71 @@ it.each(['offline', 'mixed', 'two URLs', 'http', 'credentials', 'query', 'blocke
     if (kind === 'query') record.settings.startingUrls = ['https://unit.example/news?next=other']
     if (kind === 'blocked') start.eligible = false
     if (kind === 'wrong actor') start.actorUserId = '6'.repeat(24)
+    expect(readFixtureStart(data)).toBeNull()
+  })
+
+
+const githubUnitIdentity = { contractVersion: 'public-research-github-capture.v1', owner: 'unit-owner', repository: 'unit-repo', path: 'README.md', commit: 'a'.repeat(40) }
+const nativeGithubConfiguration = () => {
+  const data = nativeNewsConfiguration(), record = data.configuration, start = data.availability.researchStart
+  record.settings.sources = ['GITHUB']
+  record.settings.startingUrls = ['https://api.github.com/repos/unit-owner/unit-repo/contents/README.md?ref=' + 'a'.repeat(40)]
+  data.availability.categories.forEach(category => Object.assign(category, { selected: category.key === 'GITHUB',
+    status: category.key === 'GITHUB' ? 'GATED' : 'NOT_SELECTED',
+    reason: category.key === 'GITHUB' ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' }))
+  start.githubCapture = { ...githubUnitIdentity }
+  return data
+}
+it('reads the exact GitHub Start descriptor without sending category identity as client authority', () => {
+  const data = nativeGithubConfiguration(), start = readFixtureStart(data)
+  expect(start).toBe(data.availability.researchStart)
+  const payload = buildFixtureStartPayload(data, start.requestKey)
+  expect(payload.publicResearch).toEqual({ mode: 'LIVE', releaseId: start.requestKey })
+  expect(payload).not.toHaveProperty('githubCapture'); expect(payload).not.toHaveProperty('settings')
+})
+it.each(['missing marker', 'branch', 'path', 'URL', 'mixed sources', 'extra field', 'offline'])('rejects invalid GitHub Start %s', kind => {
+  const data = nativeGithubConfiguration(), start = data.availability.researchStart
+  if (kind === 'missing marker') delete start.githubCapture
+  if (kind === 'branch') start.githubCapture.commit = 'main'
+  if (kind === 'path') start.githubCapture.path = '../private'
+  if (kind === 'URL') data.configuration.settings.startingUrls[0] += '&extra=1'
+  if (kind === 'mixed sources') data.configuration.settings.sources.push('WEBSITE')
+  if (kind === 'extra field') start.githubCapture.token = 'unit-only'
+  if (kind === 'offline') start.mode = 'OFFLINE'
+  expect(readFixtureStart(data)).toBeNull()
+})
+
+const nativeIndustryConfiguration = () => {
+  const data = nativeGithubConfiguration(), record = data.configuration, start = data.availability.researchStart
+  delete start.githubCapture
+  record.settings.sources = ['INDUSTRY']
+  record.settings.startingUrls = ['https://www.gov.uk/government/statistics/unit-release/unit-release']
+  data.availability.categories.forEach(category => Object.assign(category, { selected: category.key === 'INDUSTRY',
+    status: category.key === 'INDUSTRY' ? 'GATED' : 'NOT_SELECTED',
+    reason: category.key === 'INDUSTRY' ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' }))
+  start.industryCapture = { contractVersion: 'public-research-industry-capture.v1', reportUrl: record.settings.startingUrls[0],
+    reportingPeriodQuote: 'at the start of 2026', reportCaveatQuote: 'official statistics in development' }
+  return data
+}
+it('reads exact Industry Start without sending source permission or metadata as client authority', () => {
+  const data = nativeIndustryConfiguration(), start = readFixtureStart(data)
+  expect(start).toBe(data.availability.researchStart)
+  const payload = buildFixtureStartPayload(data, start.requestKey)
+  expect(payload.publicResearch).toEqual({ mode: 'LIVE', releaseId: start.requestKey })
+  expect(payload).not.toHaveProperty('industryCapture'); expect(payload).not.toHaveProperty('settings')
+})
+it.each(['missing marker', 'missing period', 'missing caveat', 'foreign host', 'query', 'URL mismatch', 'mixed sources', 'extra field', 'GitHub marker', 'offline'])(
+  'rejects inconsistent Industry Start: %s', kind => {
+    const data = nativeIndustryConfiguration(), start = data.availability.researchStart
+    if (kind === 'missing marker') delete start.industryCapture
+    if (kind === 'missing period') start.industryCapture.reportingPeriodQuote = ''
+    if (kind === 'missing caveat') start.industryCapture.reportCaveatQuote = ''
+    if (kind === 'foreign host') start.industryCapture.reportUrl = 'https://other.example/government/statistics/unit-release/unit-release'
+    if (kind === 'query') start.industryCapture.reportUrl += '?extra=1'
+    if (kind === 'URL mismatch') data.configuration.settings.startingUrls[0] += '-other'
+    if (kind === 'mixed sources') data.configuration.settings.sources.push('WEBSITE')
+    if (kind === 'extra field') start.industryCapture.unproved = true
+    if (kind === 'GitHub marker') start.githubCapture = githubUnitIdentity
+    if (kind === 'offline') start.mode = 'OFFLINE'
     expect(readFixtureStart(data)).toBeNull()
   })

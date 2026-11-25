@@ -818,6 +818,90 @@ const nativeNewsRun = () => {
   summary.qualifications = ['PENDING_HUMAN_REVIEW', 'NEWS_PUBLISHER_ASSERTIONS_NOT_INDEPENDENTLY_VERIFIED']
   return value
 }
+
+// Unit-only combined data; this never establishes a real capture or permission.
+const combinedNewsRun = () => {
+  const value = publicResearchRun('SUCCEEDED', 'LIVE'), summary = value.publicResearch
+  const search = summary.receipts[0], page = summary.receipts[2]
+  summary.newsCapture = { contractVersion: 'public-research-news-capture.v2', articleUrl: 'https://unit.example/news', inputIndex: 2 }
+  Object.assign(summary.limits, { maxRegistryRequests: 0, maxPages: 3 })
+  summary.receipts = [search, ...['unit-home', 'unit-about', 'unit-news'].map((sourceId, inputIndex) => ({
+    ...page, ordinal: inputIndex + 1, inputIndex, category: inputIndex === 2 ? 'NEWS' : 'WEBSITE', sourceId,
+    bodyDisposition: 'NOT_RETAINED_IN_RUN', ...(inputIndex === 2 ? { provenanceHash: 'sha256:' + 'f'.repeat(64) } : {}),
+  }))]
+  summary.categories = ['SEARCH', 'WEBSITE', 'REGISTRY', 'NEWS'].map(key => ({ key,
+    status: key === 'REGISTRY' ? 'NOT_SELECTED' : 'SUCCEEDED', completedCount: key === 'WEBSITE' ? 2 : key === 'REGISTRY' ? 0 : 1,
+    failedCount: 0, unknownCount: 0, notAttemptedCount: 0, evidenceObjectCount: key === 'WEBSITE' ? 6 : key === 'NEWS' ? 3 : 0 }))
+  Object.assign(summary, { operationCount: 4, completedOperationCount: 4, bytesRead: 250, elapsedMsRecorded: 40 })
+  summary.qualifications = ['PENDING_HUMAN_REVIEW', 'SEARCH_METADATA_NOT_ORIGINAL_EVIDENCE', 'NEWS_PUBLISHER_ASSERTIONS_NOT_INDEPENDENTLY_VERIFIED']
+  value.outcomes = [{ kind: 'SEARCH', inputIndex: 0, status: 'SUCCEEDED', evidenceObjectCount: 0 },
+    ...summary.receipts.slice(1).map(receipt => ({ kind: 'WEBSITE', inputIndex: receipt.inputIndex, status: 'SUCCEEDED',
+      sourceId: receipt.sourceId, evidenceObjectCount: receipt.evidenceObjectCount }))]
+  value.discovery = { classification: 'DISCOVERY_METADATA_ONLY', originalEvidence: false, status: 'SUCCESS', retrievedAt: value.startedAt,
+    requestHash: search.requestHash, responseHash: search.responseTextHash,
+    items: [{ url: 'https://unit.example/discovered', title: 'Unit title', snippet: 'Unit snippet', resultOrder: 1 }] }
+  return value
+}
+
+describe('explicitly assigned combined News Run', () => {
+  it('reads and shows separate capture categories plus discovery-only Search', () => {
+    const value = combinedNewsRun()
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+    showSearchReceipt(value); mount({ scope: controlledScope }, '/app/intelligence?acquisitionRunId=' + runId)
+    expect(screen.getByRole('list', { name: 'Recorded research categories' })).toHaveTextContent('WEBSITE: SUCCEEDED')
+    expect(screen.getByRole('list', { name: 'Recorded research categories' })).toHaveTextContent('NEWS: SUCCEEDED')
+    expect(screen.getByRole('list', { name: 'Recorded research categories' })).toHaveTextContent('0 not attempted')
+  })
+  it.each(['News index', 'Website index', 'News URL', 'invented not attempted', 'missing provenance', 'Website provenance',
+    'missing outcome', 'Search as original', 'News empty', 'registry'])(
+    'rejects a combined receipt with %s', kind => {
+      const value = combinedNewsRun(), summary = value.publicResearch, article = summary.receipts[3]
+      if (kind === 'News index') article.inputIndex = 0
+      if (kind === 'Website index') summary.receipts[1].inputIndex = 2
+      if (kind === 'News URL') summary.newsCapture.articleUrl += '?private=1'
+      if (kind === 'invented not attempted') summary.categories[3].notAttemptedCount = 1
+      if (kind === 'missing provenance') delete article.provenanceHash
+      if (kind === 'Website provenance') summary.receipts[1].provenanceHash = article.provenanceHash
+      if (kind === 'missing outcome') value.outcomes.pop()
+      if (kind === 'Search as original') summary.receipts[0].sourceId = 'invented-original'
+      if (kind === 'News empty') summary.categories[3].status = 'EMPTY'
+      if (kind === 'registry') summary.categories[2].status = 'SUCCEEDED'
+      expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+    })
+  it('keeps saved Website captures while showing News was never attempted', () => {
+    const value = combinedNewsRun(), summary = value.publicResearch
+    value.status = 'PARTIALLY_SUCCEEDED'; summary.receipts.pop()
+    Object.assign(summary, { operationCount: 3, completedOperationCount: 3, bytesRead: 170, elapsedMsRecorded: 30 })
+    Object.assign(summary.categories[3], { status: 'NOT_ATTEMPTED', completedCount: 0, evidenceObjectCount: 0, notAttemptedCount: 1 })
+    Object.assign(value.outcomes[3], { status: 'UNATTEMPTED', evidenceObjectCount: 0 }); delete value.outcomes[3].sourceId
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+  })
+  it('reads the in-flight Search receipt without inventing captures or attempted pages', () => {
+    const value = combinedNewsRun(), summary = value.publicResearch
+    value.status = 'RUNNING'; value.currency = 'ACTIVE'; delete value.canonicalSaved; delete value.outputStateVersion; delete value.outcomes
+    delete value.completedAt; delete value.audit; delete value.discovery; value.cancellation.eligible = true
+    summary.receipts = [{ ...summary.receipts[0], phase: 'DISPATCHING', httpStatus: null, responseTextHash: null,
+      providerRequestId: null, sourceId: null, evidenceObjectCount: 0, bytesRead: 0, elapsedMs: 0 }]
+    Object.assign(summary, { operationCount: 1, completedOperationCount: 0, bytesRead: 0, elapsedMsRecorded: 0 })
+    summary.categories.forEach(category => Object.assign(category, { completedCount: 0, failedCount: 0,
+      unknownCount: category.key === 'SEARCH' ? 1 : 0, evidenceObjectCount: 0,
+      status: category.key === 'REGISTRY' ? 'NOT_SELECTED' : category.key === 'SEARCH' ? 'RUNNING' : 'PENDING',
+      notAttemptedCount: category.key === 'WEBSITE' ? 2 : category.key === 'NEWS' ? 1 : 0 }))
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+  })
+  it('reads a recorded queued cancellation with no transport or saved evidence', () => {
+    const value = combinedNewsRun(), summary = value.publicResearch
+    value.status = 'CANCELLED'; value.canonicalSaved = false
+    delete value.outputStateVersion; delete value.startedAt; delete value.audit.saveId; delete value.audit.startId; delete value.discovery
+    value.cancellation = { eligible: false, executionAttemptId: value.executionAttemptId, stage: 'QUEUED', workerStopConfirmed: false }
+    summary.receipts = []; Object.assign(summary, { operationCount: 0, completedOperationCount: 0, bytesRead: 0, elapsedMsRecorded: 0 })
+    summary.categories.forEach(category => Object.assign(category, { completedCount: 0, failedCount: 0, unknownCount: 0,
+      evidenceObjectCount: 0, status: category.key === 'REGISTRY' ? 'NOT_SELECTED' : 'CANCELLED',
+      notAttemptedCount: category.key === 'WEBSITE' ? 2 : category.key === 'REGISTRY' ? 0 : 1 }))
+    value.outcomes.forEach(outcome => { outcome.status = 'CANCELLED'; outcome.evidenceObjectCount = 0; delete outcome.sourceId })
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+  })
+})
 describe('native single-article News Run', () => {
   it('shows News and its provenance hash without converting it into accepted evidence', () => {
     const value = nativeNewsRun()
@@ -890,4 +974,110 @@ describe('native News without a transport receipt', () => {
         : ['responseTextHash', 'provenanceHash'].includes(field) ? 'sha256:' + 'e'.repeat(64) : 'unit-observation'
       expect(readAcquisitionRun(value, controlledScope)).toBeNull()
     })
+})
+
+
+const scopedDiscoveryRun=()=>{const value=nativeDiscoveryRun();value.discovery.scopeDisposition={contractVersion:'public-research-search-scope.v1',approvedHostname:'unit.example',receivedCount:2,excluded:[{url:'https://other.example/article',resultOrder:2,reason:'HOSTNAME_OUTSIDE_APPROVED_SCOPE'}]};value.publicResearch.qualifications.push('SEARCH_OUT_OF_SCOPE_RESULTS_EXCLUDED');return value}
+describe('explicit Search scope exclusions',()=>{
+ it('shows exclusions as inert metadata while retaining in-scope discovery',()=>{const value=scopedDiscoveryRun();loadControlled(value);mount({scope:controlledScope},'/app/intelligence?acquisitionRunId='+runId);const region=screen.getByRole('region',{name:'Excluded search results'});expect(region).toHaveTextContent('https://other.example/article');expect(region).toHaveTextContent('not visited or captured');expect(region.querySelector('a')).toBeNull();expect(screen.getByRole('region',{name:'Public web search discoveries'})).toHaveTextContent('2 results returned · 1 in scope · 1 excluded')})
+ it('reads all-excluded EMPTY and original accepted result positions',()=>{const value=scopedDiscoveryRun();value.discovery.items[0].resultOrder=2;value.discovery.scopeDisposition.excluded[0].resultOrder=1;expect(readAcquisitionRun(value,controlledScope)).not.toBeNull();value.discovery.items=[];value.discovery.status='EMPTY';value.discovery.scopeDisposition.receivedCount=1;expect(readAcquisitionRun(value,controlledScope)).not.toBeNull()})
+ it.each(['count','host','reason','order','overlap','unsafe','missing query','qualification','unknown version'])('rejects forged %s',kind=>{const value=scopedDiscoveryRun(),scope=value.discovery.scopeDisposition;if(kind==='count')scope.receivedCount=3;if(kind==='host')scope.approvedHostname='other.example';if(kind==='reason')scope.excluded[0].reason='ALLOWED';if(kind==='order')scope.excluded[0].resultOrder=1;if(kind==='overlap')scope.excluded[0].url=value.discovery.items[0].url;if(kind==='unsafe')scope.excluded[0].url='https://user:secret@other.example/';if(kind==='missing query')delete value.discovery.queryBinding;if(kind==='qualification')value.publicResearch.qualifications.pop();if(kind==='unknown version')scope.contractVersion='unknown';expect(readAcquisitionRun(value,controlledScope)).toBeNull()})
+})
+
+
+it('retains all nine emitted qualifications when excluded Search precedes a failed News capture',()=>{const value=combinedNewsRun(),summary=value.publicResearch,article=summary.receipts[3];value.status='PARTIALLY_SUCCEEDED';article.sourceId=null;article.evidenceObjectCount=0;delete article.provenanceHash;Object.assign(summary.categories[3],{status:'FAILED',failedCount:1,evidenceObjectCount:0});Object.assign(value.outcomes[3],{status:'FAILED',evidenceObjectCount:0});delete value.outcomes[3].sourceId;summary.qualifications=['SEARCH_METADATA_NOT_ORIGINAL_EVIDENCE','REGISTRY_IDENTITY_NOT_CANDIDATE_EVIDENCE','PENDING_HUMAN_REVIEW','COVERAGE_NOT_ESTABLISHED','RESERVED_COST_NOT_INVOICE','NO_PROVIDER_ABORT_PROOF','NEWS_PUBLISHER_ASSERTIONS_NOT_INDEPENDENTLY_VERIFIED','SEARCH_OUT_OF_SCOPE_RESULTS_EXCLUDED','RESPONSE_PREFIX_OR_WITHHELD_BODY'];const scoped=scopedDiscoveryRun();Object.assign(value.discovery,{queryBinding:scoped.discovery.queryBinding,scopeDisposition:scoped.discovery.scopeDisposition});expect(readAcquisitionRun(value,controlledScope)).toBe(value)})
+it('shows accepted discovery with its original provider result number',()=>{const value=scopedDiscoveryRun();value.discovery.items[0].resultOrder=2;value.discovery.scopeDisposition.excluded[0].resultOrder=1;loadControlled(value);mount({scope:controlledScope},'/app/intelligence?acquisitionRunId='+runId);const region=screen.getByRole('region',{name:'Public web search discoveries'});expect(region.querySelector('ol > li').value).toBe(2)})
+
+
+it('uses the existing wrapping facts owner for the inert excluded URL',()=>{const value=scopedDiscoveryRun();loadControlled(value);mount({scope:controlledScope},'/app/intelligence?acquisitionRunId='+runId);const region=screen.getByRole('region',{name:'Excluded search results'});const url=region.querySelector('dd');expect(url).toHaveTextContent('https://other.example/article');expect(url.closest('dl')).toHaveClass('intelligence-hub__inspection-facts');expect(region.querySelector('a')).toBeNull()})
+
+
+const nativeGithubRun = () => {
+  const value = nativeNewsRun(), summary = value.publicResearch
+  delete summary.newsCapture
+  summary.githubCapture = { contractVersion: 'public-research-github-capture.v1', owner: 'unit-owner', repository: 'unit-repo', path: 'README.md', commit: 'a'.repeat(40) }
+  summary.categories.find(category => category.key === 'NEWS').key = 'GITHUB'
+  summary.receipts[0].category = 'GITHUB'
+  summary.qualifications = ['PENDING_HUMAN_REVIEW', 'GITHUB_PINNED_API_RENDERING_NOT_RAW_FILE_OR_IDENTITY_PROOF']
+  return value
+}
+it('reopens a pinned GitHub minimized Run and its generic saved source-provenance hash', () => {
+  const value = nativeGithubRun()
+  expect(readAcquisitionRun(value, controlledScope)).toEqual(value)
+})
+it.each(['branch', 'missing marker', 'raw body', 'missing provenance', 'mixed category', 'extra operation', 'discovery'])(
+  'rejects inconsistent GitHub Run %s', kind => {
+    const value = nativeGithubRun(), summary = value.publicResearch, receipt = summary.receipts[0]
+    if (kind === 'branch') summary.githubCapture.commit = 'main'
+    if (kind === 'missing marker') delete summary.githubCapture
+    if (kind === 'raw body') receipt.responseText = 'unit-only body'
+    if (kind === 'missing provenance') delete receipt.provenanceHash
+    if (kind === 'mixed category') summary.categories[0].status = 'SUCCEEDED'
+    if (kind === 'extra operation') { summary.receipts.push({ ...receipt, ordinal: 1 }); summary.operationCount = summary.completedOperationCount = 2 }
+    if (kind === 'discovery') value.discovery = {}
+    expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+  })
+
+
+it.each(['refused', 'prefix'])('keeps GitHub %s results readable without inventing a saved source', kind => {
+  const value = nativeGithubRun(), summary = value.publicResearch, receipt = summary.receipts[0]
+  value.status = 'FAILED'; value.canonicalSaved = false; value.currency = 'HISTORICAL_OUTPUT'
+  delete value.outputStateVersion; delete value.audit.saveId
+  value.outcomes[0] = { kind: 'WEBSITE', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 }
+  const category = summary.categories.find(item => item.key === 'GITHUB')
+  Object.assign(category, { status: kind === 'prefix' ? 'UNKNOWN' : 'FAILED', failedCount: kind === 'prefix' ? 0 : 1,
+    unknownCount: kind === 'prefix' ? 1 : 0, evidenceObjectCount: 0 })
+  Object.assign(receipt, { sourceId: null, evidenceObjectCount: 0 })
+  delete receipt.provenanceHash
+  if (kind === 'refused') {
+    delete receipt.bodyDisposition
+    Object.assign(receipt, { responseTextHash: null, httpStatus: null, bytesRead: 0, elapsedMs: 0 })
+    summary.bytesRead = summary.elapsedMsRecorded = 0
+  }
+  expect(readAcquisitionRun(value, controlledScope)).toEqual(value)
+})
+
+const nativeIndustryRun = () => {
+  const value = nativeGithubRun(), summary = value.publicResearch
+  delete summary.githubCapture
+  summary.industryCapture = { contractVersion: 'public-research-industry-capture.v1',
+    reportUrl: 'https://www.gov.uk/government/statistics/unit-release/unit-release',
+    reportingPeriodQuote: 'at the start of 2026', reportCaveatQuote: 'official statistics in development' }
+  summary.categories.find(category => category.key === 'GITHUB').key = 'INDUSTRY'
+  summary.receipts[0].category = 'INDUSTRY'
+  summary.qualifications = ['PENDING_HUMAN_REVIEW', 'INDUSTRY_CONTEXT_AND_NOMINATED_SCOPE_NOT_COMPANY_FACTS']
+  return value
+}
+it('reads an Industry minimized Run with its nominated period and caveat', () => {
+  const value = nativeIndustryRun()
+  expect(readAcquisitionRun(value, controlledScope)).toEqual(value)
+})
+it.each(['missing marker', 'empty quote', 'raw body', 'missing provenance', 'mixed category', 'extra operation', 'discovery', 'GitHub marker'])(
+  'rejects malformed Industry Run: %s', kind => {
+    const value = nativeIndustryRun(), summary = value.publicResearch, receipt = summary.receipts[0]
+    if (kind === 'missing marker') delete summary.industryCapture
+    if (kind === 'empty quote') summary.industryCapture.reportingPeriodQuote = ''
+    if (kind === 'raw body') receipt.responseText = 'unit-only text'
+    if (kind === 'missing provenance') delete receipt.provenanceHash
+    if (kind === 'mixed category') summary.categories[0].status = 'SUCCEEDED'
+    if (kind === 'extra operation') { summary.receipts.push({ ...receipt, ordinal: 1 }); summary.operationCount = summary.completedOperationCount = 2 }
+    if (kind === 'discovery') value.discovery = {}
+    if (kind === 'GitHub marker') summary.githubCapture = nativeGithubRun().publicResearch.githubCapture
+    expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+  })
+it.each(['refused', 'prefix'])('keeps Industry %s result readable without inventing a saved source', kind => {
+  const value = nativeIndustryRun(), summary = value.publicResearch, receipt = summary.receipts[0]
+  value.status = 'FAILED'; value.canonicalSaved = false; value.currency = 'HISTORICAL_OUTPUT'
+  delete value.outputStateVersion; delete value.audit.saveId
+  value.outcomes[0] = { kind: 'WEBSITE', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 }
+  const category = summary.categories.find(item => item.key === 'INDUSTRY')
+  Object.assign(category, { status: kind === 'prefix' ? 'UNKNOWN' : 'FAILED', failedCount: kind === 'prefix' ? 0 : 1,
+    unknownCount: kind === 'prefix' ? 1 : 0, evidenceObjectCount: 0 })
+  Object.assign(receipt, { sourceId: null, evidenceObjectCount: 0 }); delete receipt.provenanceHash
+  if (kind === 'refused') {
+    delete receipt.bodyDisposition
+    Object.assign(receipt, { responseTextHash: null, httpStatus: null, bytesRead: 0, elapsedMs: 0 })
+    summary.bytesRead = summary.elapsedMsRecorded = 0
+  }
+  expect(readAcquisitionRun(value, controlledScope)).toEqual(value)
 })

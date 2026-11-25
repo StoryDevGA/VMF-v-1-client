@@ -3,7 +3,7 @@ import { Button } from '../../components/Button'
 import { Textarea } from '../../components/Textarea'
 import { useGetEvidenceOriginalQuery } from '../../store/api/runtimeInstanceApi.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
-import { getRecordedNativeOriginal, getRecordedOriginalRead, getRecordedEvidenceSupport, getRecordedSourceCapture, getRecordedNewsSource } from './intelligenceHubModel.js'
+import { getRecordedNativeOriginal, getRecordedOriginalRead, getRecordedEvidenceSupport, getRecordedSourceCapture, getRecordedNewsSource, getRecordedGithubSource, getRecordedIndustrySource } from './intelligenceHubModel.js'
 
 function NativeOriginalDetails({ source, scope, reference }) {
   const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
@@ -39,6 +39,8 @@ export default function SourceEvidenceDetails({ source, item, stateVersion, scop
   const support = item ? getRecordedEvidenceSupport(item, source, stateVersion) : null
   const original = getRecordedNativeOriginal(source, scope)
   const news = getRecordedNewsSource(source, stateVersion)
+  const github = getRecordedGithubSource(source, stateVersion)
+  const industry = getRecordedIndustrySource(source, stateVersion)
   const receipt = capture?.captureReceipt
   const facts = capture ? {
     'Capture operation': receipt.operation === 'CONTROLLED_HTML_REPLAY_CAPTURE'
@@ -78,6 +80,36 @@ export default function SourceEvidenceDetails({ source, item, stateVersion, scop
         Limitations: news.limitations,
       }).map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
         : <p role="alert">Recorded News provenance is unavailable or inconsistent with this source and revision.</p>}
+    </section> : null}
+    {source?.publicResearchProvenance?.contractVersion === 'public-research-source.v3' ? <section aria-label="Recorded GitHub provenance">
+      <h3>Recorded GitHub provenance</h3>
+      {github ? <dl className="intelligence-hub__inspection-facts">{Object.entries({
+        Category: 'GitHub', Repository: github.owner + '/' + github.repository, File: github.path,
+        'Requested commit': github.commit, 'Canonical file URL': github.canonicalUrl,
+        'API request URL': github.requestedUrl, 'Final URL': github.finalUrl, 'API version': github.apiVersion,
+        Representation: 'GitHub API HTML rendering · not raw Markdown file bytes',
+        'Requested media type': 'application/vnd.github.html+json',
+        'Retrieved at': github.retrievedAt, 'Publication time': 'Not recorded',
+        Currentness: 'Pinned requested revision · latest repository state not verified',
+        'Permitted interpretation': github.permittedInterpretation, 'Prohibited interpretation': github.prohibitedInterpretation,
+        Limitations: github.limitations,
+      }).map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
+        : <p role="alert">Recorded GitHub provenance is unavailable or inconsistent with this source and revision.</p>}
+    </section> : null}
+    {source?.publicResearchProvenance?.contractVersion === 'public-research-source.v4' ? <section aria-label="Recorded Industry provenance">
+      <h3>Recorded Industry provenance</h3>
+      {industry ? <dl className="intelligence-hub__inspection-facts">{Object.entries({
+        Category: 'Industry', 'Publication title': industry.title, 'Recorded publisher': industry.publisher,
+        'Publisher publication time': industry.publishedAt, 'Publication content ID': industry.publicationContentId,
+        'Canonical publication URL': industry.canonicalUrl, 'Requested URL': industry.requestedUrl, 'Final URL': industry.finalUrl,
+        Representation: 'Published GOV.UK statistical HTML · linked charts and downloads not fetched',
+        'Nominated period quote': industry.reportingPeriodQuote, 'Nominated caveat quote': industry.reportCaveatQuote,
+        'Scope basis': 'Both nominated quotes match captured text; other metrics can use different periods',
+        'Retrieved at': industry.retrievedAt, Currentness: 'Publisher assertion · not independently verified',
+        'Permitted interpretation': industry.permittedInterpretation, 'Prohibited interpretation': industry.prohibitedInterpretation,
+        Limitations: industry.limitations,
+      }).map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
+        : <p role="alert">Recorded Industry provenance is unavailable or inconsistent with this source and revision.</p>}
     </section> : null}
     <h3>Recorded source capture</h3>
     {facts ? <dl className="intelligence-hub__inspection-facts">{Object.entries(facts).map(([term, value]) =>
