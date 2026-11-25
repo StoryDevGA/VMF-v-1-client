@@ -58,6 +58,8 @@ Retention and access are checked separately from the capture result. Research ca
 
 Public-search discoveries remain in the recorded research Run. Their URLs and snippets are discovery metadata; they are not additional original sources or evidence items in this registry. Only separately captured and saved material contributes original evidence. Open the recorded Run from Context to inspect its discoveries, then return here for its saved sources.
 
+For a supported News capture, Source details and the exact evidence inspection in Review show Recorded News provenance. Inspect its article title, recorded publisher and author, publisher publication time, retrieval time, exact URL and interpretation limits. Those values come from the captured page's NewsArticle metadata. Publication and authorship are publisher assertions; a public or official publisher does not establish independent reporting, a verified identity match or currentness. Missing author or publication time remains Not recorded. The research Run separately records NEWS and the source-provenance hash; the underlying HTML storage remains a website original.
+
 ## Partial, stale and unavailable reads
 
 A bounded read can be partial or capped. An unknown total is unavailable, not zero. Refresh the selected scope when currency is uncertain. Do not treat an empty visible page as proof that the whole revision has no evidence.

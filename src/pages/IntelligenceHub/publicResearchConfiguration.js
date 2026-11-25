@@ -110,7 +110,7 @@ export const readResearchCapabilityMatrix = value => {
   const exact = (row, fields) => row && !Array.isArray(row) && Object.keys(row).length === fields.length
     && fields.every(key => Object.hasOwn(row, key))
   const implementation = { WEBSITE: 'NATIVE_GATED', SEARCH: 'NATIVE_GATED', REGISTRY: 'SEPARATE_SPRINT',
-    GITHUB: 'INTERNAL_FIXTURE_ONLY', LINKEDIN: 'UNAVAILABLE', SOCIAL: 'UNAVAILABLE', NEWS: 'INTERNAL_FIXTURE_ONLY',
+    GITHUB: 'INTERNAL_FIXTURE_ONLY', LINKEDIN: 'UNAVAILABLE', SOCIAL: 'UNAVAILABLE', NEWS: 'NATIVE_GATED',
     REVIEWS: 'UNAVAILABLE', INDUSTRY: 'UNAVAILABLE' }
   if (!exact(value, ['contractVersion', 'categories']) || value.contractVersion !== 'public-research-capability-matrix.v1'
     || !Array.isArray(value.categories) || value.categories.length !== PUBLIC_RESEARCH_SOURCES.length
@@ -163,6 +163,12 @@ export const readFixtureStart = data => {
     const start = availability.researchStart
     const keys = (value, expected) => value && !Array.isArray(value) && Object.keys(value).length === expected.length && expected.every(key => Object.hasOwn(value, key))
     const offline = start?.mode === 'OFFLINE'
+    const safeNewsUrl = candidate => {
+      try {
+        const url = new URL(candidate)
+        return url.protocol === 'https:' && !url.username && !url.password && !url.hash && !url.search && !url.port
+      } catch { return false }
+    }
     const fields = ['contractVersion', 'eligible', 'mode', 'liveExecutionEnabled', 'classification', 'actorUserId', 'scope', 'basis', 'selector', 'requestKey']
     if (offline) fields.push('fixture')
     if (!keys(start, fields) || start.contractVersion !== 'public-research-start.v1' || start.eligible !== true || !record
@@ -176,7 +182,9 @@ export const readFixtureStart = data => {
       || !keys(start.selector, ['configurationVersion', 'configurationHash', 'basisStateVersion'])
       || start.selector.configurationVersion !== record.configurationVersion || start.selector.configurationHash !== record.configurationHash
       || start.selector.basisStateVersion !== data.basis.stateVersion
-      || record.settings.sources.some(key => !['SEARCH', 'WEBSITE', 'REGISTRY'].includes(key))) return null
+      || record.settings.sources.some(key => !['SEARCH', 'WEBSITE', 'REGISTRY', 'NEWS'].includes(key))
+      || record.settings.sources.includes('NEWS') && (offline || record.settings.sources.length !== 1
+        || record.settings.startingUrls.length !== 1 || !safeNewsUrl(record.settings.startingUrls[0]))) return null
     if (offline) {
       if (start.requestKey !== null || !keys(start.fixture, ['fixtureId', 'fixtureVersion', 'fixtureFileSha256', 'controlledBindingId'])
         || start.fixture.fixtureId !== 'controlled-public-research.v1' || start.fixture.fixtureVersion !== 1

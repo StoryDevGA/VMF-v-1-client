@@ -57,6 +57,31 @@ export const getRecordedSourceCapture = (source, stateVersion) => {
   return capture
 }
 
+export const getRecordedNewsSource = (source, stateVersion) => {
+  const capture = getRecordedSourceCapture(source, stateVersion), value = source?.publicResearchProvenance
+  const fields = ['contractVersion', 'mode', 'provider', 'category', 'metadataMethod', 'title', 'publisher', 'author',
+    'publishedAt', 'currentness', 'permittedInterpretation', 'prohibitedInterpretation', 'limitations',
+    'sourceId', 'originalContentHash', 'requestedUrl', 'finalUrl', 'retrievedAt']
+  const text = (candidate, max) => typeof candidate === 'string' && candidate.trim().length > 0 && candidate.length <= max
+  if (!capture || !value || Array.isArray(value) || Object.keys(value).length !== fields.length
+    || !fields.every(field => Object.hasOwn(value, field))
+    || value.contractVersion !== 'public-research-source.v2' || value.mode !== 'LIVE_PUBLIC_WEB'
+    || value.provider !== 'PUBLIC_HTTPS' || value.category !== 'NEWS' || value.metadataMethod !== 'NEWSARTICLE_JSON_LD'
+    || capture.captureReceipt.operation !== 'WEBSITE_DECODED_TEXT_CAPTURE'
+    || value.currentness !== 'PUBLISHER_ASSERTED_NOT_INDEPENDENTLY_VERIFIED'
+    || value.sourceId !== source.sourceId || value.originalContentHash !== capture.originalContentHash
+    || value.requestedUrl !== source.sourceRef || value.finalUrl !== value.requestedUrl
+    || value.retrievedAt !== capture.capturedAt || !text(value.title, 500) || !text(value.publisher, 255)
+    || !(value.author === null || text(value.author, 255))
+    || !(value.publishedAt === null || text(value.publishedAt, 100) && Number.isFinite(Date.parse(value.publishedAt)))
+    || !['permittedInterpretation', 'prohibitedInterpretation', 'limitations'].every(field => text(value[field], 2000))) return null
+  try {
+    const url = new URL(value.requestedUrl)
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.search) return null
+  } catch { return null }
+  return value
+}
+
 // Recorded references/capture descriptors contain plain objects and scalar JSON
 // values. Compare their values, independent of storage/projection key order.
 const sameRecordedValue = (left, right, seen = new WeakSet(), depth = 0) => {

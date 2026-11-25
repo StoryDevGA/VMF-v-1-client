@@ -69,3 +69,42 @@ it('opens the same real-shaped recorded reference despite nested JSON key reorde
   fireEvent.click(screen.getByRole('button',{name:'Read retained material'}))
   expect(screen.getByLabelText('Full captured text from retained original').value).toBe(args.text)
 })
+
+
+const newsSample = () => {
+  const args = sample(), source = args.source
+  source.publicResearchProvenance = { contractVersion: 'public-research-source.v2', mode: 'LIVE_PUBLIC_WEB',
+    provider: 'PUBLIC_HTTPS', category: 'NEWS', metadataMethod: 'NEWSARTICLE_JSON_LD',
+    title: '<script>Unit article title</script>', publisher: 'Unit publisher', author: 'Unit author',
+    publishedAt: '2026-11-18T09:00:07+00:00', currentness: 'PUBLISHER_ASSERTED_NOT_INDEPENDENTLY_VERIFIED',
+    permittedInterpretation: 'Attribute this unit assertion to its publisher.',
+    prohibitedInterpretation: 'No independent verification or identity match.',
+    limitations: 'Unit metadata is a publisher assertion only.', sourceId: source.sourceId,
+    originalContentHash: source.contentHash, requestedUrl: source.sourceRef, finalUrl: source.sourceRef,
+    retrievedAt: source.sourceCapture.capturedAt }
+  return args
+}
+it('shows recorded News publisher metadata as literal qualified text with the existing capture facts', () => {
+  const args = newsSample(); render(<SourceEvidenceDetails {...args}/>)
+  const region = screen.getByRole('region', { name: 'Recorded News provenance' })
+  expect(region.textContent).toContain('Unit publisher')
+  expect(region.textContent).toContain('2026-11-18T09:00:07+00:00')
+  expect(region.textContent).toContain('<script>Unit article title</script>')
+  expect(region.querySelector('script')).toBeNull()
+  expect(region.textContent).toContain('Publisher assertion · not independently verified')
+  expect(region.textContent).toContain('No independent verification or identity match.')
+})
+it('keeps missing publication time and author visibly unknown', () => {
+  const args = newsSample(); args.source.publicResearchProvenance.author = null; args.source.publicResearchProvenance.publishedAt = null
+  render(<SourceEvidenceDetails {...args}/>)
+  expect(screen.getByRole('region', { name: 'Recorded News provenance' }).textContent.match(/Not recorded/g)).toHaveLength(2)
+})
+it.each(['sourceId', 'originalContentHash', 'requestedUrl', 'retrievedAt', 'mode', 'unknown field', 'stale read'])(
+  'withholds inconsistent native News provenance: %s', kind => {
+    const args = newsSample()
+    if (kind === 'unknown field') args.source.publicResearchProvenance.extra = 'unsupported'
+    else if (kind === 'stale read') args.source.stateVersion = 'old-state'
+    else args.source.publicResearchProvenance[kind] = 'changed'
+    render(<SourceEvidenceDetails {...args}/>)
+    expect(screen.getByRole('region', { name: 'Recorded News provenance' }).textContent).toContain('unavailable or inconsistent')
+  })

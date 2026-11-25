@@ -128,6 +128,7 @@ function ScopedRunHistory({ scope, active, locked, canAcquire, busy, onRetry, ca
                   {receipt.linkScan.truncated ? ' · scan limit reached' : ''}{receipt.linkScan.baseUnsupported ? ' · base URL unsupported; no links followed' : ''}
                   {receipt.linkScan.pageLimitReached ? ' · page limit reached' : ''}</dd></div> : null}
                 {receipt.discovery ? <div><dt>Link discovered from</dt><dd>Operation {receipt.discovery.parentOrdinal + 1} · HTML anchor · depth {receipt.discovery.depth} · {receipt.discovery.parentContentHash}</dd></div> : null}
+                {receipt.provenanceHash ? <div><dt>Source provenance hash</dt><dd>{receipt.provenanceHash}</dd></div> : null}
                 {receipt.bodyDisposition ? <div><dt>Response body</dt><dd>Not retained in this Run. Inspect the source’s original availability.</dd></div> : null}
                 <div><dt>HTTP status</dt><dd>{receipt.httpStatus ?? 'No HTTP status recorded'}</dd></div>
                 {receipt.providerMessage ? <div><dt>Provider response</dt><dd>{receipt.providerMessage}</dd></div> : null}

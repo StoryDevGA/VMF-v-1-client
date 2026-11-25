@@ -803,3 +803,91 @@ describe('native search timeout readback', () => {
     expect(reads.cancel).not.toHaveBeenCalled()
   })
 })
+
+
+const nativeNewsRun = () => {
+  const value = publicResearchRun('SUCCEEDED', 'LIVE'), summary = value.publicResearch, receipt = summary.receipts[2]
+  summary.newsCapture = { contractVersion: 'public-research-news-capture.v1' }
+  Object.assign(summary.limits, { maxSearchRequests: 0, maxRegistryRequests: 0, maxPages: 1 })
+  Object.assign(summary, { operationCount: 1, completedOperationCount: 1, bytesRead: 80, elapsedMsRecorded: 10 })
+  summary.categories.forEach(category => Object.assign(category, { status: 'NOT_SELECTED', completedCount: 0,
+    failedCount: 0, unknownCount: 0, evidenceObjectCount: 0 }))
+  summary.categories.push({ key: 'NEWS', status: 'SUCCEEDED', completedCount: 1, failedCount: 0, unknownCount: 0, evidenceObjectCount: 3 })
+  Object.assign(receipt, { ordinal: 0, category: 'NEWS', bodyDisposition: 'NOT_RETAINED_IN_RUN', provenanceHash: 'sha256:' + 'f'.repeat(64) })
+  summary.receipts = [receipt]; value.outcomes = [value.outcomes[2]]
+  summary.qualifications = ['PENDING_HUMAN_REVIEW', 'NEWS_PUBLISHER_ASSERTIONS_NOT_INDEPENDENTLY_VERIFIED']
+  return value
+}
+describe('native single-article News Run', () => {
+  it('shows News and its provenance hash without converting it into accepted evidence', () => {
+    const value = nativeNewsRun()
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+    showSearchReceipt(value); mount({ scope: controlledScope }, '/app/intelligence?acquisitionRunId=' + runId)
+    expect(screen.getByText('Source provenance hash')).toBeVisible()
+    expect(screen.getByRole('list', { name: 'Recorded research categories' })).toHaveTextContent('NEWS: SUCCEEDED')
+    expect(screen.getByText('Not retained in this Run. Inspect the source’s original availability.')).toBeVisible()
+    expect(reads.cancel).not.toHaveBeenCalled()
+  })
+  it.each(['offline', 'missing opt-in', 'mixed', 'search budget', 'two pages', 'bad hash', 'missing provenance', 'retained body marker', 'wrong category', 'not selected', 'not applicable'])(
+    'rejects incompatible News receipt: %s', kind => {
+      const value = nativeNewsRun(), summary = value.publicResearch, receipt = summary.receipts[0]
+      if (kind === 'offline') { summary.mode = 'OFFLINE'; summary.classification = 'CONTROLLED_PROVIDER_FREE_RESEARCH'; summary.liveExecutionEnabled = false }
+      if (kind === 'missing opt-in') delete summary.newsCapture
+      if (kind === 'mixed') Object.assign(summary.categories[0], { status: 'SUCCEEDED', completedCount: 1 })
+      if (kind === 'search budget') summary.limits.maxSearchRequests = 1
+      if (kind === 'two pages') summary.limits.maxPages = 2
+      if (kind === 'bad hash') receipt.provenanceHash = 'invalid'
+      if (kind === 'missing provenance') delete receipt.provenanceHash
+      if (kind === 'retained body marker') delete receipt.bodyDisposition
+      if (kind === 'wrong category') receipt.category = 'WEBSITE'
+      if (kind === 'not selected' || kind === 'not applicable') {
+        value.status = 'FAILED'; value.canonicalSaved = false; delete value.outputStateVersion; delete value.audit.saveId
+        value.currency = 'HISTORICAL_OUTPUT'; value.outcomes[0] = { kind: 'WEBSITE', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0 }
+        Object.assign(summary.categories[3], { status: kind === 'not selected' ? 'NOT_SELECTED' : 'NOT_APPLICABLE',
+          completedCount: 0, evidenceObjectCount: 0 })
+        summary.operationCount = summary.completedOperationCount = 0; summary.receipts = []
+      }
+      expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+    })
+})
+
+
+// Mirrors the API's public summary when the recorded operation has receipt:null.
+const nativeNewsWithoutTransport = (kind = 'refused') => {
+  const value = nativeNewsRun(), summary = value.publicResearch, receipt = summary.receipts[0]
+  Object.assign(value, { status: 'FAILED', canonicalSaved: false, currency: 'HISTORICAL_OUTPUT' })
+  delete value.outputStateVersion; delete value.audit.saveId
+  value.outcomes = [{ kind: 'WEBSITE', inputIndex: 0, status: 'FAILED', evidenceObjectCount: 0,
+    reason: kind === 'refused' ? 'PUBLIC_RESEARCH_NOT_ATTEMPTED' : 'PUBLIC_RESEARCH_OPERATION_FAILED' }]
+  summary.bytesRead = 0; summary.elapsedMsRecorded = 0
+  Object.assign(summary.categories[3], { status: kind === 'refused' ? 'FAILED' : 'UNKNOWN',
+    failedCount: kind === 'refused' ? 1 : 0, unknownCount: kind === 'unknown' ? 1 : 0, evidenceObjectCount: 0 })
+  Object.assign(receipt, { httpStatus: null, responseTextHash: null, providerRequestId: null, sourceId: null,
+    bytesRead: 0, elapsedMs: 0, evidenceObjectCount: 0 })
+  delete receipt.bodyDisposition; delete receipt.provenanceHash
+  return value
+}
+describe('native News without a transport receipt', () => {
+  it.each(['refused', 'unknown'])('reads the recorded %s outcome without inventing a response', kind => {
+    const value = nativeNewsWithoutTransport(kind)
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+  })
+  it.each(['refused', 'unknown'])('shows the saved %s Run without retrying or claiming captured evidence', kind => {
+    const value = nativeNewsWithoutTransport(kind), retry = vi.fn()
+    showSearchReceipt(value); mount({ scope: controlledScope, onRetry: retry }, '/app/intelligence?acquisitionRunId=' + runId)
+    expect(screen.getByRole('region', { name: 'Selected acquisition Run' })).toHaveTextContent('FAILED · No original evidence saved')
+    expect(screen.getByRole('list', { name: 'Recorded research categories' })).toHaveTextContent('NEWS: ' + (kind === 'refused' ? 'FAILED' : 'UNKNOWN'))
+    expect(screen.getByText('No HTTP status recorded')).toBeVisible()
+    expect(screen.getByText('No response hash recorded')).toBeVisible()
+    expect(screen.queryByText('Source provenance hash')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not retained in this Run. Inspect the source’s original availability.')).not.toBeInTheDocument()
+    expect(retry).not.toHaveBeenCalled(); expect(reads.cancel).not.toHaveBeenCalled()
+  })
+  it.each(['httpStatus', 'responseTextHash', 'providerRequestId', 'sourceId', 'bytesRead', 'elapsedMs', 'evidenceObjectCount', 'provenanceHash'])(
+    'still refuses an unmarked News response containing %s', field => {
+      const value = nativeNewsWithoutTransport(), receipt = value.publicResearch.receipts[0]
+      receipt[field] = field === 'httpStatus' ? 200 : ['bytesRead', 'elapsedMs', 'evidenceObjectCount'].includes(field) ? 1
+        : ['responseTextHash', 'provenanceHash'].includes(field) ? 'sha256:' + 'e'.repeat(64) : 'unit-observation'
+      expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+    })
+})

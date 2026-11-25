@@ -6,7 +6,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import PublicResearchConfiguration from './PublicResearchConfiguration.jsx'
 import { PUBLIC_RESEARCH_SOURCES, initialResearchConfiguration, changeResearchJurisdiction,
-  researchConfigurationProblem, readResearchAvailability, readResearchCapabilityMatrix } from './publicResearchConfiguration.js'
+  researchConfigurationProblem, readResearchAvailability, readResearchCapabilityMatrix, readFixtureStart, buildFixtureStartPayload } from './publicResearchConfiguration.js'
 
 // Test-only parity read; production data comes from the authenticated API.
 const capabilityMatrix = JSON.parse(readFileSync(resolve(process.cwd(), '../VMF-v-1-api/src/runtime-contracts/public-research-capability-matrix.v1.json'), 'utf8'))
@@ -53,7 +53,7 @@ it('shows server-owned methods separately from unchecked request readiness and n
     availability={catalogueAvailability(capabilityMatrix)} onStart={start} onSave={save} />)
   const dialog = await open(user)
   for (const row of capabilityMatrix.categories) expect(within(dialog).getByText(new RegExp(row.method.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeVisible()
-  expect(within(dialog).getAllByText(/Internal test capture only/)).toHaveLength(2)
+  expect(within(dialog).getAllByText(/Internal test capture only/)).toHaveLength(1)
   await user.click(within(dialog).getByRole('checkbox', { name: 'GitHub', exact: true }))
   expect(within(dialog).getByRole('button', { name: 'Start research' })).toBeDisabled()
   expect(start).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled()
@@ -76,7 +76,7 @@ it.each(['LIVE', 'OFFLINE'])('ready copy requires the existing verified caller f
   await user.click(screen.getByRole('checkbox', { name: 'GitHub', exact: true }))
   expect(screen.queryByText(/Available under the current operating release|Available for the registered offline fixture/)).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start research' })).toBeDisabled()
-  expect(screen.getAllByText(/Internal test capture only/)).toHaveLength(2)
+  expect(screen.getAllByText(/Internal test capture only/)).toHaveLength(1)
 })
 
 it('preserves selected non-UK registry N/A despite a verified eligible whole-run descriptor', async () => {
@@ -258,3 +258,49 @@ it('withdraws PUBLIC Start when the prepared settings stop matching the saved ca
  expect(screen.getByRole('button', {name: 'Start research'})).toBeDisabled()
  expect(onStart).not.toHaveBeenCalled()
 })
+
+
+const nativeNewsConfiguration = () => {
+  const scope = { customerId: '1'.repeat(24), tenantId: '2'.repeat(24), runtimeInstanceId: '3'.repeat(24), runtimeInstanceKey: 'unit-news' }
+  const basis = { stateVersion: 'unit-state', updatedAt: '2026-11-24T12:00:00.000Z' }
+  const configuration = { configurationVersion: '11111111-1111-4111-8111-111111111111', configurationHash: 'sha256:' + 'a'.repeat(64),
+    saveAuditId: '4'.repeat(24), savedBy: '5'.repeat(24), contextSource: 'USER_PREPARED_CONTEXT_BRIEF', context: brief,
+    purpose: 'Unit News only', coverage: 'STANDARD', settings: { ...initialResearchConfiguration(brief),
+      sources: ['NEWS'], startingUrls: ['https://unit.example/news'] } }
+  const availability = { ...catalogueAvailability(capabilityMatrix), reason: 'OPERATING_APPROVAL_NOT_RECORDED',
+    configurationVersion: configuration.configurationVersion, configurationHash: configuration.configurationHash,
+    categories: PUBLIC_RESEARCH_SOURCES.map(({ key }) => ({ key, selected: key === 'NEWS',
+      status: key === 'NEWS' ? 'GATED' : 'NOT_SELECTED', reason: key === 'NEWS' ? 'OPERATING_APPROVAL_NOT_RECORDED' : 'SOURCE_NOT_SELECTED' })),
+    requestMapping: { contractVersion: 'public-research-request-mapping.v1', configurationVersion: configuration.configurationVersion,
+      configurationHash: configuration.configurationHash, saveAuditId: configuration.saveAuditId,
+      scope, basis, contextSource: configuration.contextSource, inputs: configuration.context, purpose: configuration.purpose,
+      acquisitionProfile: 'STANDARD', settings: configuration.settings },
+    researchStart: { contractVersion: 'public-research-start.v1', eligible: true, mode: 'LIVE', liveExecutionEnabled: true,
+      classification: 'NATIVE_PUBLIC_RESEARCH', actorUserId: configuration.savedBy, scope, basis,
+      selector: { configurationVersion: configuration.configurationVersion, configurationHash: configuration.configurationHash, basisStateVersion: basis.stateVersion },
+      requestKey: '22222222-2222-4222-8222-222222222222' } }
+  return { configuration, availability, scope, basis, currency: 'CURRENT_BASIS', editable: true }
+}
+it('reads exact native News capability and builds only the existing release selector', () => {
+  const data = nativeNewsConfiguration(), start = readFixtureStart(data)
+  expect(start).toBe(data.availability.researchStart)
+  const payload = buildFixtureStartPayload(data, start.requestKey)
+  expect(payload.publicResearch).toEqual({ mode: 'LIVE', releaseId: start.requestKey })
+  expect(payload).not.toHaveProperty('settings'); expect(payload).not.toHaveProperty('responseText')
+})
+it.each(['offline', 'mixed', 'two URLs', 'http', 'credentials', 'query', 'blocked', 'wrong actor'])(
+  'refuses unsupported News capability: %s', kind => {
+    const data = nativeNewsConfiguration(), record = data.configuration, start = data.availability.researchStart
+    if (kind === 'offline') { start.mode = 'OFFLINE'; start.liveExecutionEnabled = false; start.classification = 'CONTROLLED_PROVIDER_FREE_RESEARCH' }
+    if (kind === 'mixed') {
+      record.settings.sources.push('WEBSITE')
+      Object.assign(data.availability.categories.find(row => row.key === 'WEBSITE'), { selected: true, status: 'GATED', reason: 'OPERATING_APPROVAL_NOT_RECORDED' })
+    }
+    if (kind === 'two URLs') record.settings.startingUrls.push('https://unit.example/other')
+    if (kind === 'http') record.settings.startingUrls = ['http://unit.example/news']
+    if (kind === 'credentials') record.settings.startingUrls = ['https://user:pass@unit.example/news']
+    if (kind === 'query') record.settings.startingUrls = ['https://unit.example/news?next=other']
+    if (kind === 'blocked') start.eligible = false
+    if (kind === 'wrong actor') start.actorUserId = '6'.repeat(24)
+    expect(readFixtureStart(data)).toBeNull()
+  })
