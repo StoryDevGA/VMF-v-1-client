@@ -1,9 +1,84 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button } from '../../components/Button'
 import { Textarea } from '../../components/Textarea'
-import { useGetEvidenceOriginalQuery } from '../../store/api/runtimeInstanceApi.js'
+import { useDownloadEvidenceOriginalMutation, useGetEvidenceOriginalQuery } from '../../store/api/runtimeInstanceApi.js'
 import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
-import { getRecordedNativeOriginal, getRecordedOriginalRead, getRecordedEvidenceSupport, getRecordedSourceCapture, getRecordedNewsSource, getRecordedGithubSource, getRecordedIndustrySource } from './intelligenceHubModel.js'
+import { verifyCustomerReportDownload } from '../../utils/customerSuppliedResearch.js'
+import { getRecordedCustomerResearch, getRecordedCustomerOriginal, getRecordedReportCitations, getRecordedNativeOriginal, getRecordedOriginalRead, getRecordedEvidenceSupport, getRecordedSourceCapture, getRecordedNewsSource, getRecordedGithubSource, getRecordedIndustrySource } from './intelligenceHubModel.js'
+
+function CustomerOriginalDetails({ source, scope, reference }) {
+  const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
+  const [requested, setRequested] = useState(false)
+  const [downloadStatus, setDownloadStatus] = useState(null)
+  const [download, downloadState] = useDownloadEvidenceOriginalMutation()
+  const mounted = useRef(false), inFlight = useRef(false), latestRead = useRef(null)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const current = sessionRevision === scope.sessionRevision && getSessionRevision() === scope.sessionRevision
+  const args = { ...scope, sourceId: source.sourceId, originalId: reference.originalId,
+    purpose: 'Inspect retained customer-supplied report before human review' }
+  const query = useGetEvidenceOriginalQuery(args, { skip: !current || !requested, refetchOnMountOrArgChange: true })
+  const read = current && requested && !query.isFetching && !query.error ? getRecordedOriginalRead(query.currentData, source, scope) : null
+  const citations = read ? getRecordedReportCitations(query.currentData, source, scope) : null
+  latestRead.current = read
+  const ownsRead = () => mounted.current && getSessionRevision() === scope.sessionRevision && latestRead.current === read && Boolean(read)
+  const downloadOriginal = async () => {
+    if (!ownsRead() || inFlight.current) return
+    inFlight.current = true
+    setDownloadStatus(null)
+    let operation
+    try {
+      operation = download(args)
+      const attachment = await operation.unwrap()
+      if (!ownsRead()) return
+      if (!await verifyCustomerReportDownload(attachment, reference)) throw new Error('Original attachment does not match its recorded identity.')
+      if (!ownsRead()) return
+      const objectUrl = URL.createObjectURL(attachment.blob)
+      const link = document.createElement('a')
+      try {
+        link.href = objectUrl
+        link.download = `${reference.originalId}.${source.fileName.split('.').pop().toLowerCase()}`
+        document.body.appendChild(link)
+        link.click()
+      } finally { link.remove(); URL.revokeObjectURL(objectUrl) }
+      setDownloadStatus({ message: `Original download prepared. Exact byte hash matched. Download read audit: ${attachment.auditId}` })
+    } catch {
+      if (ownsRead()) setDownloadStatus({ error: true, message: 'Original report download is unavailable or could not be verified. No replacement report was created. Refresh the source before trying again.' })
+    } finally { inFlight.current = false; operation?.reset() }
+  }
+  if (!current) return null
+  return <section aria-label="Retained customer report original">
+    <h3>Retained report original</h3>
+    <Button size="sm" disabled={requested} onClick={() => {
+      if (mounted.current && getSessionRevision() === scope.sessionRevision) setRequested(true)
+    }}>Inspect report original</Button>
+    {requested && query.isFetching ? <p role="status">Checking retained report original…</p> : null}
+    {requested && !query.isFetching && !read ? <p role="alert">Retained report original is unavailable or inconsistent with this source and revision. Refresh the source before continuing.</p> : null}
+    {read ? <>
+      <dl className="intelligence-hub__inspection-facts">
+        <div><dt>Original byte hash</dt><dd>{reference.byteHash}</dd></div>
+        <div><dt>Original byte length</dt><dd>{reference.byteLength}</dd></div>
+        <div><dt>Retained at</dt><dd>{reference.acquiredAt}</dd></div>
+        <div><dt>Retention</dt><dd>30 days · Development/Test</dd></div>
+        <div><dt>Original inspection audit</dt><dd>{read.auditId}</dd></div>
+      </dl>
+      <Button size="sm" disabled={downloadState.isLoading} onClick={downloadOriginal}>Download original report</Button>
+      <p>The original file opens in your own document reader. Recorded evidence passages below use normalized extracted-text coordinates; they are not PDF page or original-file locations.</p>
+      <section aria-label="Links found in retained report">
+        <h4>Links found in retained report</h4>
+        {citations ? <>
+          <p>{citations.status === 'UNAVAILABLE' ? 'Citation inspection unavailable.' : `${citations.locationsInspected} report locations inspected · partial citation coverage.`}</p>
+          {citations.limitReached ? <p>Inspection reached a limit. More links may remain in the original.</p> : null}
+          {citations.entries.length ? <dl className="intelligence-hub__inspection-facts">{citations.entries.map((entry, index) =>
+            <div key={index}><dt>{entry.location} · {entry.origin === 'HYPERLINK' ? 'Embedded hyperlink' : 'URL-like text'}</dt>
+              <dd><a href={entry.url} target="_blank" rel="noopener noreferrer nofollow">{entry.url}</a></dd></div>)}</dl>
+            : citations.status === 'PARTIAL' ? <p>No safe absolute HTTP/S links were found in the inspected locations. This does not establish that the report has no citations.</p> : null}
+          {citations.limitations.map((text, index) => <p key={index}>{text}</p>)}
+        </> : <p>Found-link metadata is unavailable or inconsistent with this original read. Inspect the retained report; manually declared links remain separate.</p>}
+      </section>
+      {downloadStatus ? <p role={downloadStatus.error ? 'alert' : 'status'}>{downloadStatus.message}</p> : null}
+    </> : null}
+  </section>
+}
 
 function NativeOriginalDetails({ source, scope, reference }) {
   const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
@@ -38,6 +113,8 @@ export default function SourceEvidenceDetails({ source, item, stateVersion, scop
   const capture = getRecordedSourceCapture(source, stateVersion)
   const support = item ? getRecordedEvidenceSupport(item, source, stateVersion) : null
   const original = getRecordedNativeOriginal(source, scope)
+  const report = getRecordedCustomerResearch(source, stateVersion)
+  const reportOriginal = getRecordedCustomerOriginal(source, scope)
   const news = getRecordedNewsSource(source, stateVersion)
   const github = getRecordedGithubSource(source, stateVersion)
   const industry = getRecordedIndustrySource(source, stateVersion)
@@ -68,6 +145,34 @@ export default function SourceEvidenceDetails({ source, item, stateVersion, scop
     } : {}),
   } : null
   return <section aria-label="Recorded capture and support">
+    {Object.hasOwn(source || {}, 'customerSuppliedResearch') ? <section aria-label="Customer-supplied research provenance">
+      <h3>Customer-supplied research</h3>
+      {report ? <>
+        <p>Supplied by a customer, not captured by StorylineOS Public Research. Declarations and citations are not independently verified. Evidence still requires human review and qualification.</p>
+        <dl className="intelligence-hub__inspection-facts">{Object.entries({
+          'Supplied by (user ID)': report.suppliedBy, 'Supplied at': report.suppliedAt, 'Supplied via': report.delivery ? 'Public report URL' : 'Report upload',
+          'Declared tool': report.declaration.tool ?? 'Unknown · not declared', 'Declared model / version': report.declaration.model ?? 'Unknown · not declared',
+          'Declared research method': report.declaration.searchMethod ?? 'Unknown · not declared',
+          'Permission basis': 'Customer declared · not independently verified', 'Declared permission reference': report.declaration.rightsReference,
+          'Supplied original byte hash': report.originalByteHash, 'Report Run': report.runId, 'Report Attempt': report.attemptId,
+          ...(report.delivery ? {
+            'Report URL': report.delivery.url, 'Report retrieved at': report.delivery.retrievedAt,
+            'Report HTTP status': report.delivery.httpStatus, 'Response content type': report.delivery.contentType,
+            'Recorded retrieval basis': report.delivery.authorization.reference, 'Retrieval basis hash': report.delivery.authorizationHash,
+            'Recorded publisher': report.delivery.authorization.attribution?.publisher ?? 'Not recorded',
+            'Recorded attribution': report.delivery.authorization.attribution?.statement ?? 'Not recorded',
+            'Recorded licence URL': report.delivery.authorization.attribution?.licenceUrl ?? 'Not recorded',
+          } : {}),
+        }).map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
+        <h4>Declared citation URLs</h4>
+        {report.declaration.citationUrls.length ? <dl className="intelligence-hub__inspection-facts">{report.declaration.citationUrls.map((url, index) =>
+          <div key={index}><dt>Citation {index + 1}</dt><dd><a href={url} target="_blank" rel="noopener noreferrer nofollow">{url}</a></dd></div>)}</dl>
+          : <p>No citation URLs declared in the upload fields. Inspect the original report for any embedded citations and unknowns.</p>}
+        <p>These links are declarations, not separately retrieved sources or independent support. Inspect the retained original for separately detected links, citation gaps and report qualifications.</p>
+        {reportOriginal ? <CustomerOriginalDetails key={JSON.stringify([scope, reportOriginal])} source={source} scope={scope} reference={reportOriginal} />
+          : <p role="alert">Retained report original is unavailable or inconsistent with this source and revision. Inspect the recorded Run outcome; do not assume the upload was fully retained.</p>}
+      </> : <p role="alert">Customer-supplied report provenance is unavailable or inconsistent with this source and revision.</p>}
+    </section> : null}
     {source?.publicResearchProvenance?.contractVersion === 'public-research-source.v2' ? <section aria-label="Recorded News provenance">
       <h3>Recorded News provenance</h3>
       {news ? <dl className="intelligence-hub__inspection-facts">{Object.entries({

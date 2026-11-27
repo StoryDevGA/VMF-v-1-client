@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { createHash, webcrypto } from 'node:crypto'
+import { Blob as NodeBlob, Buffer } from 'node:buffer'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import SourceEvidenceDetails from './SourceEvidenceDetails.jsx'
 import { getSessionRevision, setAccessToken } from '../../utils/tokenStorage.js'
-const {read}=vi.hoisted(()=>({read:vi.fn()}))
-vi.mock('../../store/api/runtimeInstanceApi.js',()=>({useGetEvidenceOriginalQuery:read}))
+const {read,downloadHook,download,reset,operationReset}=vi.hoisted(()=>({read:vi.fn(),downloadHook:vi.fn(),download:vi.fn(),reset:vi.fn(),operationReset:vi.fn()}))
+vi.mock('../../store/api/runtimeInstanceApi.js',()=>({useGetEvidenceOriginalQuery:read,useDownloadEvidenceOriginalMutation:downloadHook}))
 const sample=()=>{
   const text='<script>unit only</script>\nSecond line', hash='sha256:'+'a'.repeat(64)
   const capture={contractVersion:'source-capture.v1',sourceId:'source',originalContentHash:hash,captureTextHash:hash,textLength:text.length,
@@ -22,8 +24,8 @@ const sample=()=>{
   const data={data:{availability:'AVAILABLE_DEV_TEST',originalContentRef:ref,observedStateVersion:'state',auditId:'a'.repeat(24),capturedText:text}}
   return {source,scope,stateVersion:'state',data,text}
 }
-beforeEach(()=>{read.mockReturnValue({isFetching:false})})
-afterEach(()=>{cleanup();vi.clearAllMocks()})
+beforeEach(()=>{read.mockReturnValue({isFetching:false});downloadHook.mockReturnValue([download,{isLoading:false,reset}])})
+afterEach(()=>{cleanup();vi.clearAllMocks();vi.unstubAllGlobals()})
 it('leaves historical sources without a native reference unchanged',()=>{
   const args=sample();delete args.source.originalContentRef;render(<SourceEvidenceDetails {...args}/>)
   expect(screen.queryByRole('button',{name:'Read retained material'})).toBeNull();expect(read).not.toHaveBeenCalled()
@@ -68,6 +70,115 @@ it('opens the same real-shaped recorded reference despite nested JSON key reorde
   render(<SourceEvidenceDetails {...args}/>)
   fireEvent.click(screen.getByRole('button',{name:'Read retained material'}))
   expect(screen.getByLabelText('Full captured text from retained original').value).toBe(args.text)
+})
+
+const reportSample = () => {
+  const args = sample(), { source } = args, capture = source.sourceCapture
+  const bytes = Buffer.from(args.text), hash = 'sha256:' + createHash('sha256').update(bytes).digest('hex')
+  source.sourceType = 'UPLOADED_DOCUMENT'; source.fileName = 'unit-report.txt'; delete source.sourceRef
+  source.contentHash = hash; capture.originalContentHash = hash
+  capture.adapter = 'document-txt-text-extraction-v1'; capture.extractionMethod = 'TEXT_NATIVE'
+  capture.captureReceipt.operation = 'DOCUMENT_TEXT_CAPTURE'
+  source.customerSuppliedResearch = { contractVersion:'customer-supplied-research.v1', classification:'CUSTOMER_SUPPLIED_RESEARCH',
+    rightsStatus:'CUSTOMER_DECLARED_NOT_VERIFIED', sourceId:source.sourceId, suppliedBy:'1'.repeat(24),
+    suppliedAt:capture.capturedAt, originalByteHash:hash, runId:capture.captureReceipt.runId, attemptId:capture.captureReceipt.attemptId,
+    declaration:{rightsConfirmed:true,rightsReference:'Unit-only permission claim',tool:'<script>Unit tool</script>',model:null,
+      searchMethod:null,citationUrls:['https://unit.example/citation']} }
+  const ref = source.originalContentRef
+  Object.assign(ref,{inputKind:'UPLOADED_FILE',parent:null,byteHash:hash,byteLength:bytes.length})
+  ref.binding.sourceContentHash = hash;ref.binding.sourceLocator = source.fileName
+  delete ref.policy.nativeResearch
+  ref.policy.customerSuppliedResearch = {amendment:'SS-058-AM02',provenance:structuredClone(source.customerSuppliedResearch)}
+  delete args.data.data.capturedText
+  return {...args,attachment:{blob:new NodeBlob([bytes]),auditId:'b'.repeat(24)}}
+}
+
+it('shows declared provenance and unknowns, never provider verification or executable report content',()=>{
+  const args=reportSample();const view=render(<SourceEvidenceDetails {...args}/>)
+  expect(screen.getByRole('heading',{name:'Customer-supplied research'})).toBeTruthy()
+  expect(screen.getByText('Customer declared · not independently verified')).toBeTruthy()
+  expect(screen.getAllByText('Unknown · not declared')).toHaveLength(2)
+  expect(screen.getByText('<script>Unit tool</script>')).toBeTruthy();expect(view.container.querySelector('script')).toBeNull()
+  expect(screen.getByRole('link',{name:'https://unit.example/citation'}).getAttribute('rel')).toContain('noreferrer')
+  expect(read.mock.lastCall[1].skip).toBe(true);expect(download).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button',{name:'Download original report'})).toBeNull()
+})
+
+it('shows separately detected links only after exact original inspection without fetching targets',()=>{
+  const args=reportSample()
+  args.data.data.reportCitations={contractVersion:'customer-report-citations.v1',originalByteHash:args.source.contentHash,status:'PARTIAL',
+    method:'TXT_TEXT',locationsInspected:1,limitReached:true,entries:[{url:'https://unit.example/detected',location:'Report text',origin:'TEXT_URL'}],
+    limitations:['Unit-only partial metadata, not retrieved evidence.']}
+  read.mockReturnValue({currentData:args.data,isFetching:false})
+  render(<SourceEvidenceDetails {...args}/>);expect(screen.queryByRole('link',{name:'https://unit.example/detected'})).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'Inspect report original'}))
+  expect(screen.getByRole('link',{name:'https://unit.example/detected'})).toBeTruthy()
+  expect(screen.getByRole('link',{name:'https://unit.example/citation'})).toBeTruthy()
+  expect(screen.getByText(/Inspection reached a limit/)).toBeTruthy();expect(download).not.toHaveBeenCalled()
+})
+it.each(['malformed','unavailable','missing','null-entry'])('citation %s leaves original download and declarations available',kind=>{
+  const args=reportSample()
+  if(kind!=='missing')args.data.data.reportCitations={contractVersion:'customer-report-citations.v1',originalByteHash:args.source.contentHash,
+    status:'UNAVAILABLE',method:'UNAVAILABLE',locationsInspected:0,limitReached:false,entries:[],limitations:['Unit citation read unavailable.']}
+  if(kind==='malformed')args.data.data.reportCitations.originalByteHash='wrong'
+  if(kind==='null-entry')Object.assign(args.data.data.reportCitations,{status:'PARTIAL',method:'TXT_TEXT',locationsInspected:1,entries:[null]})
+  read.mockReturnValue({currentData:args.data,isFetching:false})
+  render(<SourceEvidenceDetails {...args}/>);fireEvent.click(screen.getByRole('button',{name:'Inspect report original'}))
+  expect(screen.getByRole('button',{name:'Download original report'})).toBeTruthy()
+  expect(screen.getByRole('link',{name:'https://unit.example/citation'})).toBeTruthy();expect(download).not.toHaveBeenCalled()
+})
+
+it('reads original metadata explicitly and prepares only the exact audited report attachment',async()=>{
+  vi.stubGlobal('crypto',webcrypto);vi.stubGlobal('URL',class extends URL {static createObjectURL=vi.fn(()=>'blob:unit-only');static revokeObjectURL=vi.fn()})
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+  try {
+    const args=reportSample();read.mockReturnValue({currentData:args.data,isFetching:false})
+    download.mockReturnValue({unwrap:()=>Promise.resolve(args.attachment),reset:operationReset})
+    render(<SourceEvidenceDetails {...args}/>);fireEvent.click(screen.getByRole('button',{name:'Inspect report original'}))
+    expect(screen.getByText(args.data.data.auditId)).toBeTruthy();expect(screen.queryByLabelText('Full captured text from retained original')).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Download original report'}))
+    await screen.findByText(/Original download prepared/)
+    expect(download).toHaveBeenCalledTimes(1);expect(download.mock.calls[0][0]).toMatchObject({customerId:'customer',tenantId:'tenant',sourceId:'source'})
+    expect(click).toHaveBeenCalledOnce();expect(click.mock.instances[0].download).toBe(args.source.originalContentRef.originalId+'.txt')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:unit-only');expect(operationReset).toHaveBeenCalledOnce();expect(reset).not.toHaveBeenCalled()
+  } finally {click.mockRestore()}
+})
+
+it.each(['hash','audit','read','error'])('withholds an inconsistent report attachment or read: %s',async kind=>{
+  vi.stubGlobal('crypto',webcrypto)
+  const create=vi.fn();vi.stubGlobal('URL',class extends URL {static createObjectURL=create})
+  const args=reportSample()
+  if(kind==='hash') args.attachment.blob=new NodeBlob(['x'.repeat(args.attachment.blob.size)])
+  if(kind==='audit') args.attachment.auditId=null
+  read.mockReturnValue({currentData:kind==='read'?{data:{...args.data.data,observedStateVersion:'old'}}:args.data,isFetching:false})
+  download.mockReturnValue({unwrap:()=>kind==='error'?Promise.reject(Error('unavailable')):Promise.resolve(args.attachment),reset:operationReset})
+  render(<SourceEvidenceDetails {...args}/>);fireEvent.click(screen.getByRole('button',{name:'Inspect report original'}))
+  if(kind==='read') expect(screen.queryByRole('button',{name:'Download original report'})).toBeNull()
+  else {fireEvent.click(screen.getByRole('button',{name:'Download original report'}));await screen.findByRole('alert')}
+  expect(create).not.toHaveBeenCalled()
+})
+
+it.each(['logout','unmount','source-change'])('ignores a late report download after %s',async change=>{
+  const args=reportSample();let resolve
+  read.mockReturnValue({currentData:args.data,isFetching:false})
+  download.mockReturnValue({unwrap:()=>new Promise(done=>{resolve=done}),reset:operationReset})
+  const create=vi.fn();vi.stubGlobal('URL',class extends URL {static createObjectURL=create})
+  const view=render(<SourceEvidenceDetails {...args}/>);fireEvent.click(screen.getByRole('button',{name:'Inspect report original'}))
+  fireEvent.click(screen.getByRole('button',{name:'Download original report'}))
+  if(change==='logout') act(()=>setAccessToken(null))
+  else if(change==='unmount') view.unmount()
+  else view.rerender(<SourceEvidenceDetails {...args} scope={{...args.scope,tenantId:'different'}}/>)
+  await act(async()=>resolve(args.attachment))
+  expect(create).not.toHaveBeenCalled();expect(operationReset).toHaveBeenCalledOnce();expect(reset).not.toHaveBeenCalled()
+})
+
+it('leaves missing originals and inconsistent declarations unavailable without another upload or native reader',()=>{
+  const args=reportSample();delete args.source.originalContentRef
+  const view=render(<SourceEvidenceDetails {...args}/>)
+  expect(screen.getByRole('alert').textContent).toContain('Retained report original is unavailable')
+  expect(read).not.toHaveBeenCalled();expect(downloadHook).not.toHaveBeenCalled()
+  args.source.customerSuppliedResearch.declaration.citationUrls=['javascript:alert(1)'];view.rerender(<SourceEvidenceDetails {...args}/>)
+  expect(screen.getByRole('alert').textContent).toContain('provenance is unavailable');expect(screen.queryByRole('link')).toBeNull()
 })
 
 
@@ -186,3 +297,32 @@ it.each(['canonicalUrl', 'requestedUrl', 'originalContentHash', 'retrievedAt', '
     render(<SourceEvidenceDetails {...args}/>)
     expect(screen.getByRole('region', { name: 'Recorded Industry provenance' }).textContent).toContain('unavailable or inconsistent')
   })
+
+const urlReportSample=(kind)=>{
+  const args=reportSample(),{source,scope}=args,url='https://unit.example/report.txt'
+  const grant={owner:'PRODUCT_GOVERNANCE',url,scope:{customerId:scope.customerId,tenantId:scope.tenantId},
+    reference:kind==='reference'?{}:'Unit reference',decision:'ALLOWED',legalStatus:'CONFIRMED',retentionAllowed:true,
+    recordedAt:'2026-01-01T00:00:00.000Z',reviewBy:'2027-01-01T00:00:00.000Z',
+    attribution:{publisher:kind==='publisher'?{}:'Unit publisher',statement:'Unit attribution',licenceUrl:'https://unit.example/licence'}}
+  source.fileName='report.txt';source.sourceRef=url
+  source.customerSuppliedResearch.delivery={mode:'PUBLIC_URL',url,fileName:source.fileName,contentType:'text/plain',httpStatus:200,
+    retrievedAt:source.sourceCapture.capturedAt,authorizationHash:'sha256:'+'d'.repeat(64),authorization:grant}
+  source.originalContentRef.inputKind='PUBLIC_URL';source.originalContentRef.binding.sourceLocator=url
+  source.originalContentRef.policy.customerSuppliedResearch.provenance=structuredClone(source.customerSuppliedResearch)
+  return args
+}
+it.each(['reference','publisher'])('malformed URL grant %s is unavailable without crashing details',kind=>{
+  const args=urlReportSample(kind)
+  expect(()=>render(<SourceEvidenceDetails {...args}/>)).not.toThrow()
+  expect(screen.queryByRole('button',{name:'Inspect report original'})).toBeNull()
+})
+it.each(['https://unit.example/licence?version=3','https://unit.example:8443/licence?version=3'])('shows API-supported licence link and retains original inspection %s',licenceUrl=>{
+  const args=urlReportSample(),{source}=args
+  source.customerSuppliedResearch.delivery.authorization.attribution.licenceUrl=licenceUrl
+  source.originalContentRef.policy.customerSuppliedResearch.provenance=structuredClone(source.customerSuppliedResearch)
+  read.mockReturnValue({currentData:args.data,isFetching:false})
+  render(<SourceEvidenceDetails {...args}/>)
+  expect(screen.getByText(licenceUrl)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button',{name:'Inspect report original'}))
+  expect(screen.getByRole('button',{name:'Download original report'})).toBeTruthy()
+})

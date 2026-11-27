@@ -1,5 +1,27 @@
 # Intelligence Hub Context
 
+## Customer-supplied research
+
+Choose **Preview research prompt** to prepare a copyable prompt from the saved brief. Staged brief edits and stale native settings are excluded. Current matching native settings appear separately as context; they do not select external categories or grant access.
+
+Choose the **External-tool source categories** you want the customer’s permitted tool to investigate. None are selected automatically. LinkedIn, X/Instagram, Reviews and official-registry instructions apply only in that external tool, subject to permitted access. They do not enable StorylineOS integrations or change its native availability.
+
+Select starting links from **Existing source links**, or explicitly choose a **Saved research Run** to inspect its actual Search discoveries. Browse pages using the displayed controls; no automatic full-history scan runs. You may select up to 20 distinct credential-free HTTP/S pointers. URL fragments are omitted. Recorded source links retain their recorded qualifications; Search discoveries remain discovery-only, not originals or verified support. Repeated URLs are not independent corroboration. Files without a recorded public delivery URL are not offered as public links, and full originals or report citations are not automatically fetched for the prompt.
+
+Use **Customer research questions / gaps** for your requests to investigate. These are customer-entered questions, not system-assessed findings. Blank questions do not establish that no gaps exist. Research date, dedicated decision purpose, external research depth and page scope remain explicit unknowns where they are not recorded; confirm them rather than inventing values.
+
+Review the complete prompt and its selected links before choosing **Copy prompt** and manually using your chosen tool. It contains customer context; paste it only where you are authorised to do so. If a read used by selected links becomes unavailable, retry it or remove those links before copying. If the clipboard API is unavailable, the button automatically tries copying the current preview without changing its text. Manual-copy guidance appears only if both copy methods fail. Selections are local to this dialog and reset when it closes or its workspace, revision, saved basis or session changes. StorylineOS sends nothing to the external tool and starts no research by copying.
+
+The prompt asks the external tool to perform permitted research and return a readable twelve-section report, rather than stop at a plan. It keeps native capture instructions as reference context while preserving customer restrictions and explicit scoped clarifications. It requests a source register, qualified evidence ledger, contradictions and unknowns as one TXT, DOCX, PDF or PPTX; if the tool cannot create a file, it should return the full report as plain text that you can save as TXT. Unavailable sources or tools must be reported as limitations, not invented results. The external tool may still require its own approvals; a prompt cannot guarantee its response. Those report sections remain document content; they are not a trusted structured import or automatically accepted facts. Existing native research and saved evidence remain in the workspace.
+
+To return a permitted report, choose **Customer-supplied research** under **Document handling**. Under **Report delivery**, choose **Upload report file** for one TXT, DOCX, PDF or PPTX, or **Direct public report URL** for a direct HTTPS link to one of those files. Enter a permission or ownership reference and explicitly confirm your right to supply the report and permit its 30-day Development/Test retention. This is your declaration, not independent permission verification. Leave tool, model/version and research method blank when unknown. Declared citation URLs are optional; they do not trigger retrieval. Citations, qualifications and unknowns inside the report remain in its exact original file.
+
+Choose **Upload research report** for a file or **Retrieve research report** for a URL only when the required declarations, current authority and report are ready. URL retrieval also needs a current recorded Product/Governance source-access basis for that exact URL. Your declaration does not create that permission. Login pages, redirects, query parameters, private addresses and HTML share pages are unavailable; export and upload the file instead. Changing delivery or editing the URL resets your rights confirmation. No external account is connected and citation links are not followed.
+
+The existing acquisition and original-retention outcomes remain separate: inspect the Run receipt if a result is partial, failed or unconfirmed, and do not create a second submission to disguise an unresolved outcome. URL failure does not imply a retained original. Email ingestion remains separate.
+
+Open the saved report in [Sources](intelligence-hub-sources.md), then inspect its candidate passages in [Review](intelligence-hub-review.md). Customer-supplied research stays separate from StorylineOS-captured website evidence and requires human qualification and review. Uploading, copying or inspecting does not accept evidence or change customer truth. A report whose supply/retention basis is unconfirmed must remain on hold.
+
 Context owns the acquisition brief, website URLs, document extraction and acquisition profile for the exact selected revision. Sources remains the provenance registry.
 
 ## Availability after lock

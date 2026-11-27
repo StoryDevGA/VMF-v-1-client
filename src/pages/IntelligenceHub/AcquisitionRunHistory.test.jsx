@@ -464,6 +464,35 @@ const publicResearchRun = (status = 'SUCCEEDED', mode = 'OFFLINE') => {
   return value
 }
 describe('combined Public Research Run contract and existing history', () => {
+  it.each([['COMPLETE', true], ['LIMIT_EXCEEDED', false], ['TIMEOUT', false], ['FAILED', false]])(
+    'shows the recorded transport observation %s without claiming a complete failed response', (transportOutcome, bodyComplete) => {
+      const value = publicResearchRun(bodyComplete ? 'SUCCEEDED' : 'FAILED', 'LIVE')
+      Object.assign(value.publicResearch.receipts[2], { transportOutcome, bodyComplete })
+      expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+      showSearchReceipt(value); mount({ scope: controlledScope }, `/app/intelligence?acquisitionRunId=${runId}`)
+      expect(screen.getByText(transportOutcome.replaceAll('_', ' '), { selector: 'dd' })).toBeVisible()
+      expect(screen.getByText(bodyComplete ? 'Complete response' : 'Incomplete response')).toBeVisible()
+    })
+  it('keeps historical receipts readable without inventing transport observations', () => {
+    const value = publicResearchRun('SUCCEEDED', 'LIVE')
+    expect(readAcquisitionRun(value, controlledScope)).toBe(value)
+    showSearchReceipt(value); mount({ scope: controlledScope }, `/app/intelligence?acquisitionRunId=${runId}`)
+    expect(screen.getAllByText('Recorded transport outcome')).toHaveLength(3)
+    expect(screen.queryByText('Complete response')).not.toBeInTheDocument()
+    expect(screen.queryByText('Incomplete response')).not.toBeInTheDocument()
+  })
+  it.each(['missing outcome', 'missing completeness', 'unknown outcome', 'non-boolean', 'contradictory completeness', 'dispatch'])(
+    'rejects malformed recorded transport observations: %s', kind => {
+      const value = publicResearchRun(kind === 'dispatch' ? 'RUNNING' : 'FAILED', 'LIVE')
+      const receipt = value.publicResearch.receipts[kind === 'dispatch' ? 0 : 2]
+      Object.assign(receipt, { transportOutcome: 'LIMIT_EXCEEDED', bodyComplete: false })
+      if (kind === 'missing outcome') delete receipt.transportOutcome
+      if (kind === 'missing completeness') delete receipt.bodyComplete
+      if (kind === 'unknown outcome') receipt.transportOutcome = 'INVENTED'
+      if (kind === 'non-boolean') receipt.bodyComplete = 'false'
+      if (kind === 'contradictory completeness') receipt.bodyComplete = true
+      expect(readAcquisitionRun(value, controlledScope)).toBeNull()
+    })
   it('shows website body minimisation on a new native receipt without claiming original availability', () => {
     const value = publicResearchRun('SUCCEEDED', 'LIVE')
     value.publicResearch.receipts[2].bodyDisposition = 'NOT_RETAINED_IN_RUN'

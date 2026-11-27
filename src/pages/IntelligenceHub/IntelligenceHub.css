@@ -2813,3 +2813,22 @@
   .root-layout:has(.intelligence-hub--screen) .nav__user-identity { width:100%; }
   .root-layout:has(.intelligence-hub--screen) .nav__user-details :is(.nav__user-name, .nav__user-email) { max-width:100%; }
 }
+
+/* Prompt pointers can contain long publisher filenames; keep shared controls within the dialog. */
+.intelligence-hub__prompt-option {
+  display:flex;
+  min-width:0;
+  max-width:100%;
+}
+.intelligence-hub__prompt-option .tickbox-box { flex-shrink:0; }
+.intelligence-hub__prompt-option .tickbox-label {
+  min-width:0;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.intelligence-hub__prompt-url,
+.intelligence-hub__prompt-selection {
+  min-width:0;
+  max-width:100%;
+  overflow-wrap:anywhere;
+}

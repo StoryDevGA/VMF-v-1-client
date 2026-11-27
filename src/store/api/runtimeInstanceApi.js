@@ -8,6 +8,23 @@ import { baseApi } from './baseApi.js'
 
 export const DEFAULT_RUNTIME_INSTANCE_TYPE = 'VALUE_NARRATIVE'
 export const RUNTIME_HEAVY_READ_OPTIONS = Object.freeze({ maxRetries: 0 })
+
+export const handleEvidenceOriginalContent = async response => {
+  if (!response.ok) return response.json()
+  if (response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/octet-stream') {
+    throw new Error('Original attachment response is unavailable.')
+  }
+  const auditId = response.headers.get('x-evidence-original-audit')
+  if (!/^[a-f0-9]{24}$/.test(auditId || '')) throw new Error('Original download audit is unavailable.')
+  return { blob: await response.blob(), auditId }
+}
+
+export const buildDownloadEvidenceOriginalQuery = ({ runtimeInstanceId, customerId, tenantId, sourceId, originalId, purpose }) => {
+  const params = new URLSearchParams()
+  appendParam(params, 'customerId', customerId); appendParam(params, 'tenantId', tenantId); appendParam(params, 'purpose', purpose)
+  return { url: `/runtime-instances/${encodeURIComponent(runtimeInstanceId)}/discovery-sources/${encodeURIComponent(sourceId)}/originals/${encodeURIComponent(originalId)}/content?${params}`,
+    method: 'GET', responseHandler: handleEvidenceOriginalContent, cache: 'no-store' }
+}
 export const AVAILABLE_FRAMEWORK_PACKAGE_LIST_TAGS = Object.freeze([
   { type: 'RuntimeFrameworkPackage', id: 'AVAILABLE_LIST' },
   { type: 'RuntimeFrameworkPackage', id: 'LIST' },
@@ -566,8 +583,8 @@ export const buildMutateRuntimeStateQuery = ({ runtimeInstanceId, body }) => ({
   body,
 })
 
-export const buildUpdateRuntimeDiscoveryInputsQuery = ({ runtimeInstanceId, body }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-inputs`,
+export const buildUpdateRuntimeDiscoveryInputsQuery = ({ runtimeInstanceId, customerId, tenantId, body }) => ({
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-inputs`, { customerId, tenantId }),
   method: 'PATCH',
   body,
 })
@@ -1170,6 +1187,10 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeRendererTags,
       extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
+    downloadEvidenceOriginal: build.mutation({
+      query: buildDownloadEvidenceOriginalQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
     getAcquisitionRun: build.query({
       query: ({ runtimeInstanceId, customerId, tenantId, runId }) => {
         const params = new URLSearchParams()
@@ -1250,6 +1271,7 @@ export const {
   useCancelAcquisitionRunMutation,
   useGetAcquisitionRunQuery,
   useGetEvidenceOriginalQuery,
+  useDownloadEvidenceOriginalMutation,
   usePlanRuntimeOutcomeRequestMutation,
   useConfirmRuntimeOutcomeRequestPlanMutation,
   useLazyRetrieveRuntimeOutcomeRequestPlanQuery,

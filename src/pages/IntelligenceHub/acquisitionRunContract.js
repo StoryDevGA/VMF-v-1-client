@@ -96,9 +96,15 @@ const publicResearchRunMatches = value => {
     const hasDiscovery = receipt != null && Object.hasOwn(receipt, 'discovery')
     const hasBodyDisposition = receipt != null && Object.hasOwn(receipt, 'bodyDisposition')
     const hasProviderMessage = receipt != null && Object.hasOwn(receipt, 'providerMessage')
+    const hasTransportOutcome = receipt != null && Object.hasOwn(receipt, 'transportOutcome')
+    const hasBodyComplete = receipt != null && Object.hasOwn(receipt, 'bodyComplete')
     if (!keys(receipt, ['ordinal', 'category', 'phase', 'inputIndex', 'requestHash', 'responseTextHash', 'httpStatus', 'bytesRead',
       'elapsedMs', 'providerRequestId', 'sourceId', 'evidenceObjectCount', ...(hasProviderMessage ? ['providerMessage'] : []), ...(hasBodyDisposition ? ['bodyDisposition'] : []),
-      ...(hasScan ? ['linkScan'] : []), ...(hasDiscovery ? ['discovery'] : []), ...(hasProvenanceHash ? ['provenanceHash'] : [])])
+      ...(hasScan ? ['linkScan'] : []), ...(hasDiscovery ? ['discovery'] : []), ...(hasProvenanceHash ? ['provenanceHash'] : []),
+      ...(hasTransportOutcome ? ['transportOutcome'] : []), ...(hasBodyComplete ? ['bodyComplete'] : [])])
+      || hasTransportOutcome !== hasBodyComplete
+      || hasTransportOutcome && (receipt.phase !== 'RECORDED' || !['COMPLETE', 'TIMEOUT', 'FAILED', 'LIMIT_EXCEEDED'].includes(receipt.transportOutcome)
+        || typeof receipt.bodyComplete !== 'boolean' || receipt.bodyComplete && receipt.transportOutcome !== 'COMPLETE')
       || hasProvenanceHash && (!(hasNews && receipt.category === 'NEWS') && !(hasGithub && receipt.category === 'GITHUB') && !(hasIndustry && receipt.category === 'INDUSTRY') || receipt.phase !== 'RECORDED'
         || !hash(receipt.provenanceHash) || receipt.httpStatus !== 200 || !hasBodyDisposition)
       || hasScan && (!hasTraversal || receipt.ordinal !== 0 || receipt.category !== 'WEBSITE'

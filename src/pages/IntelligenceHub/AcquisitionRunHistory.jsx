@@ -125,6 +125,8 @@ function ScopedRunHistory({ scope, active, locked, canAcquire, busy, onRetry, ca
               {receipt.category} {receipt.inputIndex + 1}: {receipt.phase} · {receipt.bytesRead} bytes · {receipt.elapsedMs} ms
               <dl className="intelligence-hub__inspection-facts"><div><dt>Request hash</dt><dd>{receipt.requestHash}</dd></div>
                 <div><dt>Response hash</dt><dd>{receipt.responseTextHash ?? 'No response hash recorded'}</dd></div>
+                <div><dt>Recorded transport outcome</dt><dd>{receipt.transportOutcome?.replaceAll('_', ' ') ?? 'Not recorded'}</dd></div>
+                <div><dt>Response completeness</dt><dd>{receipt.bodyComplete === true ? 'Complete response' : receipt.bodyComplete === false ? 'Incomplete response' : 'Not recorded'}</dd></div>
                 {receipt.linkScan ? <div><dt>Homepage link scan</dt><dd>{receipt.linkScan.observedAnchorCount} anchor entries observed · {receipt.linkScan.approvedLinkCount} approved links found
                   {receipt.linkScan.truncated ? ' · scan limit reached' : ''}{receipt.linkScan.baseUnsupported ? ' · base URL unsupported; no links followed' : ''}
                   {receipt.linkScan.pageLimitReached ? ' · page limit reached' : ''}</dd></div> : null}

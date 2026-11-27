@@ -1,10 +1,32 @@
 import { buildAcquisitionRunsQuery } from './runtimeInstanceApi.js'
 import { buildCancelAcquisitionRunQuery } from './runtimeInstanceApi.js'
+import { buildDownloadEvidenceOriginalQuery, handleEvidenceOriginalContent, useDownloadEvidenceOriginalMutation } from './runtimeInstanceApi.js'
 import { buildResearchConfigurationQuery, buildSaveResearchConfigurationQuery } from './runtimeInstanceApi.js'
 import { describe, expect, it } from 'vitest'
 import { buildSubmitRuntimePostLockEvidenceQuery, buildRuntimePostLockEvidenceQuery,
   useSubmitRuntimePostLockEvidenceMutation, useLazyGetRuntimePostLockEvidenceQuery } from './runtimeInstanceApi.js'
 import { configureStore } from '@reduxjs/toolkit'
+
+describe('audited retained original attachment transport', () => {
+  it('uses the existing encoded scoped byte route without local cache ownership on the wire', () => {
+    expect(buildDownloadEvidenceOriginalQuery({ runtimeInstanceId:'r/1',sourceId:'s?1',originalId:'o/1',customerId:'c & 1',tenantId:'t/1',
+      purpose:'Inspect report',sessionRevision:9,stateVersion:'local-only' })).toEqual({
+      url:'/runtime-instances/r%2F1/discovery-sources/s%3F1/originals/o%2F1/content?customerId=c+%26+1&tenantId=t%2F1&purpose=Inspect+report',
+      method:'GET',responseHandler:handleEvidenceOriginalContent,cache:'no-store' })
+    expect(typeof useDownloadEvidenceOriginalMutation).toBe('function')
+  })
+  it('requires the byte content type and exposed audit, and preserves error JSON', async () => {
+    const blob={unitOnly:true}
+    const response={ok:true,headers:new Headers({'content-type':'application/octet-stream','x-evidence-original-audit':'a'.repeat(24)}),blob:()=>Promise.resolve(blob)}
+    await expect(handleEvidenceOriginalContent(response)).resolves.toEqual({blob,auditId:'a'.repeat(24)})
+    response.headers.delete('x-evidence-original-audit')
+    await expect(handleEvidenceOriginalContent(response)).rejects.toThrow('audit')
+    response.headers.set('x-evidence-original-audit','a'.repeat(24));response.headers.set('content-type','application/json')
+    await expect(handleEvidenceOriginalContent(response)).rejects.toThrow('response')
+    await expect(handleEvidenceOriginalContent({ok:false,json:()=>({error:{code:'EVIDENCE_ORIGINAL_EXPIRED'}})}))
+      .resolves.toEqual({error:{code:'EVIDENCE_ORIGINAL_EXPIRED'}})
+  })
+})
 
 describe('Structure session cache ownership', () => {
   it.each(['getRuntimeRenderer', 'getRuntimeStateBootstrap', 'getRuntimeStateSectionSummary', 'getResearchConfiguration'])('%s isolates a same-scope new session and late old fulfillment', async endpoint => {
@@ -913,6 +935,13 @@ describe('runtimeInstanceApi', () => {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })
+    expect(buildUpdateRuntimeDiscoveryInputsQuery({
+      runtimeInstanceId: 'value narrative/001', customerId: 'customer/001', tenantId: 'tenant/001',
+      body: { customerSuppliedResearch: { contractVersion: 'customer-supplied-research-input.v1', rightsConfirmed: true,
+        rightsReference: 'Unit-only declaration' }, documentSources: [{ fileName: 'unit.txt', contentBase64: 'dW5pdA==' }] },
+    })).toEqual({ url: '/runtime-instances/value%20narrative%2F001/discovery-inputs?customerId=customer%2F001&tenantId=tenant%2F001',
+      method: 'PATCH', body: { customerSuppliedResearch: { contractVersion: 'customer-supplied-research-input.v1', rightsConfirmed: true,
+        rightsReference: 'Unit-only declaration' }, documentSources: [{ fileName: 'unit.txt', contentBase64: 'dW5pdA==' }] } })
     expect(buildAcceptRuntimeDiscoveryQuery({
       runtimeInstanceId: 'value narrative/001',
       body: {

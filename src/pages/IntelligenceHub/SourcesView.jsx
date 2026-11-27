@@ -209,7 +209,7 @@ export default function SourcesView({ workspaceId, revisionId, customerId, tenan
       } : {
         Source: label(source), 'Original filename': source?.sourceFileName || source?.fileName || 'Not supplied',
         'Recorded evidence': count(source?.evidenceObjectCount,source?.evidenceCountCapped),
-        'Current processing receipt': 'Not supplied', 'Original file': 'Not supplied',
+        'Current processing receipt': 'Not supplied', 'Original file': 'Inspect retained original availability below',
         'Frozen membership': 'Not established by current source records',
       }).map(([term,value])=><div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
       <p>{evidenceInspection ? 'The fragment is preserved as recorded, not rewritten as a complete or verified assertion.' : 'Extracted evidence is retained. Unavailable processing provenance is not a failed extraction.'}</p>

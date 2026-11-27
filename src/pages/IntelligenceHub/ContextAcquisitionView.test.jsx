@@ -3,10 +3,11 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearTokens, setTokens } from '../../utils/tokenStorage.js'
+import { clearTokens, setTokens, getSessionRevision } from '../../utils/tokenStorage.js'
 import ContextAcquisitionView from './ContextAcquisitionView.jsx'
+import { emptyCustomerResearchFields, readCustomerResearchDeclaration } from '../../utils/customerSuppliedResearch.js'
 const calls = vi.hoisted(() => ({ execute: vi.fn(), update: vi.fn(), availability: vi.fn(), history: vi.fn(), saveConfig: vi.fn(), configRead: {}, configRefetch: vi.fn(), lookupRead: {}, lookupRefetch: vi.fn(), lookupArgs: vi.fn() }))
-vi.mock('../../store/api/runtimeInstanceApi.js', () => ({ useGetAcquisitionRunsQuery: (...args) => { calls.lookupArgs(...args); return calls.lookupRead }, useGetResearchConfigurationQuery: () => calls.configRead, useSaveResearchConfigurationMutation: () => [calls.saveConfig], useExecuteRuntimeActionMutation: () => [calls.execute], useUpdateRuntimeDiscoveryInputsMutation: () => [calls.update] }))
+vi.mock('../../store/api/runtimeInstanceApi.js', () => ({ useGetAcquisitionRunsQuery: (...args) => { calls.lookupArgs(...args); return calls.lookupRead }, useGetRuntimeStateSourcesQuery: () => ({ error: { status: 503 } }), useGetAcquisitionRunQuery: () => ({}), useGetResearchConfigurationQuery: () => calls.configRead, useSaveResearchConfigurationMutation: () => [calls.saveConfig], useExecuteRuntimeActionMutation: () => [calls.execute], useUpdateRuntimeDiscoveryInputsMutation: () => [calls.update] }))
 vi.mock('./PostLockSubmissionPanel.jsx', () => ({ default: props => {
   calls.availability(props)
   return props.active && props.locked ? <form aria-label="Post-lock submission test boundary"><p>Availability read boundary</p></form> : null
@@ -1304,4 +1305,236 @@ it.each(['OFFLINE', 'LIVE'])('describes PUBLIC %s availability and retry without
  expect(screen.getByText(/Explicit research retry prepared for Run/)).toBeVisible()
  expect(screen.queryByText(/Fixture retry prepared locally/)).not.toBeInTheDocument()
  expect(calls.execute).not.toHaveBeenCalled()
+})
+
+describe('AM02 copy-only prompt and customer report controls', () => {
+  const stageReport = async (user, name = 'unit-report.txt') => {
+    await user.selectOptions(screen.getByLabelText('Document handling'), 'research')
+    await user.upload(screen.getByLabelText(/Select one research report/), new File(['Invented unit-only report'], name, { type: 'text/plain' }))
+    await screen.findByText(new RegExp(`${name}.*Staged locally`))
+  }
+  const declareRights = async user => {
+    await user.type(screen.getByLabelText(/Permission or ownership reference/), 'Unit-only permission declaration')
+    await user.click(screen.getByRole('checkbox', { name: /I have the right to supply this report/ }))
+  }
+  it.each(['absent', 'disabled'])('report intake without a saved company brief uses its own guards when generic action is %s', async kind => {
+    const user = userEvent.setup(), props = base()
+    const emptyInputs = { companyName: '', marketRegion: '', targetOffer: '', companyWebsite: '', websiteSources: [], notes: '' }
+    props.discovery = { ...props.discovery, inputValues: emptyInputs }
+    props.renderer.actions = kind === 'disabled' ? [{ actionKey: 'BUILD_EVIDENCE_PACK', enabled: false, disabledReason: 'Unit ordinary build requires a brief.' }] : []
+    render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await stageReport(user); await declareRights(user)
+    expect(screen.getByRole('button', { name: 'Upload research report' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Upload research report' }))
+    await waitFor(() => expect(calls.update).toHaveBeenCalledTimes(1))
+    expect(calls.update.mock.calls[0][0]).toMatchObject({ customerId: props.customerId, tenantId: props.tenantId, runtimeInstanceId: props.runtimeInstanceId,
+      body: { inputs: { companyName: '', marketRegion: '', targetOffer: '', companyWebsite: '', notes: '' }, acquisitionProfile: 'STANDARD' } })
+    expect(calls.update.mock.calls[0][0].body.documentSources).toHaveLength(1)
+    expect(calls.execute).not.toHaveBeenCalled()
+  })
+  it('submits one declared URL through the scoped report PATCH without a file or research action',async()=>{
+    const user=userEvent.setup(),props=base()
+    render(<MemoryRouter><ContextAcquisitionView {...props}/></MemoryRouter>)
+    await user.selectOptions(screen.getByLabelText('Document handling'),'research')
+    await user.selectOptions(screen.getByLabelText('Report delivery'),'url')
+    expect(screen.queryByLabelText(/Select one research report/)).toBeNull()
+    await user.type(screen.getByLabelText('Public report file URL'),'https://unit.example/report.txt')
+    await declareRights(user)
+    await user.click(screen.getByRole('button',{name:'Retrieve research report'}))
+    await waitFor(()=>expect(calls.update).toHaveBeenCalledTimes(1))
+    expect(calls.update.mock.calls[0][0]).toMatchObject({customerId:props.customerId,tenantId:props.tenantId,runtimeInstanceId:props.runtimeInstanceId,
+      body:{customerReportUrl:'https://unit.example/report.txt',acquisitionProfile:'STANDARD',inputs:inputValues}})
+    expect(calls.update.mock.calls[0][0].body.documentSources).toBeUndefined();expect(calls.execute).not.toHaveBeenCalled()
+  })
+  it('resets rights on each URL edit and clears file/declaration state when delivery changes',async()=>{
+    const user=userEvent.setup()
+    render(<MemoryRouter><ContextAcquisitionView {...base()}/></MemoryRouter>)
+    await stageReport(user);await declareRights(user)
+    await user.selectOptions(screen.getByLabelText('Report delivery'),'url')
+    expect(screen.getByRole('checkbox',{name:/I have the right/})).not.toBeChecked()
+    expect(screen.getByLabelText(/Permission or ownership reference/)).toHaveValue('')
+    await user.type(screen.getByLabelText('Public report file URL'),'https://unit.example/report.txt');await declareRights(user)
+    await user.type(screen.getByLabelText('Public report file URL'),'x')
+    expect(screen.getByRole('checkbox',{name:/I have the right/})).not.toBeChecked()
+    expect(screen.getByRole('button',{name:'Retrieve research report'})).toBeDisabled()
+    await user.selectOptions(screen.getByLabelText('Report delivery'),'file')
+    expect(screen.getByText('0 of 1 files staged')).toBeVisible();expect(calls.update).not.toHaveBeenCalled()
+  })
+  it.each(['url','session'])('rejects a retained URL submit after %s changes',async change=>{
+    const user=userEvent.setup()
+    render(<MemoryRouter><ContextAcquisitionView {...base()}/></MemoryRouter>)
+    await user.selectOptions(screen.getByLabelText('Document handling'),'research');await user.selectOptions(screen.getByLabelText('Report delivery'),'url')
+    await user.type(screen.getByLabelText('Public report file URL'),'https://unit.example/report.txt');await declareRights(user)
+    const form=screen.getByRole('button',{name:'Retrieve research report'}).closest('form')
+    const retained=form[Object.keys(form).find(key=>key.startsWith('__reactProps'))].onSubmit
+    if(change==='url')await user.clear(screen.getByLabelText('Public report file URL'))
+    else act(()=>clearTokens())
+    await act(async()=>retained({preventDefault:vi.fn()}))
+    expect(calls.update).not.toHaveBeenCalled();expect(calls.execute).not.toHaveBeenCalled()
+  })
+  it('previews and copies the saved brief, excluding staged edits and unavailable settings, without a mutation', async () => {
+    const user = userEvent.setup(), props = base()
+    render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Edit evidence gathering brief' }))
+    await user.clear(screen.getByLabelText('Company name')); await user.type(screen.getByLabelText('Company name'), 'Staged unit company')
+    await user.click(screen.getByRole('button', { name: 'Preview research prompt' }))
+    const prompt = screen.getByLabelText('Research prompt from saved context')
+    expect(prompt.value).toContain(`Company: ${inputValues.companyName}`)
+    expect(prompt.value).not.toContain('Staged unit company')
+    expect(prompt).toHaveAttribute('readonly')
+    expect(screen.getByText(/Staged brief edits are excluded/)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Copy prompt' }))
+    await screen.findByText(/Prompt copied/)
+    expect(await navigator.clipboard.readText()).toBe(prompt.value)
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled(); expect(calls.saveConfig).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Back to Context' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Preview research prompt' })).toHaveFocus())
+  })
+  it.each(['current', 'stale', 'different brief'])('includes only current saved source settings: %s', async kind => {
+    const user = userEvent.setup(), fixture = configurationFixture(true)
+    fixture.data.configuration.context.companyName = inputValues.companyName
+    fixture.data.configuration.purpose = `Company: ${inputValues.companyName}\nMarket / region: Test market\nProduct or service: Synthetic service`
+    if (kind === 'stale') { fixture.data.currency = 'STALE_BASIS'; fixture.data.configuration.basisStateVersion = 'rsv2:old' }
+    if (kind === 'different brief') {
+      fixture.data.configuration.context.companyName = 'Other unit company'
+      fixture.data.configuration.purpose = 'Company: Other unit company\nMarket / region: Test market\nProduct or service: Synthetic service'
+    }
+    calls.configRead = { currentData: fixture }
+    render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Preview research prompt' }))
+    const prompt = screen.getByLabelText('Research prompt from saved context').value
+    expect(prompt.includes('Current saved source choices:')).toBe(kind === 'current')
+    expect(prompt.includes('settings are unavailable or stale and are excluded')).toBe(kind !== 'current')
+  })
+  it('offers manual copy guidance after clipboard failure', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('Unit clipboard unavailable'))
+    render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Preview research prompt' }))
+    await user.click(screen.getByRole('button', { name: 'Copy prompt' }))
+    expect(await screen.findByText(/copy it manually/)).toBeVisible()
+    expect(screen.queryByText(/Prompt copied/)).not.toBeInTheDocument()
+    expect(calls.update).not.toHaveBeenCalled()
+  })
+  it.each(['departure', 'session', 'scope', 'brief'])('ignores late clipboard completion after %s', async kind => {
+    const user = userEvent.setup(), props = base(); let finish
+    vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Preview research prompt' }))
+    await user.click(screen.getByRole('button', { name: 'Copy prompt' }))
+    if (kind === 'session') act(() => clearTokens())
+    else {
+      const changed = kind === 'departure' ? { active: false } : kind === 'scope' ? { contextKey: 'other-unit-scope' }
+        : { discovery: { ...props.discovery, inputValues: { ...inputValues, notes: 'Updated saved unit brief' } } }
+      view.rerender(<MemoryRouter><ContextAcquisitionView {...props} {...changed} /></MemoryRouter>)
+    }
+    await act(async () => finish())
+    expect(screen.queryByText(/Prompt copied/)).not.toBeInTheDocument()
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('uses the existing scoped PATCH for one declared report, even when a generic action is enabled', async () => {
+    const user = userEvent.setup(), props = base()
+    props.renderer.actions = [{ actionKey: 'BUILD_EVIDENCE_PACK', enabled: true }]
+    render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await stageReport(user)
+    expect(screen.getByRole('button', { name: 'Upload research report' })).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: 'Website address' })).toBeDisabled()
+    await declareRights(user)
+    expect(calls.update).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Upload research report' }))
+    await waitFor(() => expect(calls.update).toHaveBeenCalledTimes(1))
+    const request = calls.update.mock.calls[0][0]
+    expect(request.sessionRevision).toBe(getSessionRevision())
+    expect(request).toMatchObject({ runtimeInstanceId: props.runtimeInstanceId, customerId: props.customerId, tenantId: props.tenantId,
+      body: { inputs: inputValues, acquisitionProfile: 'STANDARD', expectedUpdatedAt: stamp,
+        customerSuppliedResearch: readCustomerResearchDeclaration({ ...emptyCustomerResearchFields(), rightsConfirmed: true,
+          rightsReference: 'Unit-only permission declaration' }).declaration } })
+    expect(request.body.documentSources).toHaveLength(1)
+    expect(request.body).not.toHaveProperty('publicResearch')
+    expect(request.body.customerSuppliedResearch).not.toHaveProperty('suppliedBy')
+    expect(calls.execute).not.toHaveBeenCalled()
+    await screen.findByText(/0 of 1 files staged/)
+    expect(screen.getByRole('checkbox', { name: /I have the right/ })).not.toBeChecked()
+  })
+  it('clears files and declarations on mode changes and keeps ordinary extraction as the default', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+    expect(screen.getByLabelText('Document handling')).toHaveValue('extract')
+    await stageReport(user); await declareRights(user)
+    await user.selectOptions(screen.getByLabelText('Document handling'), 'extract')
+    expect(screen.getByText(/0 of 5 files staged/)).toBeVisible()
+    expect(screen.getByLabelText(/Select documents/)).toHaveAttribute('multiple')
+    await user.selectOptions(screen.getByLabelText('Document handling'), 'research')
+    expect(screen.getByLabelText(/Permission or ownership reference/)).toHaveValue('')
+    expect(screen.getByRole('checkbox', { name: /I have the right/ })).not.toBeChecked()
+    expect(screen.getByLabelText(/Select one research report/)).not.toHaveAttribute('multiple')
+    expect(screen.getByRole('button', { name: 'Upload research report' })).toBeDisabled()
+  })
+  it.each(['rights', 'reference', 'profile', 'scope', 'brief', 'stale', 'authority', 'locked'])('keeps report upload blocked for %s', async kind => {
+    const user = userEvent.setup(), props = base()
+    const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    if (kind === 'brief') {
+      await user.click(screen.getByRole('button', { name: 'Edit evidence gathering brief' }))
+      await user.type(screen.getByLabelText('Company name'), ' changed')
+      await user.click(screen.getByRole('button', { name: 'Apply brief' }))
+    }
+    await stageReport(user); await declareRights(user)
+    if (kind === 'rights') await user.click(screen.getByRole('checkbox', { name: /I have the right/ }))
+    if (kind === 'reference') await user.clear(screen.getByLabelText(/Permission or ownership reference/))
+    if (kind === 'profile') props.discovery = { ...props.discovery, acquisitionProfile: 'ENHANCED' }
+    if (kind === 'scope') props.customerId = ''
+    if (kind === 'stale') props.renderer = { ...props.renderer, runtimeInstance: { ...props.renderer.runtimeInstance, updatedAt: '2026-10-04T11:00:00.000Z' } }
+    if (kind === 'authority') props.authority = { canAcquire: false }
+    if (kind === 'locked') props.locked = true
+    if (kind === 'profile') {
+      // The local profile is intentionally held with staged input. Mount the
+      // enhanced saved profile as its own ownership frame instead.
+      props.contextKey = 'unit-enhanced-scope'
+    }
+    view.rerender(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    if (kind === 'profile' || kind === 'scope') { await stageReport(user); await declareRights(user) }
+    expect(screen.getByRole('button', { name: kind === 'locked' ? 'Acquire new evidence' : 'Upload research report' })).toBeDisabled()
+    expect(calls.execute).not.toHaveBeenCalled(); expect(calls.update).not.toHaveBeenCalled()
+  })
+  it('preserves an unconfirmed report request and never automatically resubmits it', async () => {
+    const user = userEvent.setup()
+    calls.update.mockReturnValue({ unwrap: () => Promise.reject({ data: { message: 'Unit upload outcome unconfirmed' } }) })
+    render(<MemoryRouter><ContextAcquisitionView {...base()} /></MemoryRouter>)
+    await stageReport(user); await declareRights(user)
+    await user.click(screen.getByRole('button', { name: 'Upload research report' }))
+    expect(await screen.findByText(/Execution outcome is unconfirmed/)).toBeVisible()
+    expect(calls.update).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/unit-report.txt.*Staged locally/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Upload research report' })).toBeDisabled()
+    const original = calls.update.mock.calls[0][0]
+    await user.click(screen.getByRole('button', { name: 'Check original acquisition request' }))
+    await waitFor(() => expect(calls.update).toHaveBeenCalledTimes(2))
+    expect(calls.update.mock.calls[1][0]).toEqual(original)
+  })
+  it.each(['authority', 'loading', 'brief'])('rejects a retained Copy handler after current %s changes', async kind => {
+    const user = userEvent.setup(), props = base()
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
+    const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Preview research prompt' }))
+    const button = screen.getByRole('button', { name: 'Copy prompt' })
+    const retained = button[Object.keys(button).find(key => key.startsWith('__reactProps'))].onClick
+    const change = kind === 'authority' ? { authority: { canAcquire: false } } : kind === 'loading' ? { loading: true }
+      : { discovery: { ...props.discovery, inputValues: { ...inputValues, notes: 'Different saved unit brief' } } }
+    view.rerender(<MemoryRouter><ContextAcquisitionView {...props} {...change} /></MemoryRouter>)
+    await act(async () => retained({ preventDefault: vi.fn() }))
+    expect(write).not.toHaveBeenCalled()
+    expect(calls.update).not.toHaveBeenCalled(); expect(calls.execute).not.toHaveBeenCalled()
+  })
+  it.each(['rights', 'mode', 'authority'])('rejects a retained report submit handler after %s changes', async kind => {
+    const user = userEvent.setup(), props = base()
+    const view = render(<MemoryRouter><ContextAcquisitionView {...props} /></MemoryRouter>)
+    await stageReport(user); await declareRights(user)
+    const form = screen.getByRole('button', { name: 'Upload research report' }).closest('form')
+    const retained = form[Object.keys(form).find(key => key.startsWith('__reactProps'))].onSubmit
+    if (kind === 'rights') await user.click(screen.getByRole('checkbox', { name: /I have the right/ }))
+    if (kind === 'mode') await user.selectOptions(screen.getByLabelText('Document handling'), 'extract')
+    if (kind === 'authority') view.rerender(<MemoryRouter><ContextAcquisitionView {...props} authority={{ canAcquire: false }} /></MemoryRouter>)
+    await act(async () => retained({ preventDefault: vi.fn() }))
+    expect(calls.update).not.toHaveBeenCalled(); expect(calls.execute).not.toHaveBeenCalled()
+  })
 })

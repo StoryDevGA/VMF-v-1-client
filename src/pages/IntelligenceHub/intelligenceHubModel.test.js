@@ -3,6 +3,9 @@ import {
   HUB_VIEWS,
   getRecordedSourceCapture,
   getRecordedNativeOriginal,
+  getRecordedCustomerResearch,
+  getRecordedCustomerOriginal,
+  getRecordedReportCitations,
   getRecordedOriginalRead,
   getRecordedEvidenceSupport,
   recordedEvidenceLocation,
@@ -220,9 +223,11 @@ it.each([
   expect(getRecordedEvidenceSupport(recordedItem, source, recordedVersion)).toBeNull()
 })
 
-it('continues to refuse document capture owner IDs rather than extending the website exception', () => {
+it('accepts paired document capture owner IDs supported by the server and refuses an unpaired receipt', () => {
   const source = ordinaryWebsiteSource()
   source.sourceCapture.captureReceipt.operation = 'DOCUMENT_TEXT_CAPTURE'
+  expect(getRecordedSourceCapture(source, recordedVersion)).toEqual(source.sourceCapture)
+  source.sourceCapture.captureReceipt.attemptId = null
   expect(getRecordedSourceCapture(source, recordedVersion)).toBeNull()
 })
 
@@ -282,4 +287,150 @@ it('rejects malformed or cyclic recorded values even when both arguments share i
   Object.defineProperty(source.originalContentRef.policy.nativeResearch.capture,'injected',{enumerable:true,get:()=>{throw Error('Getter must not run')}})
   expect(()=>getRecordedNativeOriginal(source,scope)).not.toThrow()
   expect(getRecordedNativeOriginal(source,scope)).toBeNull()
+})
+
+const customerUnitRead = () => {
+  const result = nativeUnitRead(), { source, data } = result
+  source.sourceType = 'UPLOADED_DOCUMENT'; source.fileName = 'unit-only-report.txt'; delete source.sourceRef
+  const capture = source.sourceCapture
+  capture.adapter = 'document-txt-text-extraction-v1'; capture.extractionMethod = 'TEXT_NATIVE'
+  capture.captureReceipt.operation = 'DOCUMENT_TEXT_CAPTURE'
+  source.customerSuppliedResearch = { contractVersion: 'customer-supplied-research.v1', classification: 'CUSTOMER_SUPPLIED_RESEARCH',
+    rightsStatus: 'CUSTOMER_DECLARED_NOT_VERIFIED', sourceId: source.sourceId, suppliedBy: '1'.repeat(24),
+    suppliedAt: capture.capturedAt, originalByteHash: source.contentHash,
+    runId: capture.captureReceipt.runId, attemptId: capture.captureReceipt.attemptId,
+    declaration: { rightsConfirmed: true, rightsReference: 'Unit-only permission assertion', tool: null, model: null, searchMethod: null,
+      citationUrls: ['https://unit.example/source'] } }
+  const ref = source.originalContentRef
+  ref.inputKind = 'UPLOADED_FILE'; ref.parent = null; ref.byteHash = source.contentHash; ref.binding.sourceLocator = source.fileName
+  delete ref.policy.nativeResearch
+  ref.policy.customerSuppliedResearch = { amendment: 'SS-058-AM02', provenance: structuredClone(source.customerSuppliedResearch) }
+  delete data.capturedText
+  return result
+}
+
+it('reads declared customer provenance and audited original metadata without inventing captured website text', () => {
+  const { source, scope, data } = customerUnitRead()
+  expect(getRecordedCustomerResearch(source, scope.stateVersion)).toEqual(source.customerSuppliedResearch)
+  expect(getRecordedCustomerOriginal(source, scope)).toEqual(source.originalContentRef)
+  expect(getRecordedOriginalRead({ data }, source, scope)).toEqual(data)
+  expect(getRecordedNativeOriginal(source, scope)).toBeNull()
+  source.customerSuppliedResearch.declaration.citationUrls = []
+  source.originalContentRef.policy.customerSuppliedResearch.provenance = structuredClone(source.customerSuppliedResearch)
+  expect(getRecordedCustomerOriginal(source, scope)).toBeTruthy()
+})
+
+it.each([
+  source => { source.customerSuppliedResearch.suppliedBy = 'unknown' },
+  source => { source.customerSuppliedResearch.suppliedAt = 'old' },
+  source => { source.customerSuppliedResearch.originalByteHash = 'sha256:' + '0'.repeat(64) },
+  source => { source.customerSuppliedResearch.runId = 'other' },
+  source => { source.customerSuppliedResearch.declaration.model = undefined },
+  source => { source.customerSuppliedResearch.declaration.citationUrls = ['javascript:alert(1)'] },
+  source => { source.customerSuppliedResearch.declaration.citationUrls = ['https://user:password@unit.example/'] },
+  source => { source.customerSuppliedResearch.declaration.rightsConfirmed = false },
+  source => { source.customerSuppliedResearch.declaration.extra = 'unexpected' },
+  source => { source.publicResearchProvenance = {} },
+  source => { source.sourceStateVersion = 'old' },
+])('refuses inconsistent or malformed customer report provenance %#', mutate => {
+  const { source, scope, data } = customerUnitRead(); mutate(source)
+  expect(getRecordedCustomerResearch(source, scope.stateVersion)).toBeNull()
+  expect(getRecordedCustomerOriginal(source, scope)).toBeNull()
+  expect(getRecordedOriginalRead({ data }, source, scope)).toBeNull()
+})
+
+it.each([
+  ref => { ref.binding.tenantId = 'other' }, ref => { ref.binding.runtimeInstanceId = 'other' },
+  ref => { ref.binding.sourceLocator = 'other.txt' }, ref => { ref.byteHash = 'sha256:' + '0'.repeat(64) },
+  ref => { ref.policy.retentionDays = 300 }, ref => { ref.inputKind = 'PUBLIC_URL' },
+  ref => { ref.policy.customerSuppliedResearch.provenance.declaration.citationUrls = [] },
+  ref => { ref.policy.nativeResearch = {} }, ref => { ref.parent = {} },
+])('refuses inconsistent customer original reference %#', mutate => {
+  const { source, scope, data } = customerUnitRead(); mutate(source.originalContentRef)
+  expect(getRecordedCustomerOriginal(source, scope)).toBeNull()
+  expect(getRecordedOriginalRead({ data }, source, scope)).toBeNull()
+})
+
+it('binds report read responses and safely compares declared citation arrays', () => {
+  const { source, scope, data } = customerUnitRead()
+  const reverse = value => Array.isArray(value) ? value.map(reverse) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reverse(item)])) : value
+  data.originalContentRef = reverse(source.originalContentRef)
+  expect(getRecordedOriginalRead({ data }, source, scope)).toBeTruthy()
+  data.originalContentRef.policy.customerSuppliedResearch.provenance.declaration.citationUrls.push('https://unit.example/other')
+  expect(getRecordedOriginalRead({ data }, source, scope)).toBeNull()
+  source.customerSuppliedResearch.declaration.citationUrls[0] = source.customerSuppliedResearch
+  expect(getRecordedCustomerResearch(source, scope.stateVersion)).toBeNull()
+})
+
+const urlReportRead=()=>{
+  const {source,scope,data}=customerUnitRead(),url='https://unit.example/report.txt'
+  const delivery={mode:'PUBLIC_URL',url,fileName:'report.txt',contentType:'text/plain',httpStatus:200,retrievedAt:source.sourceCapture.capturedAt,
+    authorizationHash:'sha256:'+'d'.repeat(64),authorization:{owner:'PRODUCT_GOVERNANCE',scope:{customerId:scope.customerId,tenantId:scope.tenantId},
+      url,reference:'Unit-only recorded source basis',decision:'ALLOWED',legalStatus:'CONFIRMED',retentionAllowed:true,
+      recordedAt:'2026-01-01T00:00:00.000Z',reviewBy:'2027-01-01T00:00:00.000Z'}}
+  source.fileName=delivery.fileName;source.sourceRef=url;source.customerSuppliedResearch.delivery=delivery
+  source.originalContentRef.inputKind='PUBLIC_URL';source.originalContentRef.binding.sourceLocator=url
+  source.originalContentRef.policy.customerSuppliedResearch.provenance=structuredClone(source.customerSuppliedResearch)
+  return {source,scope,data,delivery}
+}
+it('URL delivery is distinct from upload and requires its recorded source/tenant binding',()=>{
+  const {source,scope,data,delivery}=urlReportRead()
+  expect(getRecordedCustomerOriginal(source,scope)).toBeTruthy();expect(getRecordedOriginalRead({data},source,scope)).toBeTruthy()
+  expect(getRecordedNativeOriginal(source,scope)).toBeNull()
+  delivery.authorization.scope.tenantId='other'
+  source.originalContentRef.policy.customerSuppliedResearch.provenance=structuredClone(source.customerSuppliedResearch)
+  expect(getRecordedCustomerOriginal(source,scope)).toBeNull()
+})
+
+const citationRead=()=>{
+  const args=customerUnitRead()
+  args.data.reportCitations={contractVersion:'customer-report-citations.v1',originalByteHash:args.source.contentHash,status:'PARTIAL',
+    method:'TXT_TEXT',locationsInspected:1,limitReached:false,entries:[{url:'https://unit.example/detected',location:'Report text',origin:'TEXT_URL'}],
+    limitations:['Unit-only partial citation inspection; not retrieved evidence.']}
+  return args
+}
+it('binds found links to the exact original and keeps declarations unchanged',()=>{
+  const {source,scope,data}=citationRead(),before=structuredClone(source.customerSuppliedResearch.declaration)
+  expect(getRecordedReportCitations({data},source,scope)).toEqual(data.reportCitations)
+  expect(source.customerSuppliedResearch.declaration).toEqual(before)
+})
+it.each([
+  value=>{value.originalByteHash='sha256:'+'0'.repeat(64)},value=>{value.method='PDF_TEXT_AND_LINKS'},
+  value=>{value.entries[0].url='javascript:alert(1)'},value=>{value.entries[0].url='https://user:secret@unit.example/'},
+  value=>{value.entries.push({url:'https://unit.example/',location:'Report text',origin:'INDEPENDENTLY_VERIFIED'})},
+  value=>{value.status='COMPLETE'},value=>{value.extra='unexpected'},
+  value=>{value.entries=[null]},value=>{value.entries=[[]]},value=>{value.entries=['invalid']},
+])('invalid found links are unavailable without invalidating the original read %#',mutate=>{
+  const {source,scope,data}=citationRead();mutate(data.reportCitations)
+  expect(getRecordedReportCitations({data},source,scope)).toBeNull();expect(getRecordedOriginalRead({data},source,scope)).toBeTruthy()
+})
+it('citation UNAVAILABLE is separate from original availability',()=>{
+  const {source,scope,data}=citationRead()
+  Object.assign(data.reportCitations,{status:'UNAVAILABLE',method:'UNAVAILABLE',locationsInspected:0,entries:[]})
+  expect(getRecordedReportCitations({data},source,scope).status).toBe('UNAVAILABLE')
+  expect(getRecordedOriginalRead({data},source,scope)).toBeTruthy()
+})
+
+it.each(['reference','publisher','statement','licenceUrl','empty','oversize'])('rejects malformed displayed URL grant %s without a React value',kind=>{
+  const {source,scope,delivery}=urlReportRead(),grant=delivery.authorization
+  grant.attribution={publisher:'Unit publisher',statement:'Unit attribution',licenceUrl:'https://unit.example/licence'}
+  expect(getRecordedCustomerResearch(source,scope.stateVersion)).toBeTruthy()
+  if(kind==='reference')grant.reference={}
+  else if(kind==='empty')grant.attribution=null
+  else if(kind==='oversize')grant.reference='x'.repeat(501)
+  else grant.attribution[kind]={}
+  expect(getRecordedCustomerResearch(source,scope.stateVersion)).toBeNull()
+})
+
+it.each(['https://unit.example/licence?version=3','https://unit.example:8443/licence','https://unit.example:8443/licence?version=3'])('accepts the recorded API licence-link shape %s',licenceUrl=>{
+  const {source,scope,delivery}=urlReportRead()
+  delivery.authorization.attribution={publisher:'Unit publisher',statement:'Unit attribution',licenceUrl}
+  source.originalContentRef.policy.customerSuppliedResearch.provenance=structuredClone(source.customerSuppliedResearch)
+  expect(getRecordedCustomerOriginal(source,scope)).toBeTruthy()
+})
+it.each(['http://unit.example/licence','https://user:secret@unit.example/licence','https://unit.example/licence#part'])('rejects unsupported recorded API licence shape %s',licenceUrl=>{
+  const {source,scope,delivery}=urlReportRead()
+  delivery.authorization.attribution={publisher:'Unit publisher',statement:'Unit attribution',licenceUrl}
+  expect(getRecordedCustomerResearch(source,scope.stateVersion)).toBeNull()
 })

@@ -1,6 +1,7 @@
 import { readGithubCapture, githubCaptureRequestUrl, githubCaptureCanonicalUrl } from './githubCaptureContract.js'
 import { readIndustryCapture } from './industryCaptureContract.js'
 import { getExecutionWorkspaceDestinationHref, getRuntimeWorkspaceRoute } from '../../utils/runtimeWorkspace.js'
+import { readCustomerResearchDeclaration, readCustomerReportUrl } from '../../utils/customerSuppliedResearch.js'
 
 export const HUB_VIEWS = Object.freeze([
   'Overview',
@@ -55,7 +56,8 @@ export const getRecordedSourceCapture = (source, stateVersion) => {
     if (capture.adapter !== 'website-html-fetch-v1' || capture.extractionMethod !== 'DECODED_HTML_STRIPPED_TEXT'
       || !(receipt.runId === null && receipt.attemptId === null)
         && !(uuid(receipt.runId) && uuid(receipt.attemptId))) return null
-  } else if (receipt.runId !== null || receipt.attemptId !== null) return null
+  } else if (!(receipt.runId === null && receipt.attemptId === null)
+    && !(uuid(receipt.runId) && uuid(receipt.attemptId))) return null
   return capture
 }
 
@@ -128,21 +130,26 @@ export const getRecordedNewsSource = (source, stateVersion) => {
   return value
 }
 
-// Recorded references/capture descriptors contain plain objects and scalar JSON
+// Recorded references/capture descriptors contain plain objects, arrays and scalar JSON
 // values. Compare their values, independent of storage/projection key order.
 const sameRecordedValue = (left, right, seen = new WeakSet(), depth = 0) => {
   if (depth > 16 || typeof left !== typeof right) return false
   if (left === null || right === null) return left === right
   if (['string', 'boolean', 'number'].includes(typeof left))
     return (typeof left !== 'number' || Number.isFinite(left)) && left === right
-  if (typeof left !== 'object' || Array.isArray(left) || Array.isArray(right)
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(left))
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(right))
+  const array = Array.isArray(left)
+  if (typeof left !== 'object' || array !== Array.isArray(right)
+    || !(array ? Object.getPrototypeOf(left) === Array.prototype && left.length <= 20
+      : [Object.prototype, null].includes(Object.getPrototypeOf(left)))
+    || !(array ? Object.getPrototypeOf(right) === Array.prototype && right.length <= 20
+      : [Object.prototype, null].includes(Object.getPrototypeOf(right)))
     || Object.getOwnPropertySymbols(left).length || Object.getOwnPropertySymbols(right).length
     || seen.has(left) || seen.has(right)) return false
   const leftFields = Object.getOwnPropertyDescriptors(left), rightFields = Object.getOwnPropertyDescriptors(right)
-  const keys = Object.keys(leftFields)
-  if (keys.length !== Object.keys(rightFields).length) return false
+  const keys = Object.keys(leftFields).filter(key => !array || key !== 'length')
+  if (array && (left.length !== right.length || keys.length !== left.length
+    || keys.some((key, index) => key !== String(index)))) return false
+  if (keys.length !== Object.keys(rightFields).filter(key => !array || key !== 'length').length) return false
   seen.add(left); seen.add(right)
   try {
     return keys.every(key => !['__proto__', 'constructor', 'prototype'].includes(key)
@@ -150,6 +157,72 @@ const sameRecordedValue = (left, right, seen = new WeakSet(), depth = 0) => {
       && Object.hasOwn(leftFields[key], 'value') && Object.hasOwn(rightFields[key], 'value')
       && sameRecordedValue(leftFields[key].value, rightFields[key].value, seen, depth + 1))
   } finally { seen.delete(left); seen.delete(right) }
+}
+
+export const getRecordedCustomerResearch = (source, stateVersion) => {
+  const capture = getRecordedSourceCapture(source, stateVersion), report = source?.customerSuppliedResearch
+  if (!capture || !report || !sameRecordedValue(report, report) || source.sourceType !== 'UPLOADED_DOCUMENT'
+    || source.publicResearchProvenance !== undefined || source.controlledReplayProvenance !== undefined
+    || report.contractVersion !== 'customer-supplied-research.v1' || report.classification !== 'CUSTOMER_SUPPLIED_RESEARCH'
+    || report.rightsStatus !== 'CUSTOMER_DECLARED_NOT_VERIFIED' || report.sourceId !== source.sourceId
+    || !/^[a-f0-9]{24}$/.test(report.suppliedBy || '') || report.suppliedAt !== capture.capturedAt
+    || report.originalByteHash !== capture.originalContentHash || capture.captureReceipt.operation !== 'DOCUMENT_TEXT_CAPTURE'
+    || !report.runId || !report.attemptId || report.runId !== capture.captureReceipt.runId
+    || report.attemptId !== capture.captureReceipt.attemptId || capture.captureReceipt.inputIndex !== 0) return null
+  const declaration = report.declaration
+  const validated = readCustomerResearchDeclaration({ ...declaration, tool: declaration?.tool ?? '', model: declaration?.model ?? '',
+    searchMethod: declaration?.searchMethod ?? '', citationUrls: Array.isArray(declaration?.citationUrls) ? declaration.citationUrls.join('\n') : '' }).declaration
+  if (!validated) return null
+  const { contractVersion: _version, ...normalized } = validated
+  const delivery = report.delivery
+  if (delivery) {
+    const grant = delivery.authorization
+    const text = (value, max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max
+    const attribution = grant?.attribution
+    if (attribution !== undefined) {
+      if (!attribution || typeof attribution !== 'object' || Array.isArray(attribution)
+        || Object.keys(attribution).sort().join() !== 'licenceUrl,publisher,statement'
+        || !text(attribution.publisher, 160) || !text(attribution.statement, 1000) || !text(attribution.licenceUrl, 500)) return null
+      try {
+        const licence = new URL(attribution.licenceUrl)
+        if (licence.protocol !== 'https:' || licence.username || licence.password || licence.hash) return null
+      } catch { return null }
+    }
+    if (Object.keys(delivery).sort().join() !== 'authorization,authorizationHash,contentType,fileName,httpStatus,mode,retrievedAt,url'
+      || delivery.mode !== 'PUBLIC_URL' || readCustomerReportUrl(delivery.url).url !== delivery.url
+      || source.sourceRef !== delivery.url || source.fileName !== delivery.fileName || !/\.(txt|docx|pdf|pptx)$/i.test(delivery.fileName || '')
+      || /[\\/]/.test(delivery.fileName) || delivery.httpStatus !== 200 || !sourceEvidenceHash(delivery.authorizationHash)
+      || !Number.isFinite(Date.parse(delivery.retrievedAt)) || typeof delivery.contentType !== 'string' || !delivery.contentType
+      || grant?.owner !== 'PRODUCT_GOVERNANCE' || grant.url !== delivery.url || !grant.scope?.customerId || !grant.scope?.tenantId
+      || !text(grant.reference, 500) || grant.decision !== 'ALLOWED' || grant.legalStatus !== 'CONFIRMED' || grant.retentionAllowed !== true
+      || !(Date.parse(grant.recordedAt) <= Date.parse(delivery.retrievedAt) && Date.parse(grant.reviewBy) > Date.parse(delivery.retrievedAt))) return null
+  }
+  const expected = { contractVersion: report.contractVersion, classification: report.classification, rightsStatus: report.rightsStatus,
+    sourceId: report.sourceId, suppliedBy: report.suppliedBy, suppliedAt: report.suppliedAt, originalByteHash: report.originalByteHash,
+    runId: report.runId, attemptId: report.attemptId, declaration: normalized, ...(delivery ? { delivery } : {}) }
+  return sameRecordedValue(report, expected) ? report : null
+}
+
+export const getRecordedCustomerOriginal = (source, scope) => {
+  const report = getRecordedCustomerResearch(source, scope?.stateVersion), ref = source?.originalContentRef
+  if (!report || !ref || !sameRecordedValue(ref, ref) || !scope?.customerId || !scope?.tenantId || !scope?.runtimeInstanceId) return null
+  const binding = ref.binding, policy = ref.policy
+  if (ref.contractVersion !== 'evidence-original-reference.v1' || ref.inputKind !== (report.delivery ? 'PUBLIC_URL' : 'UPLOADED_FILE') || ref.parent !== null
+    || !/^original_[a-f0-9]{64}$/.test(ref.originalId || '') || ref.byteHash !== report.originalByteHash
+    || !Number.isSafeInteger(ref.byteLength) || ref.byteLength < 1
+    || ref.byteLength > (/\.pptx$/i.test(source.fileName || '') ? 40000000 : 2500000)
+    || !/\.(txt|docx|pdf|pptx)$/i.test(source.fileName || '') || !Number.isFinite(Date.parse(ref.acquiredAt))
+    || binding?.customerId !== scope.customerId || binding.tenantId !== scope.tenantId
+    || ![binding.runtimeInstanceId, binding.runtimeInstanceKey].includes(scope.runtimeInstanceId)
+    || binding.sourceId !== source.sourceId || binding.sourceContentHash !== report.originalByteHash
+    || binding.sourceLocator !== (source.sourceRef ?? source.url ?? source.fileRef ?? source.fileName)
+    || policy?.policyId !== 'FS-006' || policy.policyVersion !== '0.2' || policy.retentionDays !== 30
+    || policy.effectiveEnvironment !== 'DEVELOPMENT_TEST' || policy.nativeResearch !== undefined || !sourceEvidenceHash(policy.policyHash)
+    || policy.customerSuppliedResearch?.amendment !== 'SS-058-AM02'
+    || !sameRecordedValue(policy.customerSuppliedResearch.provenance, report)
+    || report.delivery && (report.delivery.authorization.scope.customerId !== scope.customerId
+      || report.delivery.authorization.scope.tenantId !== scope.tenantId)) return null
+  return ref
 }
 
 export const getRecordedNativeOriginal = (source, scope) => {
@@ -178,12 +251,35 @@ export const getRecordedNativeOriginal = (source, scope) => {
 }
 
 export const getRecordedOriginalRead = (response, source, scope) => {
-  const ref = getRecordedNativeOriginal(source, scope), data = getHubPayload(response)
+  const ref = getRecordedCustomerOriginal(source, scope) || getRecordedNativeOriginal(source, scope), data = getHubPayload(response)
   if (!ref || data?.availability !== 'AVAILABLE_DEV_TEST' || data.observedStateVersion !== scope.stateVersion
     || !sameRecordedValue(data.originalContentRef, ref)
-    || !/^[a-f0-9]{24}$/.test(data.auditId || '') || typeof data.capturedText !== 'string'
-    || data.capturedText.length !== ref.policy.nativeResearch.capture.textLength || data.capturedText.length > 80000) return null
+    || !/^[a-f0-9]{24}$/.test(data.auditId || '')) return null
+  if (ref.policy.nativeResearch && (typeof data.capturedText !== 'string'
+    || data.capturedText.length !== ref.policy.nativeResearch.capture.textLength || data.capturedText.length > 80000)) return null
   return data
+}
+
+export const getRecordedReportCitations = (response, source, scope) => {
+  if (!getRecordedCustomerOriginal(source, scope) || !getRecordedOriginalRead(response, source, scope)) return null
+  const value = getHubPayload(response)?.reportCitations
+  if (!value || !sameRecordedValue(value, value)
+    || Object.keys(value).sort().join() !== 'contractVersion,entries,limitReached,limitations,locationsInspected,method,originalByteHash,status'
+    || value.contractVersion !== 'customer-report-citations.v1' || value.originalByteHash !== source.originalContentRef.byteHash
+    || !['PARTIAL', 'UNAVAILABLE'].includes(value.status) || typeof value.limitReached !== 'boolean'
+    || !Number.isInteger(value.locationsInspected) || value.locationsInspected < 0 || value.locationsInspected > 120
+    || !Array.isArray(value.entries) || value.entries.length > 20 || !Array.isArray(value.limitations)
+    || !value.limitations.length || value.limitations.length > 8
+    || value.limitations.some(text => typeof text !== 'string' || !text || text.length > 500)) return null
+  if (value.status === 'UNAVAILABLE') return value.method === 'UNAVAILABLE' && !value.entries.length && !value.locationsInspected ? value : null
+  const expectedMethod = { txt: 'TXT_TEXT', docx: 'DOCX_MAIN_DOCUMENT', pptx: 'PPTX_SLIDES_AND_NOTES', pdf: 'PDF_TEXT_AND_LINKS' }[source.fileName.split('.').pop().toLowerCase()]
+  if (value.method !== expectedMethod || !value.locationsInspected) return null
+  for (const entry of value.entries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).sort().join() !== 'location,origin,url' || !['TEXT_URL', 'HYPERLINK'].includes(entry.origin)
+      || typeof entry.location !== 'string' || !entry.location || entry.location.length > 80 || typeof entry.url !== 'string' || entry.url.length > 500) return null
+    try { const url = new URL(entry.url); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null } catch { return null }
+  }
+  return value
 }
 
 export const getRecordedEvidenceSupport = (item, source, stateVersion) => {

@@ -1,5 +1,15 @@
 # Intelligence Hub Review
 
+## Review customer-supplied research
+
+Select an evidence candidate and choose **Supporting evidence** or **Detailed inspection**. The shared source details show **Customer-supplied research**, its recorded supplier/time, declared research details, citation URLs and exact supporting passage when available. Unknown tool/model details stay unknown. Declarations, report conclusions and linked citations are not independently verified customer facts.
+
+Use **Inspect report original**, then **Download original report** when available, to read the retained file in your document reader and examine its embedded citations, qualifications and unknowns. The exact attachment must match its recorded byte hash. A missing, stale or unverifiable original remains unavailable; another source's text is never substituted. [Sources](intelligence-hub-sources.md) explains the original and provenance checks.
+
+**Links found in retained report** is a separate, partial inspection of that original. It preserves supported hyperlink targets and URL-like text with their locations; it does not visit the links or treat them as captured evidence. Manually declared links remain separate. Missing or unavailable detected-link metadata does not prove there are no citations and does not hide a verified original. Inspect the full report and its qualifications before deciding on an evidence item.
+
+New report evidence remains pending human review and qualification. Apply the existing evidence decisions deliberately; reading or downloading makes no decision, accepts no report and does not complete Review, freeze a package, verify a source or change customer truth.
+
 Review is the entry point for outstanding evidence and Quality decisions in the selected revision. It uses the same finding identities and governed actions as Intelligence Quality.
 
 ## Decide on evidence
